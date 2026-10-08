@@ -1,0 +1,996 @@
+{
+  "info": {
+    "_postman_id": "83a0a96c-90c9-4ed4-9e99-a141dab09e0c",
+    "name": "OHM Backend API",
+    "description": "Platform requests omit X-Tenant. Tenant requests send X-Tenant: {{tenant_slug}}. Login requests save JWTs as collection variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Platform",
+      "item": [
+        {
+          "name": "Root login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/platform/login/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "platform",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{root_email}}\",\n  \"password\": \"{{root_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Sign in as a platform superuser.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d=pm.response.json(); pm.collectionVariables.set('root_access_token',d.access); pm.collectionVariables.set('root_refresh_token',d.refresh);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List tenants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{root_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/platform/tenants/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "platform",
+                "tenants"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{root_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "Get tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{root_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/platform/tenants/{{tenant_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "platform",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{root_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "Create tenant from approved request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{root_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/platform/tenants/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "platform",
+                "tenants"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"onboarding_request\": \"{{onboarding_id}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{root_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Only an approved onboarding request can be provisioned."
+        },
+        {
+          "name": "Update tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{root_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/platform/tenants/{{tenant_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "platform",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{tenant_name}}\",\n  \"modules\": [\n    \"employees\",\n    \"booking\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{root_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "Replace tenant",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{root_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/platform/tenants/{{tenant_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "platform",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{tenant_name}}\",\n  \"status\": \"active\",\n  \"modules\": [\n    \"employees\",\n    \"booking\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{root_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "Delete tenant",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{root_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/platform/tenants/{{tenant_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "platform",
+                "tenants",
+                "{{tenant_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{root_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Deletes the tenant and its schema."
+        }
+      ]
+    },
+    {
+      "name": "Tenant onboarding",
+      "item": [
+        {
+          "name": "Submit onboarding request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/onboarding/requests/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "requests"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_name\": \"{{contact_name}}\",\n  \"contact_email\": \"{{contact_email}}\",\n  \"contact_phone\": \"{{contact_phone}}\",\n  \"organization_name\": \"{{tenant_name}}\",\n  \"organization_type\": \"clinic\",\n  \"organization_address\": {\n    \"city\": \"Bengaluru\",\n    \"state\": \"Karnataka\",\n    \"country\": \"India\"\n  },\n  \"slug\": \"{{tenant_slug}}\",\n  \"custom_domain\": \"\",\n  \"requested_modules\": [\n    \"employees\",\n    \"booking\"\n  ],\n  \"password\": \"{{tenant_admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Saves the returned request ID and one-time applicant token.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d=pm.response.json(); pm.collectionVariables.set('onboarding_id',d.id); pm.collectionVariables.set('onboarding_token',d.access_token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Read onboarding request",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-Onboarding-Token",
+                "value": "{{onboarding_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/onboarding/requests/{{onboarding_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "requests",
+                "{{onboarding_id}}"
+              ]
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "Edit onboarding request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Onboarding-Token",
+                "value": "{{onboarding_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/onboarding/requests/{{onboarding_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "requests",
+                "{{onboarding_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"contact_phone\": \"{{contact_phone}}\",\n  \"requested_modules\": [\n    \"employees\",\n    \"booking\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Applicant edits a submitted request or responds to a request for more information."
+        },
+        {
+          "name": "List requests for review",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{root_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/onboarding/requests/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "requests"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{root_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Root-only onboarding queue."
+        },
+        {
+          "name": "Review onboarding request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{root_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/onboarding/requests/{{onboarding_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "requests",
+                "{{onboarding_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"approved\",\n  \"approved_modules\": [\n    \"employees\",\n    \"booking\"\n  ],\n  \"review_notes\": \"Approved\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{root_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": "Root review transition. Use needs_info with applicant_message when requesting more information."
+        }
+      ]
+    },
+    {
+      "name": "Tenant accounts",
+      "item": [
+        {
+          "name": "Tenant health",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenant_slug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/health/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            }
+          },
+          "description": "Confirms the API has switched to the requested tenant schema."
+        },
+        {
+          "name": "Register customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenant_slug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/registrations/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "registrations"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customer_email}}\",\n  \"password\": \"{{customer_password}}\",\n  \"full_name\": \"{{customer_name}}\",\n  \"phone\": \"{{customer_phone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "Tenant login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenant_slug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/login/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{tenant_admin_email}}\",\n  \"password\": \"{{tenant_admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "Saves tenant access and refresh JWTs.",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d=pm.response.json(); pm.collectionVariables.set('tenant_access_token',d.access); pm.collectionVariables.set('tenant_refresh_token',d.refresh);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh tenant access token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenant_slug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/access-tokens/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "access-tokens"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{tenant_refresh_token}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "description": "",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const d=pm.response.json(); pm.collectionVariables.set('tenant_access_token',d.access);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current tenant session",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenant_slug}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tenant_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/session/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "session"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tenant_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "List tenant users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenant_slug}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tenant_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tenant_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "Create tenant user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenant_slug}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tenant_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{new_user_email}}\",\n  \"full_name\": \"{{new_user_name}}\",\n  \"phone\": \"{{new_user_phone}}\",\n  \"role\": \"CUSTOMER\",\n  \"password\": \"{{new_user_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tenant_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "Get tenant user",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenant_slug}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tenant_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{user_id}}"
+              ]
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tenant_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": ""
+        },
+        {
+          "name": "Update tenant user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenant_slug}}"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{tenant_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/users/{{user_id}}/",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "{{user_id}}"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"{{new_user_name}}\",\n  \"phone\": \"{{new_user_phone}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{tenant_access_token}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "description": ""
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://api.ohm.localhost:8000"
+    },
+    {
+      "key": "tenant_slug",
+      "value": "vaishnavi-medicare"
+    },
+    {
+      "key": "root_email",
+      "value": "admin@ohm.com"
+    },
+    {
+      "key": "root_password",
+      "value": ""
+    },
+    {
+      "key": "root_access_token",
+      "value": ""
+    },
+    {
+      "key": "root_refresh_token",
+      "value": ""
+    },
+    {
+      "key": "tenant_access_token",
+      "value": ""
+    },
+    {
+      "key": "tenant_refresh_token",
+      "value": ""
+    },
+    {
+      "key": "tenant_id",
+      "value": ""
+    },
+    {
+      "key": "tenant_name",
+      "value": "Vaishnavi Medicare"
+    },
+    {
+      "key": "tenant_admin_email",
+      "value": "admin@vaishnavimedicare.com"
+    },
+    {
+      "key": "tenant_admin_password",
+      "value": ""
+    },
+    {
+      "key": "contact_name",
+      "value": "Clinic Owner"
+    },
+    {
+      "key": "contact_email",
+      "value": "owner@example.com"
+    },
+    {
+      "key": "contact_phone",
+      "value": ""
+    },
+    {
+      "key": "customer_email",
+      "value": "customer@example.com"
+    },
+    {
+      "key": "customer_password",
+      "value": ""
+    },
+    {
+      "key": "customer_name",
+      "value": "Customer Name"
+    },
+    {
+      "key": "customer_phone",
+      "value": ""
+    },
+    {
+      "key": "new_user_email",
+      "value": "employee@example.com"
+    },
+    {
+      "key": "new_user_name",
+      "value": "Employee Name"
+    },
+    {
+      "key": "new_user_phone",
+      "value": ""
+    },
+    {
+      "key": "user_id",
+      "value": ""
+    },
+    {
+      "key": "onboarding_id",
+      "value": ""
+    },
+    {
+      "key": "onboarding_token",
+      "value": ""
+    },
+    {
+      "key": "new_user_password",
+      "value": ""
+    }
+  ]
+}

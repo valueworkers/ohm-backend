@@ -1,0 +1,17 @@
+{
+	on_demand_tls {
+		ask http://web:8000/internal/domain-check/?token={$OHM_INTERNAL_TOKEN}
+	}
+}
+
+# Any host that Django confirms is a verified tenant domain gets a certificate on first request.
+https:// {
+	tls {
+		on_demand
+	}
+	reverse_proxy web:8000
+}
+
+http:// {
+	redir https://{host}{uri} permanent
+}
