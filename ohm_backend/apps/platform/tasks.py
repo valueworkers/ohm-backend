@@ -5,6 +5,9 @@ from celery import Task, current_app, shared_task
 from django.conf import settings
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
+from dns.exception import Timeout
+from dns.resolver import NXDOMAIN, NoAnswer, NoNameservers, Resolver
+
 
 logger = logging.getLogger(__name__)
 
@@ -37,38 +40,36 @@ def fanout(task_name):
         current_app.send_task(task_name, kwargs={"schema_name": schema})
 
 
-# Limits stay below services.PROVISION_STALE_AFTER (15 min) so a killed run can never overlap a retry.
-# The soft limit raises inside the task, which triggers the normal rollback + "approved" reset.
-@shared_task(soft_time_limit=600, time_limit=780)
-def provision_onboarding_request(request_id):
-    """Create the tenant for an approved onboarding request (runs in the public schema)."""
-    from .services import provision_approved_request
-
-    try:
-        provision_approved_request(request_id)
-    except ValueError as exc:
-        # Not approved / already provisioning / already provisioned: nothing to do.
-        logger.warning("Skipping provisioning for %s: %s", request_id, exc)
-    # Any other exception is recorded in provision_error and the request returns to
-    # "approved"; it propagates so Celery logs it. Root can retry via POST /api/platform/tenants/.
-
-
 def _txt_values(name):
+    resolver = Resolver()
+    resolver.lifetime = 3.0
     try:
-        answers = dns.resolver.resolve(name, "TXT")
-    except Exception:
+        answers = resolver.resolve(name, "TXT")
+    except (NXDOMAIN, NoAnswer, NoNameservers, Timeout):
         return set()
     return {b"".join(r.strings).decode() for r in answers}
 
+@shared_task
+def provision_tenant_task(request_id):
+    from .models import TenantProvisioning
+    from .services import provision_tenant
+    provision_tenant(TenantProvisioning.objects.get(pk=request_id))
 
 @shared_task
 def verify_pending_domains():
     """Mark custom domains verified once their TXT record proves ownership."""
     from .models import Domain
 
+    base = getattr(settings, "TENANT_BASE_DOMAIN", "o-hm.com")
     with schema_context(get_public_schema_name()):
-        for d in Domain.objects.filter(verified=False):
+        pending = (
+            Domain.objects.filter(verified=False)
+            .exclude(domain=base)
+            .exclude(domain__endswith=f".{base}")
+        )
+        for d in pending:
             if d.verification_token in _txt_values(f"{settings.DOMAIN_VERIFY_PREFIX}.{d.domain}"):
                 d.verified = True
                 d.verified_at = timezone.now()
                 d.save(update_fields=["verified", "verified_at"])
+                logger.info("Verified domain %s", d.domain)

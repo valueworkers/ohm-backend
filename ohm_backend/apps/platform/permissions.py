@@ -15,27 +15,13 @@ def ModuleEnabled(code):
 
     return _ModuleEnabled
 
-
-class IsRootUser(BasePermission):
-    """Allow only active platform superusers to manage public-schema tenants."""
-
-    message = "Only an authenticated root user can perform this action."
+class IsPlatformAdmin(BasePermission):
+    """O-HM super admins: Django superusers or users with a PlatformAdmin profile."""
 
     def has_permission(self, request, view):
         user = request.user
         return bool(
-            connection.schema_name == get_public_schema_name()
-            and user
+            user
             and user.is_authenticated
-            and user.is_active
-            and user.is_superuser
-        )
-
-
-class RootUserOrOnboardingApplicant(BasePermission):
-    """Allow root admins or applicants presenting their private request token."""
-
-    def has_permission(self, request, view):
-        return IsRootUser().has_permission(request, view) or bool(
-            request.headers.get("X-Onboarding-Token")
+            and (user.is_superuser or hasattr(user, "platform_admin_profile"))
         )

@@ -10,26 +10,6 @@ def _verification_token():
     return secrets.token_hex(16)
 
 
-class Tenant(TenantMixin):
-    """A healthcare service provider workspace, managed by OHM in the public schema."""
-
-    class Status(models.TextChoices):
-        PROVISIONING = "provisioning"
-        ACTIVE = "active"
-        SUSPENDED = "suspended"
-
-    name = models.CharField(max_length=200)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROVISIONING)
-    modules = models.JSONField(default=list, blank=True)  # enabled product modules, e.g. ["patients", "booking"]
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    auto_create_schema = True   # create + migrate schema on first save
-    auto_drop_schema = False    # never drop data by accident; services.py opts in on rollback
-
-    def __str__(self):
-        return f"{self.name} ({self.schema_name})"
-
-
 class Feature(models.Model):
     """A feature module that OHM can enable for service-provider tenants."""
 
@@ -42,13 +22,80 @@ class Feature(models.Model):
         return self.name
 
 
+class Plan(models.Model):
+    """A subscription plan. Limits and bundled features live here, not on Tenant."""
+
+    code = models.SlugField(max_length=50, unique=True)  # e.g. basic, professional
+    name = models.CharField(max_length=120)
+    description = models.TextField(blank=True)
+    features = models.ManyToManyField(Feature, blank=True, related_name="plans")
+    max_employees = models.PositiveIntegerField(null=True, blank=True)  # null = unlimited
+    max_branches = models.PositiveIntegerField(null=True, blank=True)   # null = unlimited
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class Tenant(TenantMixin):
+    """A healthcare service provider workspace, managed by OHM in the public schema."""
+
+    class Status(models.TextChoices):
+        PROVISIONING = "provisioning"
+        ACTIVE = "active"
+        SUSPENDED = "suspended"
+
+    name = models.CharField(max_length=200)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROVISIONING)
+    modules = models.JSONField(default=list, blank=True)  # enabled product modules, e.g. ["patients", "booking"]
+    # The user who requested the tenant; manages its profile and activates it.
+    owner = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="owned_tenants"
+    )
+
+    # --- Organization profile (copied from the approved onboarding request) ---
+    logo = models.ImageField(upload_to="tenants/logos/", null=True, blank=True)
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=30, blank=True)
+    timezone = models.CharField(max_length=64, default="Asia/Kolkata")
+    default_currency = models.CharField(max_length=3, default="INR")
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    auto_create_schema = True   # create + migrate schema on first save
+    auto_drop_schema = False    # never drop data by accident; services.py opts in on rollback
+
+    def __str__(self):
+        return f"{self.name} ({self.schema_name})"
+
+
 class Subscription(models.Model):
+    class Status(models.TextChoices):
+        TRIAL = "trial", "Trial"
+        ACTIVE = "active", "Active"
+        EXPIRED = "expired", "Expired"
+        SUSPENDED = "suspended", "Suspended"
+
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="subscriptions")
-    status = models.CharField(max_length=20, default="active")
+    plan = models.ForeignKey(Plan, null=True, blank=True, on_delete=models.PROTECT, related_name="subscriptions")
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField(null=True, blank=True)
+    trial_ends_at = models.DateTimeField(null=True, blank=True)
+    billing_email = models.EmailField(blank=True)
+    # Extra features on top of the plan's bundle (per-tenant add-ons).
     features = models.ManyToManyField(Feature, blank=True, related_name="subscriptions")
     created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-starts_at"]
+
+    def __str__(self):
+        return f"{self.tenant} - {self.plan or 'no plan'} ({self.status})"
 
 
 class Domain(DomainMixin):
@@ -74,18 +121,32 @@ class TenantProvisioning(models.Model):
         PROVISIONING = "provisioning", "Provisioning"
         PROVISIONED = "provisioned", "Provisioned"
 
+    OPEN_STATUSES = ["submitted", "approved", "provisioning"]
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     applicant = models.ForeignKey(
         settings.AUTH_USER_MODEL, on_delete=models.PROTECT, related_name="onboarding_requests"
     )
-    contact_phone = models.CharField(max_length=30, blank=True)
-    organization_name = models.CharField(max_length=200)
-    organization_type = models.CharField(max_length=120, blank=True)
-    organization_address = models.JSONField(default=dict, blank=True)
-    slug = models.SlugField(max_length=30)
-    custom_domain = models.CharField(max_length=253, blank=True)
-    requested_modules = models.JSONField(default=list, blank=True)
-    approved_modules = models.JSONField(default=list, blank=True)
+
+    # --- Fields from the onboarding form ---
+    organization_name = models.CharField(max_length=200)          # Tenant name
+    logo = models.ImageField(upload_to="onboarding/logos/", null=True, blank=True)
+    email = models.EmailField()                                   # Email
+    contact_phone = models.CharField(max_length=30)               # Phone number
+    address = models.TextField(blank=True)                        # Organization address
+    branches = models.JSONField(
+        default=list, blank=True,
+        help_text='List of branches: [{"name": "...", "address": "..."}]',
+    )
+    ops_admin_email = models.EmailField(blank=True)               # blank = no ops admin
+    slug = models.SlugField(max_length=30)                        # Subdomain -> slug.o-hm.com
+    custom_domain = models.CharField(max_length=253, blank=True)  # blank = no own domain
+    wants_custom_website = models.BooleanField(default=False)     # Customized website
+    requested_plan = models.ForeignKey(
+        Plan, null=True, blank=True, on_delete=models.SET_NULL, related_name="onboarding_requests"
+    )
+
+    # --- Workflow fields (not on the form, needed for the lobby/approval flow) ---
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SUBMITTED)
     review_notes = models.TextField(blank=True)
     reviewed_by = models.ForeignKey(
@@ -103,7 +164,6 @@ class TenantProvisioning(models.Model):
     class Meta:
         ordering = ["-created_at"]
         constraints = [
-            # Race-proof version of the "open request already exists" checks.
             models.UniqueConstraint(
                 fields=["slug"], name="uniq_open_request_slug",
                 condition=models.Q(status__in=["submitted", "approved", "provisioning"]),
@@ -116,7 +176,8 @@ class TenantProvisioning(models.Model):
 
     def __str__(self):
         return f"{self.organization_name} ({self.status})"
-    
+
+
 class PlatformAdmin(models.Model):
     """Public-schema platform privileges linked to the shared auth user model."""
 

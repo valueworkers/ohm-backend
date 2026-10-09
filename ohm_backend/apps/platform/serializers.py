@@ -1,157 +1,206 @@
+import re
+from zoneinfo import ZoneInfo
+
 from django.conf import settings
-from django.contrib.auth import get_user_model
-from django.contrib.auth.password_validation import validate_password
-from django.core.exceptions import ValidationError as DjangoValidationError
-from django.db import transaction
 from rest_framework import serializers
 
-from .models import Tenant, Domain, TenantProvisioning, Feature
-from .utils import HOST_RE, SLUG_RE, schema_for_slug
+from .models import (
+    Domain,
+    Feature,
+    Plan,
+    Subscription,
+    Tenant,
+    TenantProvisioning,
+)
 
-S = TenantProvisioning.Status
-OPEN_STATUSES = [S.SUBMITTED, S.APPROVED, S.PROVISIONING]
+from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
+# --------------------------------------------------------------------------
+# Catalogue
+# --------------------------------------------------------------------------
 
-class HomeFeatureSerializer(serializers.ModelSerializer):
+class FeatureSerializer(serializers.ModelSerializer):
     class Meta:
         model = Feature
-        fields = ["code", "name", "description"]
-        read_only_fields = fields
+        fields = ("code", "name", "description")
 
-class TenantSerializer(serializers.ModelSerializer):
-    domains = serializers.SerializerMethodField()
+
+class PlanSerializer(serializers.ModelSerializer):
+    features = FeatureSerializer(many=True, read_only=True)
 
     class Meta:
-        model = Tenant
-        fields = ["id", "name", "schema_name", "status", "modules", "created_at", "domains"]
-        read_only_fields = fields
-
-    def get_domains(self, tenant):
-        return [
-            {"domain": d.domain, "verified": d.verified, "is_primary": d.is_primary}
-            for d in tenant.domains.order_by("-is_primary", "id")
-        ]
+        model = Plan
+        fields = ("id", "code", "name", "description", "features", "max_employees", "max_branches")
 
 
-class TenantRequestCreateSerializer(serializers.ModelSerializer):
-    """Public signup: creates the applicant's public user and the request together."""
+# --------------------------------------------------------------------------
+# Onboarding
+# --------------------------------------------------------------------------
 
-    full_name = serializers.CharField(write_only=True, max_length=200)
-    email = serializers.EmailField(write_only=True)
-    password = serializers.CharField(write_only=True, trim_whitespace=False)
-    applicant_name = serializers.CharField(source="applicant.full_name", read_only=True)
-    applicant_email = serializers.EmailField(source="applicant.email", read_only=True)
+class BranchSerializer(serializers.Serializer):
+    name = serializers.CharField(max_length=200)
+    address = serializers.CharField(max_length=500)
+
+
+class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
+    # JSONField (not a nested serializer) so branches also works in multipart
+    # requests, where the client sends it as a JSON string next to the logo.
+    branches = serializers.JSONField(required=False)
 
     class Meta:
         model = TenantProvisioning
-        fields = [
-            "id", "full_name", "email", "password", "applicant_name", "applicant_email",
-            "contact_phone", "organization_name", "organization_type", "organization_address",
-            "slug", "custom_domain", "requested_modules", "status", "created_at",
-        ]
-        read_only_fields = ["id", "status", "created_at"]
+        fields = (
+            "id", "organization_name", "logo", "email", "contact_phone", "address",
+            "branches", "ops_admin_email", "slug", "custom_domain",
+            "wants_custom_website", "requested_plan", "status", "created_at",
+        )
+        read_only_fields = ("id", "status", "created_at")
 
-    def validate_email(self, value):
-        value = value.strip().lower()
-        if get_user_model().objects.filter(email__iexact=value).exists():
-            raise serializers.ValidationError("An account with this email already exists.")
-        return value
+    def validate_organization_name(self, value):
+        return value.strip()
 
-    def validate_password(self, value):
-        try:
-            validate_password(value)
-        except DjangoValidationError as exc:
-            raise serializers.ValidationError(list(exc.messages))
-        return value
+    def validate_branches(self, value):
+        serializer = BranchSerializer(data=value or [], many=True)
+        serializer.is_valid(raise_exception=True)
+        return [dict(item) for item in serializer.validated_data]
 
     def validate_slug(self, value):
         value = value.strip().lower()
-        if not SLUG_RE.fullmatch(value):
-            raise serializers.ValidationError("Use 3-30 lowercase letters, digits, or hyphens; begin with a letter.")
-        if value in settings.RESERVED_SLUGS:
-            raise serializers.ValidationError("This workspace name is reserved.")
-        if Tenant.objects.filter(schema_name=schema_for_slug(value)).exists():
-            raise serializers.ValidationError("This workspace name is already in use.")
-        if TenantProvisioning.objects.filter(slug=value, status__in=OPEN_STATUSES).exists():
-            raise serializers.ValidationError("There is already an open request for this workspace name.")
+        problem = slug_problem(value)
+        if problem:
+            raise serializers.ValidationError(problem)
         return value
 
     def validate_custom_domain(self, value):
         value = value.strip().lower()
         if not value:
             return ""
-        if not HOST_RE.fullmatch(value):
-            raise serializers.ValidationError("Enter a valid hostname, e.g. app.yourclinic.com.")
-        if value == settings.BASE_DOMAIN or value.endswith("." + settings.BASE_DOMAIN) or value in settings.ROOT_HOSTS:
-            raise serializers.ValidationError("Use a domain you own, not an OHM platform domain.")
+        if not HOST_RE.match(value):
+            raise serializers.ValidationError("Enter a valid domain, e.g. portal.example.com.")
+        base = base_domain()
+        if value == base or value.endswith(f".{base}"):
+            raise serializers.ValidationError(f"Use the subdomain field for hosts under {base}.")
         if Domain.objects.filter(domain=value).exists():
-            raise serializers.ValidationError("This domain is already connected to a tenant.")
-        if TenantProvisioning.objects.filter(custom_domain=value, status__in=OPEN_STATUSES).exists():
-            raise serializers.ValidationError("There is already an open request for this custom domain.")
+            raise serializers.ValidationError("This domain is already in use.")
+        if TenantProvisioning.objects.filter(
+            custom_domain=value, status__in=TenantProvisioning.OPEN_STATUSES
+        ).exists():
+            raise serializers.ValidationError("This domain is already requested.")
         return value
 
-    def validate_requested_modules(self, value):
-        if not isinstance(value, list) or any(not isinstance(m, str) or not m.strip() for m in value):
-            raise serializers.ValidationError("Provide requested modules as a list of non-empty strings.")
-        modules = list(dict.fromkeys(m.strip() for m in value))
-        known = set(Feature.objects.filter(is_active=True, code__in=modules).values_list("code", flat=True))
-        unknown = [m for m in modules if m not in known]
-        if unknown:
-            raise serializers.ValidationError(f"Unknown modules: {', '.join(unknown)}.")
-        return modules
-
-    @transaction.atomic
-    def create(self, validated_data):
-        applicant = get_user_model().objects.create_user(
-            email=validated_data.pop("email"),
-            password=validated_data.pop("password"),
-            full_name=validated_data.pop("full_name"),
-        )
-        return super().create({**validated_data, "applicant": applicant})
+    def validate_requested_plan(self, value):
+        if value is not None and not value.is_active:
+            raise serializers.ValidationError("This plan is not available.")
+        return value
 
 
-class TenantRequestSerializer(serializers.ModelSerializer):
-    """Read-only view for the applicant (their own requests)."""
+class TenantProvisioningSerializer(serializers.ModelSerializer):
+    """Read view. provision_error is only shown to platform admins."""
 
-    applicant_name = serializers.CharField(source="applicant.full_name", read_only=True)
     applicant_email = serializers.EmailField(source="applicant.email", read_only=True)
+    requested_plan_name = serializers.CharField(source="requested_plan.name", read_only=True, default=None)
+    tenant_schema = serializers.CharField(source="tenant.schema_name", read_only=True, default=None)
 
     class Meta:
         model = TenantProvisioning
-        fields = [
-            "id", "applicant_name", "applicant_email", "contact_phone", "organization_name",
-            "organization_type", "organization_address", "slug", "custom_domain",
-            "requested_modules", "approved_modules", "status", "review_notes", "created_at",
-        ]
+        fields = (
+            "id", "applicant_email", "organization_name", "logo", "email", "contact_phone",
+            "address", "branches", "ops_admin_email", "slug", "custom_domain",
+            "wants_custom_website", "requested_plan", "requested_plan_name",
+            "status", "review_notes", "reviewed_at", "tenant_schema",
+            "provision_error", "created_at", "updated_at",
+        )
         read_only_fields = fields
 
-
-class RootTenantRequestSerializer(TenantRequestSerializer):
-    reviewed_by_email = serializers.EmailField(source="reviewed_by.email", read_only=True, allow_null=True)
-    tenant_id = serializers.IntegerField(read_only=True, allow_null=True)
-
-    class Meta(TenantRequestSerializer.Meta):
-        fields = TenantRequestSerializer.Meta.fields + [
-            "reviewed_by_email", "reviewed_at", "tenant_id", "provision_error", "updated_at",
-        ]
-        read_only_fields = fields
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        request = self.context.get("request")
+        user = getattr(request, "user", None)
+        is_admin = bool(user and (user.is_superuser or hasattr(user, "platform_admin_profile")))
+        if not is_admin:
+            data.pop("provision_error", None)
+        return data
 
 
-class TenantRequestApprovalSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=[S.APPROVED, S.REJECTED])
-    # Omitted fields stay untouched.
-    approved_modules = serializers.ListField(child=serializers.CharField(max_length=80), required=False)
+class ReviewSerializer(serializers.Serializer):
     review_notes = serializers.CharField(required=False, allow_blank=True)
 
-    def validate_approved_modules(self, value):
-        if any(not m.strip() for m in value):
-            raise serializers.ValidationError("Selected modules cannot be blank.")
-        return list(dict.fromkeys(m.strip() for m in value))
+
+class RejectSerializer(serializers.Serializer):
+    review_notes = serializers.CharField(allow_blank=False)
+
+
+# --------------------------------------------------------------------------
+# Tenants and subscriptions (platform admin)
+# --------------------------------------------------------------------------
+
+class DomainSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Domain
+        fields = ("id", "domain", "is_primary", "verified", "verified_at")
+        read_only_fields = fields
+
+
+class SubscriptionSerializer(serializers.ModelSerializer):
+    plan_name = serializers.CharField(source="plan.name", read_only=True, default=None)
+
+    class Meta:
+        model = Subscription
+        fields = (
+            "id", "tenant", "plan", "plan_name", "status", "starts_at", "ends_at",
+            "trial_ends_at", "billing_email", "features", "created_at",
+        )
+        read_only_fields = ("id", "created_at")
 
     def validate(self, attrs):
-        modules = attrs.get("approved_modules")
-        if attrs["status"] == S.APPROVED and modules is not None:
-            if not set(modules).issubset(self.instance.requested_modules):
-                raise serializers.ValidationError(
-                    {"approved_modules": "Select only modules requested by the applicant."}
-                )
+        starts = attrs.get("starts_at", getattr(self.instance, "starts_at", None))
+        ends = attrs.get("ends_at", getattr(self.instance, "ends_at", None))
+        if starts and ends and ends <= starts:
+            raise serializers.ValidationError({"ends_at": "Must be after the start date."})
         return attrs
+
+
+class TenantSerializer(serializers.ModelSerializer):
+    domains = DomainSerializer(many=True, read_only=True)
+    subscriptions = SubscriptionSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Tenant
+        fields = (
+            "id", "name", "schema_name", "status", "owner", "modules", "logo", "contact_email",
+            "contact_phone", "timezone", "default_currency", "domains",
+            "subscriptions", "created_at",
+        )
+        read_only_fields = fields
+
+
+class TenantProfileSerializer(serializers.ModelSerializer):
+    """What a tenant owner may see and edit about their own workspace."""
+
+    domains = DomainSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Tenant
+        fields = (
+            "id", "name", "schema_name", "status", "logo", "contact_email", "contact_phone",
+            "timezone", "default_currency", "modules", "domains",
+        )
+        read_only_fields = ("id", "schema_name", "status", "modules", "domains")
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("This field may not be blank.")
+        return value
+
+    def validate_timezone(self, value):
+        try:
+            ZoneInfo(value)
+        except Exception:
+            raise serializers.ValidationError("Enter a valid IANA timezone, e.g. Asia/Kolkata.")
+        return value
+
+    def validate_default_currency(self, value):
+        value = value.strip().upper()
+        if not re.fullmatch(r"[A-Z]{3}", value):
+            raise serializers.ValidationError("Enter a 3-letter currency code, e.g. INR.")
+        return value

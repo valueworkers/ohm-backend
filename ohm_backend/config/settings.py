@@ -134,6 +134,12 @@ AUTH_USER_MODEL = "accounts.User"
 WSGI_APPLICATION = "config.wsgi.application"
 
 REST_FRAMEWORK = {
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+        "rest_framework.parsers.FormParser",
+        "rest_framework.parsers.MultiPartParser",
+    ],
+
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "apps.accounts.auth.TenantJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
@@ -143,7 +149,7 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "root_login": "20/minute",
         "tenant_registration_create": "20/hour",
-        "onboarding_request": "10/hour",
+        "tenant_request": "10/hour",
     },
     "NUM_PROXIES": 1,  # Caddy in front
 }
