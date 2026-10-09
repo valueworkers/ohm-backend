@@ -1,0 +1,108 @@
+{
+  "info": {
+    "_postman_id": "ef26575e-c3b0-4bea-9b4f-47631397d278",
+    "name": "OHM Backend API",
+    "description": "API collection for the active Django URL configuration. Set baseUrl to the API host, such as http://api.ohm.localhost:8000. Root authentication calls omit X-Tenant; tenant authentication calls include X-Tenant: {{tenantSlug}}. Both use the same login, OTP request, and password reset paths. Successful login saves accessToken and refreshToken collection variables.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://api.ohm.localhost:8000" },
+    { "key": "tenantSlug", "value": "your-tenant-slug" },
+    { "key": "slug", "value": "example-clinic" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "provisioningId", "value": "" },
+    { "key": "tenantId", "value": "" },
+    { "key": "subscriptionId", "value": "" },
+    { "key": "userId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        { "name": "Tenant API health", "request": { "method": "GET", "url": "{{baseUrl}}/health/", "description": "Tenant URL configuration; without X-Tenant this reports the public schema." } }
+      ]
+    },
+    {
+      "name": "Public platform",
+      "item": [
+        { "name": "List active plans", "request": { "method": "GET", "url": "{{baseUrl}}/plans/" } },
+        { "name": "Check tenant slug", "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/onboarding/check-slug/?slug={{slug}}", "host": ["{{baseUrl}}"], "path": ["onboarding", "check-slug"], "query": [{ "key": "slug", "value": "{{slug}}" }] } } },
+        { "name": "Public schema health", "request": { "method": "GET", "url": "{{baseUrl}}/health/", "description": "Use without X-Tenant; reports schema public." } }
+      ]
+    },
+    {
+      "name": "Onboarding requests (public schema)",
+      "description": "Applicants submit requests; applicants can list/retrieve their own requests. Platform admins can review. Current routes implement create/list/retrieve plus approve/reject/retry actions; there is no update action.",
+      "item": [
+        { "name": "Submit onboarding request", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"organization_name\": \"Example Clinic\",\n  \"email\": \"owner@example.com\",\n  \"contact_phone\": \"+919876543210\",\n  \"address\": \"Clinic address\",\n  \"branches\": [{\"name\": \"Main branch\", \"address\": \"Clinic address\"}],\n  \"ops_admin_email\": \"admin@example.com\",\n  \"slug\": \"example-clinic\",\n  \"custom_domain\": \"\",\n  \"wants_custom_website\": false,\n  \"requested_plan\": null\n}" }, "url": "{{baseUrl}}/onboarding/requests/" } },
+        { "name": "List my requests (platform admin sees all)", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/onboarding/requests/" } },
+        { "name": "Get request", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/onboarding/requests/{{provisioningId}}/" } },
+        { "name": "Approve request", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"review_notes\": \"Approved\"\n}" }, "url": "{{baseUrl}}/onboarding/requests/{{provisioningId}}/approve/" } },
+        { "name": "Reject request", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"review_notes\": \"Reason for rejection\"\n}" }, "url": "{{baseUrl}}/onboarding/requests/{{provisioningId}}/reject/" } },
+        { "name": "Retry provisioning", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/onboarding/requests/{{provisioningId}}/retry/" } }
+      ]
+    },
+    {
+      "name": "Platform administration (public schema)",
+      "description": "These endpoints require a public-schema platform admin JWT. Public URL configuration mounts platform URLs at the API host root.",
+      "item": [
+        { "name": "List tenants", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/tenants/" } },
+        { "name": "Get tenant", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/tenants/{{tenantId}}/" } },
+        { "name": "Suspend tenant", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/tenants/{{tenantId}}/suspend/" } },
+        { "name": "Activate tenant", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/tenants/{{tenantId}}/activate/" } },
+        { "name": "List subscriptions", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/subscriptions/" } },
+        { "name": "Create subscription", "request": { "method": "POST", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"plan\": 1,\n  \"status\": \"active\",\n  \"starts_at\": \"2026-10-09T00:00:00Z\",\n  \"ends_at\": null,\n  \"trial_ends_at\": null,\n  \"billing_email\": \"billing@example.com\",\n  \"features\": []\n}" }, "url": "{{baseUrl}}/subscriptions/" } },
+        { "name": "Get subscription", "request": { "method": "GET", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/subscriptions/{{subscriptionId}}/" } },
+        { "name": "Replace subscription", "request": { "method": "PUT", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"plan\": 1,\n  \"status\": \"active\",\n  \"starts_at\": \"2026-10-09T00:00:00Z\",\n  \"ends_at\": null,\n  \"trial_ends_at\": null,\n  \"billing_email\": \"billing@example.com\",\n  \"features\": []\n}" }, "url": "{{baseUrl}}/subscriptions/{{subscriptionId}}/" } },
+        { "name": "Update subscription", "request": { "method": "PATCH", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"status\": \"active\"\n}" }, "url": "{{baseUrl}}/subscriptions/{{subscriptionId}}/" } },
+        { "name": "Delete subscription", "request": { "method": "DELETE", "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/subscriptions/{{subscriptionId}}/" } }
+      ]
+    },
+    {
+      "name": "Root authentication (public schema)",
+      "description": "Platform admin authentication. Omit X-Tenant so the API uses the public schema. OTP delivery uses configured email/SMS providers.",
+      "item": [
+        { "name": "Request root login OTP", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"root@example.com\",\n  \"purpose\": \"login\"\n}" }, "url": "{{baseUrl}}/api/auth/otp/" } },
+        { "name": "Root login with password", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"root@example.com\",\n  \"method\": \"password\",\n  \"password\": \"ChangeMe123!\"\n}" }, "url": "{{baseUrl}}/api/auth/login/" }, "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (data.access) pm.collectionVariables.set('accessToken', data.access);", "if (data.refresh) pm.collectionVariables.set('refreshToken', data.refresh);"] } }] },
+        { "name": "Root login with OTP", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"root@example.com\",\n  \"method\": \"otp\",\n  \"otp\": \"123456\"\n}" }, "url": "{{baseUrl}}/api/auth/login/" }, "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (data.access) pm.collectionVariables.set('accessToken', data.access);", "if (data.refresh) pm.collectionVariables.set('refreshToken', data.refresh);"] } }] },
+        { "name": "Request root password reset OTP", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"root@example.com\",\n  \"purpose\": \"password_reset\"\n}" }, "url": "{{baseUrl}}/api/auth/otp/" } },
+        { "name": "Reset root password with OTP", "request": { "method": "POST", "header": [{ "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"root@example.com\",\n  \"otp\": \"123456\",\n  \"new_password\": \"NewSecurePass123!\"\n}" }, "url": "{{baseUrl}}/api/auth/password-reset/" } }
+      ]
+    },
+    {
+      "name": "Tenant authentication (tenant schema)",
+      "description": "Set tenantSlug for these requests. Login returns tenant-bound JWTs; save the returned access and refresh tokens into the collection variables.",
+      "item": [
+        { "name": "Register customer", "request": { "method": "POST", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"ChangeMe123!\",\n  \"full_name\": \"Example Customer\",\n  \"phone\": \"+919876543210\"\n}" }, "url": "{{baseUrl}}/api/auth/registrations/" } },
+        { "name": "Request login OTP", "request": { "method": "POST", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin@example.com\",\n  \"purpose\": \"login\"\n}" }, "url": "{{baseUrl}}/api/auth/otp/" } },
+        { "name": "Request password reset OTP", "request": { "method": "POST", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin@example.com\",\n  \"purpose\": \"password_reset\"\n}" }, "url": "{{baseUrl}}/api/auth/otp/" } },
+        { "name": "Log in with password", "request": { "method": "POST", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin@example.com\",\n  \"method\": \"password\",\n  \"password\": \"ChangeMe123!\"\n}" }, "url": "{{baseUrl}}/api/auth/login/" }, "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (data.access) pm.collectionVariables.set('accessToken', data.access);", "if (data.refresh) pm.collectionVariables.set('refreshToken', data.refresh);"] } }] },
+        { "name": "Log in with OTP", "request": { "method": "POST", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin@example.com\",\n  \"method\": \"otp\",\n  \"otp\": \"123456\"\n}" }, "url": "{{baseUrl}}/api/auth/login/" }, "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (data.access) pm.collectionVariables.set('accessToken', data.access);", "if (data.refresh) pm.collectionVariables.set('refreshToken', data.refresh);"] } }] },
+        { "name": "Reset password with OTP", "request": { "method": "POST", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"username\": \"admin@example.com\",\n  \"otp\": \"123456\",\n  \"new_password\": \"NewSecurePass123!\"\n}" }, "url": "{{baseUrl}}/api/auth/password-reset/" } },
+        { "name": "Refresh access token", "request": { "method": "POST", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"refresh\": \"{{refreshToken}}\"\n}" }, "url": "{{baseUrl}}/api/auth/access-tokens/" }, "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": ["const data = pm.response.json();", "if (data.access) pm.collectionVariables.set('accessToken', data.access);"] } }] },
+        { "name": "Get current session", "request": { "method": "GET", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/api/auth/session/" } }
+      ]
+    },
+    {
+      "name": "Tenant users (tenant schema)",
+      "description": "Tenant Admin only. X-Tenant is required on the shared API host.",
+      "item": [
+        { "name": "List users", "request": { "method": "GET", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": { "raw": "{{baseUrl}}/api/users/?role={{role}}&q={{search}}", "host": ["{{baseUrl}}"], "path": ["api", "users"], "query": [{ "key": "role", "value": "{{role}}", "disabled": true }, { "key": "q", "value": "{{search}}", "disabled": true }] } } },
+        { "name": "Create user", "request": { "method": "POST", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"email\": \"new.user@example.com\",\n  \"full_name\": \"New User\",\n  \"phone\": \"+919876543210\",\n  \"password\": \"ChangeMe123!\",\n  \"role\": \"CUSTOMER\"\n}" }, "url": "{{baseUrl}}/api/users/" } },
+        { "name": "Get user", "request": { "method": "GET", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/api/users/{{userId}}/" } },
+        { "name": "Update user", "request": { "method": "PATCH", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"full_name\": \"Updated Name\",\n  \"phone\": \"+919876543210\",\n  \"is_active\": true,\n  \"role\": \"CUSTOMER\"\n}" }, "url": "{{baseUrl}}/api/users/{{userId}}/" } }
+      ]
+    },
+    {
+      "name": "My tenant profile (tenant schema)",
+      "description": "Authenticated owner endpoints for completing and activating their newly provisioned workspace.",
+      "item": [
+        { "name": "List my tenants", "request": { "method": "GET", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/my/tenants/" } },
+        { "name": "Get my tenant", "request": { "method": "GET", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/my/tenants/{{tenantId}}/" } },
+        { "name": "Update my tenant profile", "request": { "method": "PATCH", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }], "body": { "mode": "raw", "raw": "{\n  \"name\": \"Example Clinic\",\n  \"contact_email\": \"owner@example.com\",\n  \"contact_phone\": \"+919876543210\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"default_currency\": \"INR\"\n}" }, "url": "{{baseUrl}}/my/tenants/{{tenantId}}/" } },
+        { "name": "Activate my tenant", "request": { "method": "POST", "header": [{ "key": "X-Tenant", "value": "{{tenantSlug}}" }, { "key": "Authorization", "value": "Bearer {{accessToken}}" }], "url": "{{baseUrl}}/my/tenants/{{tenantId}}/activate/" } }
+      ]
+    }
+  ]
+}

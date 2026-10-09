@@ -36,6 +36,9 @@ Set `OHM_API_HOST=api.ohm.com` in production. React calls that API host from `oh
 Tenant requests include `X-Tenant: <slug>`; root requests omit the header and remain in the public schema.
 Configure `OHM_CORS_ALLOWED_ORIGINS` and `OHM_CORS_ALLOWED_ORIGIN_REGEXES` for the React origins. On the API host:
 - `/admin/`  platform admin (Super Admin / Our Team)
+- `POST /api/auth/login/`  unified root or tenant login using email/mobile plus password or OTP; include `X-Tenant` for tenant accounts and omit it for platform admins
+- `POST /api/auth/otp/`  request a login or password-reset OTP (`username`, `purpose`); send `X-Tenant` for tenant accounts
+- `POST /api/auth/password-reset/`  reset with `username`, `otp`, and `new_password`; send `X-Tenant` for tenant accounts
 - `POST /api/onboarding/requests/`  submit a public multi-step provider application
 - `GET /api/onboarding/requests/`  root-only list of applications
 - `GET /api/onboarding/requests/{uuid}/`  root inspection or applicant status check (applicants send `X-Onboarding-Token`)
@@ -60,6 +63,11 @@ domains until a root admin approves the request and creates the tenant from it.
 
 For local frontend development, point the frontend origin at an allowed CORS origin. In production set `OHM_BASE_DOMAIN=ohm.com`,
 `OHM_URL_SCHEME=https`, `OHM_URL_PORT=` and point `ohm.com` and `*.ohm.com` at the server.
+
+OTP codes are stored in Redis, expire after five minutes, and are single-use. Email delivery uses Django's `EMAIL_*` settings. For mobile numbers,
+configure `OHM_SMS_OTP_BACKEND` with a dotted-path callable accepting `phone`, `code`, and `purpose` keyword arguments. OTP
+requests are rate limited; accounts must have a unique phone number in their schema to use phone-based login. Redis uses
+the configured `REDIS_URL` with the `ohm` key prefix.
 
 ## Custom domains
 1. Tenant adds `CNAME app.example.com -> $OHM_EDGE_HOST` and `TXT _ohm-verify.app.example.com = <token>`.

@@ -9,6 +9,8 @@ load_dotenv(BASE_DIR / ".env")
 def env(name, default=None):
     return os.environ.get(name, default)
 
+REDIS_URL = env("REDIS_URL", "redis://localhost:6379/0")
+
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-change-me")
 DEBUG = env("DJANGO_DEBUG", True)
@@ -148,6 +150,7 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_THROTTLE_RATES": {
         "root_login": "20/minute",
+        "otp_request": "5/hour",
         "tenant_registration_create": "20/hour",
         "tenant_request": "10/hour",
     },
@@ -164,9 +167,26 @@ AUTH_PASSWORD_VALIDATORS = [
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "KEY_PREFIX": "ohm",
+    }
+}
+
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(env("EMAIL_PORT", 25))
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = str(env("EMAIL_USE_TLS", "false")).lower() == "true"
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "noreply@ohm.local")
+OHM_SMS_OTP_BACKEND = env("OHM_SMS_OTP_BACKEND", "")
+
 # --- Celery ------------------------------------------------------------------
-CELERY_BROKER_URL = env("REDIS_URL", "redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = env("REDIS_URL", "redis://localhost:6379/0")
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULE = {
     "verify-pending-domains": {
         "task": "apps.platform.tasks.verify_pending_domains",
