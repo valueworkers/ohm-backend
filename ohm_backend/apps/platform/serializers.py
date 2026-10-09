@@ -1,81 +1,60 @@
-# serializers.py
 from django.conf import settings
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth import get_user_model
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db import transaction
 from rest_framework import serializers
-from rest_framework.exceptions import ValidationError
 
-from .models import Tenant, Domain, TenantProvisioning
+from .models import Tenant, Domain, TenantProvisioning, Feature
 from .utils import HOST_RE, SLUG_RE, schema_for_slug
 
+S = TenantProvisioning.Status
+OPEN_STATUSES = [S.SUBMITTED, S.APPROVED, S.PROVISIONING]
+
+class HomeFeatureSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Feature
+        fields = ["code", "name", "description"]
+        read_only_fields = fields
 
 class TenantSerializer(serializers.ModelSerializer):
     domains = serializers.SerializerMethodField()
 
     class Meta:
         model = Tenant
-        fields = [
-            "id",
-            "name",
-            "schema_name",
-            "status",
-            "modules",
-            "created_at",
-            "domains",
-        ]
-        read_only_fields = ["id", "schema_name", "created_at", "domains"]
+        fields = ["id", "name", "schema_name", "status", "modules", "created_at", "domains"]
+        read_only_fields = fields
 
     def get_domains(self, tenant):
         return [
-            {"domain": domain.domain, "verified": domain.verified, "is_primary": domain.is_primary}
-            for domain in tenant.domains.order_by("-is_primary", "id")
+            {"domain": d.domain, "verified": d.verified, "is_primary": d.is_primary}
+            for d in tenant.domains.order_by("-is_primary", "id")
         ]
 
 
-class ProvisionTenantSerializer(serializers.Serializer):
-    """Create a tenant from a root-approved onboarding application."""
+class TenantRequestCreateSerializer(serializers.ModelSerializer):
+    """Public signup: creates the applicant's public user and the request together."""
 
-    onboarding_request = serializers.PrimaryKeyRelatedField(
-        queryset=TenantProvisioning.objects.all(),
-        write_only=True,
-    )
-
-    def validate_onboarding_request(self, onboarding_request):
-        if onboarding_request.status != TenantProvisioning.Status.APPROVED:
-            raise serializers.ValidationError("Only an approved onboarding request can create a tenant.")
-        return onboarding_request
-
-
-class RootSessionSerializer(serializers.Serializer):
-    email = serializers.EmailField()
+    full_name = serializers.CharField(write_only=True, max_length=200)
+    email = serializers.EmailField(write_only=True)
     password = serializers.CharField(write_only=True, trim_whitespace=False)
-
-    def validate_email(self, value):
-        return value.strip().lower()
-
-
-class OnboardingRequestSerializer(serializers.ModelSerializer):
-    """Applicant-facing multi-step onboarding form payload."""
-
-    password = serializers.CharField(write_only=True, trim_whitespace=False, required=False)
+    applicant_name = serializers.CharField(source="applicant.full_name", read_only=True)
+    applicant_email = serializers.EmailField(source="applicant.email", read_only=True)
 
     class Meta:
         model = TenantProvisioning
         fields = [
-            "id", "contact_name", "contact_email", "contact_phone",
-            "organization_name", "organization_type", "organization_address", "slug", "custom_domain",
-            "requested_modules", "password", "status", "applicant_message", "created_at", "updated_at",
+            "id", "full_name", "email", "password", "applicant_name", "applicant_email",
+            "contact_phone", "organization_name", "organization_type", "organization_address",
+            "slug", "custom_domain", "requested_modules", "status", "created_at",
         ]
-        read_only_fields = ["id", "status", "applicant_message", "created_at", "updated_at"]
+        read_only_fields = ["id", "status", "created_at"]
 
-    def validate_contact_email(self, value):
-        return value.strip().lower()
-
-    def validate(self, attrs):
-        if self.instance is None and not attrs.get("password"):
-            raise serializers.ValidationError({"password": "Choose an initial Tenant Admin password."})
-        return attrs
+    def validate_email(self, value):
+        value = value.strip().lower()
+        if get_user_model().objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("An account with this email already exists.")
+        return value
 
     def validate_password(self, value):
         try:
@@ -92,19 +71,7 @@ class OnboardingRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("This workspace name is reserved.")
         if Tenant.objects.filter(schema_name=schema_for_slug(value)).exists():
             raise serializers.ValidationError("This workspace name is already in use.")
-        duplicate = TenantProvisioning.objects.filter(
-            slug=value,
-            status__in=[
-                TenantProvisioning.Status.SUBMITTED,
-                TenantProvisioning.Status.IN_REVIEW,
-                TenantProvisioning.Status.NEEDS_INFO,
-                TenantProvisioning.Status.APPROVED,
-                TenantProvisioning.Status.PROVISIONING,
-            ],
-        )
-        if self.instance:
-            duplicate = duplicate.exclude(pk=self.instance.pk)
-        if duplicate.exists():
+        if TenantProvisioning.objects.filter(slug=value, status__in=OPEN_STATUSES).exists():
             raise serializers.ValidationError("There is already an open request for this workspace name.")
         return value
 
@@ -118,85 +85,73 @@ class OnboardingRequestSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Use a domain you own, not an OHM platform domain.")
         if Domain.objects.filter(domain=value).exists():
             raise serializers.ValidationError("This domain is already connected to a tenant.")
-        pending = TenantProvisioning.objects.filter(
-            custom_domain=value,
-            status__in=[
-                TenantProvisioning.Status.SUBMITTED,
-                TenantProvisioning.Status.IN_REVIEW,
-                TenantProvisioning.Status.NEEDS_INFO,
-                TenantProvisioning.Status.APPROVED,
-                TenantProvisioning.Status.PROVISIONING,
-            ],
-        )
-        if self.instance:
-            pending = pending.exclude(pk=self.instance.pk)
-        if pending.exists():
+        if TenantProvisioning.objects.filter(custom_domain=value, status__in=OPEN_STATUSES).exists():
             raise serializers.ValidationError("There is already an open request for this custom domain.")
         return value
 
     def validate_requested_modules(self, value):
-        return self._validate_string_list(value, "module")
+        if not isinstance(value, list) or any(not isinstance(m, str) or not m.strip() for m in value):
+            raise serializers.ValidationError("Provide requested modules as a list of non-empty strings.")
+        modules = list(dict.fromkeys(m.strip() for m in value))
+        known = set(Feature.objects.filter(is_active=True, code__in=modules).values_list("code", flat=True))
+        unknown = [m for m in modules if m not in known]
+        if unknown:
+            raise serializers.ValidationError(f"Unknown modules: {', '.join(unknown)}.")
+        return modules
 
-    @staticmethod
-    def _validate_string_list(value, label):
-        if not isinstance(value, list):
-            raise serializers.ValidationError(f"Provide requested {label}s as a list.")
-        if any(not isinstance(item, str) or not item.strip() for item in value):
-            raise serializers.ValidationError(f"Each requested {label} must be a non-empty string.")
-        return list(dict.fromkeys(item.strip() for item in value))
-
+    @transaction.atomic
     def create(self, validated_data):
-        password = validated_data.pop("password")
-        validated_data["initial_password_hash"] = make_password(password)
-        return super().create(validated_data)
-
-    def update(self, instance, validated_data):
-        password = validated_data.pop("password", None)
-        if password is not None:
-            instance.initial_password_hash = make_password(password)
-        return super().update(instance, validated_data)
+        applicant = get_user_model().objects.create_user(
+            email=validated_data.pop("email"),
+            password=validated_data.pop("password"),
+            full_name=validated_data.pop("full_name"),
+        )
+        return super().create({**validated_data, "applicant": applicant})
 
 
-class RootOnboardingRequestSerializer(serializers.ModelSerializer):
-    reviewed_by_email = serializers.EmailField(source="reviewed_by.email", read_only=True, allow_null=True)
-    tenant_id = serializers.IntegerField(read_only=True, allow_null=True)
+class TenantRequestSerializer(serializers.ModelSerializer):
+    """Read-only view for the applicant (their own requests)."""
+
+    applicant_name = serializers.CharField(source="applicant.full_name", read_only=True)
+    applicant_email = serializers.EmailField(source="applicant.email", read_only=True)
 
     class Meta:
         model = TenantProvisioning
         fields = [
-            "id", "contact_name", "contact_email", "contact_phone", "organization_name", "organization_type",
-            "organization_address", "slug", "custom_domain", "requested_modules", "approved_modules", "status",
-            "review_notes", "applicant_message", "reviewed_by_email", "reviewed_at", "tenant_id",
-            "provision_error", "created_at", "updated_at",
+            "id", "applicant_name", "applicant_email", "contact_phone", "organization_name",
+            "organization_type", "organization_address", "slug", "custom_domain",
+            "requested_modules", "approved_modules", "status", "review_notes", "created_at",
         ]
         read_only_fields = fields
 
 
-class RootOnboardingRequestUpdateSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=[
-        TenantProvisioning.Status.IN_REVIEW,
-        TenantProvisioning.Status.NEEDS_INFO,
-        TenantProvisioning.Status.APPROVED,
-        TenantProvisioning.Status.REJECTED,
-    ])
-    approved_modules = serializers.ListField(child=serializers.CharField(max_length=80), required=False, default=list)
-    review_notes = serializers.CharField(required=False, allow_blank=True, default="")
-    applicant_message = serializers.CharField(required=False, allow_blank=True, default="")
+class RootTenantRequestSerializer(TenantRequestSerializer):
+    reviewed_by_email = serializers.EmailField(source="reviewed_by.email", read_only=True, allow_null=True)
+    tenant_id = serializers.IntegerField(read_only=True, allow_null=True)
+
+    class Meta(TenantRequestSerializer.Meta):
+        fields = TenantRequestSerializer.Meta.fields + [
+            "reviewed_by_email", "reviewed_at", "tenant_id", "provision_error", "updated_at",
+        ]
+        read_only_fields = fields
+
+
+class TenantRequestApprovalSerializer(serializers.Serializer):
+    status = serializers.ChoiceField(choices=[S.APPROVED, S.REJECTED])
+    # Omitted fields stay untouched.
+    approved_modules = serializers.ListField(child=serializers.CharField(max_length=80), required=False)
+    review_notes = serializers.CharField(required=False, allow_blank=True)
 
     def validate_approved_modules(self, value):
-        if any(not item.strip() for item in value):
-            raise ValidationError("Selected modules cannot be blank.")
-        return list(dict.fromkeys(item.strip() for item in value))
+        if any(not m.strip() for m in value):
+            raise serializers.ValidationError("Selected modules cannot be blank.")
+        return list(dict.fromkeys(m.strip() for m in value))
 
     def validate(self, attrs):
-        request = self.instance
-        status = attrs["status"]
-        if status == TenantProvisioning.Status.NEEDS_INFO and not attrs.get("applicant_message", "").strip():
-            raise serializers.ValidationError({"applicant_message": "This field is required for needs_info."})
-        if status == TenantProvisioning.Status.APPROVED:
-            requested = set(request.requested_modules)
-            if not set(attrs["approved_modules"]).issubset(requested):
-                raise serializers.ValidationError({
-                    "approved_modules": "Select only modules requested by the applicant."
-                })
+        modules = attrs.get("approved_modules")
+        if attrs["status"] == S.APPROVED and modules is not None:
+            if not set(modules).issubset(self.instance.requested_modules):
+                raise serializers.ValidationError(
+                    {"approved_modules": "Select only modules requested by the applicant."}
+                )
         return attrs

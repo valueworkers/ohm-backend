@@ -7,7 +7,7 @@ from apps.platform.views import domain_check
 
 urlpatterns = [
     path("admin/", admin.site.urls),
-    path("", include("apps.platform.urls")),
+    path("public/", include("apps.platform.urls")),
     path("health/", lambda request: JsonResponse({"status": "ok", "schema": "public"})),
     path("internal/domain-check/", domain_check),
 ]

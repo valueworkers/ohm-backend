@@ -1,8 +1,9 @@
-from django.contrib import admin
+from django.contrib import admin, messages
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name
 
 from .models import Tenant, Domain, Feature, PlatformAdmin, Subscription, TenantProvisioning
+from .services import review_onboarding_request
 
 
 class DomainInline(admin.TabularInline):
@@ -13,7 +14,7 @@ class DomainInline(admin.TabularInline):
 
 @admin.register(Tenant)
 class TenantAdmin(admin.ModelAdmin):
-    """Super Admin console for tenants; provision them through approved onboarding requests."""
+    """Super Admin console for tenants; provision them through approved tenant requests."""
 
     list_display = ("name", "schema_name", "status", "modules", "created_at")
     list_filter = ("status",)
@@ -79,6 +80,51 @@ class PlatformAdminProfileAdmin(admin.ModelAdmin):
 
 @admin.register(TenantProvisioning)
 class TenantProvisioningAdmin(admin.ModelAdmin):
-    list_display = ("organization_name", "contact_email", "status", "created_at")
-    list_filter = ("status",)
-    search_fields = ("organization_name", "contact_email", "slug")
+    """The lobby: root reviews tenant requests here. Approval creates the tenant."""
+
+    list_display = (
+        "organization_name", "applicant_email", "slug", "status",
+        "created_at", "reviewed_by", "reviewed_at",
+    )
+    list_filter = ("status", "created_at")
+    search_fields = (
+        "organization_name", "slug", "custom_domain",
+        "applicant__email", "applicant__full_name",
+    )
+    list_select_related = ("applicant", "reviewed_by", "tenant")
+    raw_id_fields = ("applicant", "reviewed_by", "tenant")
+    readonly_fields = (
+        "applicant", "status", "approved_modules", "reviewed_by", "reviewed_at",
+        "tenant", "provision_error", "created_at", "updated_at",
+    )
+    actions = ["approve_selected", "reject_selected"]
+
+    @admin.display(description="Applicant email", ordering="applicant__email")
+    def applicant_email(self, obj):
+        return obj.applicant.email
+
+    def has_add_permission(self, request):
+        # Requests come only from POST /api/tenant-requests/.
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    def _review(self, request, queryset, status):
+        done = 0
+        for req in queryset:
+            try:
+                review_onboarding_request(req.pk, status=status, user=request.user)
+                done += 1
+            except ValueError as exc:
+                self.message_user(request, f"{req.organization_name}: {exc}", messages.ERROR)
+        if done:
+            self.message_user(request, f"{done} request(s) {status}.", messages.SUCCESS)
+
+    @admin.action(description="Approve selected requests (queues provisioning)")
+    def approve_selected(self, request, queryset):
+        self._review(request, queryset, TenantProvisioning.Status.APPROVED)
+
+    @admin.action(description="Reject selected requests")
+    def reject_selected(self, request, queryset):
+        self._review(request, queryset, TenantProvisioning.Status.REJECTED)

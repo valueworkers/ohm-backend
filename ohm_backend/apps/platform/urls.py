@@ -2,24 +2,13 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
-from .views import TenantViewSet, OnboardingRequestViewSet, RootLoginView
+from .views import TenantViewSet, TenantRequestViewSet
 
 router = DefaultRouter()
 router.register("tenants", TenantViewSet, basename="tenant")
 
 urlpatterns = [
-    path("api/platform/login/", RootLoginView.as_view(), name="root-login"),
-    path("api/platform/", include(router.urls)),
-    path(
-        "api/onboarding/requests/",
-        OnboardingRequestViewSet.as_view({"get": "list", "post": "create"}),
-        name="onboarding-request-list",
-    ),
-    path(
-        "api/onboarding/requests/<uuid:pk>/",
-        OnboardingRequestViewSet.as_view(
-            {"get": "retrieve", "put": "update", "patch": "partial_update"}
-        ),
-        name="onboarding-request-detail",
-    ),
+    path("platform/", include(router.urls)),
+    path("tenant-requests/",TenantRequestViewSet.as_view({"get": "list", "post": "create"}),name="tenant-request-list"),
+    path("tenant-requests/<uuid:pk>/",TenantRequestViewSet.as_view({"get": "retrieve", "patch": "partial_update"}),name="tenant-request-detail"),
 ]
