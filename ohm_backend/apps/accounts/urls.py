@@ -13,7 +13,7 @@ from .views import (
 )
 
 router = SimpleRouter()
-router.register("users", TenantUserViewSet, basename="tenant-user")
+router.register("users/", TenantUserViewSet, basename="tenant-user")
 
 urlpatterns = [
     # Authentication and the signed-in user's own profile.
