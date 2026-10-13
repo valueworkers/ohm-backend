@@ -95,6 +95,7 @@ MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "apps.platform.middleware.VerifiedDomainTenantMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -120,6 +121,7 @@ TEMPLATES = [
 
 AUTH_USER_MODEL = "accounts.User"
 WSGI_APPLICATION = "config.wsgi.application"
+# ASGI_APPLICATION = "config.asgi.application"
 
 REST_FRAMEWORK = {
     "DEFAULT_PARSER_CLASSES": [
@@ -154,14 +156,17 @@ AUTH_PASSWORD_VALIDATORS = [
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
-CACHES = {
-    "default": {
-        "BACKEND": "django.core.cache.backends.redis.RedisCache",
-        "LOCATION": REDIS_URL,
-        "KEY_PREFIX": "ohm",
-    }
+
+
+# --- Storage & static ------------------------------------------------------------------
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
 }
 
+# --- Email ------------------------------------------------------------------
 EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
 EMAIL_HOST = env("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(env("EMAIL_PORT", 25))
@@ -171,6 +176,14 @@ EMAIL_USE_TLS = str(env("EMAIL_USE_TLS", "false")).lower() == "true"
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "noreply@ohm.local")
 OHM_SMS_OTP_BACKEND = env("OHM_SMS_OTP_BACKEND", "")
 
+# --- Cache ------------------------------------------------------------------
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "KEY_PREFIX": "ohm",
+    }
+}
 # --- Celery ------------------------------------------------------------------
 CELERY_BROKER_URL = REDIS_URL
 CELERY_RESULT_BACKEND = REDIS_URL
@@ -185,6 +198,4 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Kolkata"
 USE_I18N = True
 USE_TZ = True
-STATIC_URL = "static/"
-STATIC_ROOT = BASE_DIR / "staticfiles"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
