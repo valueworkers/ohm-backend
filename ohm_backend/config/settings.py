@@ -36,26 +36,12 @@ ROOT_HOSTS = {
 
 OHM_URL_SCHEME = env("OHM_URL_SCHEME", "http")   # "https" in production
 OHM_URL_PORT = env("OHM_URL_PORT", ":8000")      # "" in production (used for <slug>.<BASE_DOMAIN> links)
+
 RESERVED_SLUGS = {
     "admin", "www", "api", "app", "edge", "mail", "static", "media", "root", "platform",
     "ohm", "support", "help", "docs", "status", "internal", "public", "login", "register",
 }
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in env(
-        "OHM_CORS_ALLOWED_ORIGINS",
-        "https://ohm.com,http://localhost:3000,http://127.0.0.1:3000",
-    ).split(",")
-    if origin.strip()
-]
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    regex.strip()
-    for regex in env(
-        "OHM_CORS_ALLOWED_ORIGIN_REGEXES",
-        r"^https://([a-z0-9-]+\.)?ohm\.com$,^http://([a-z0-9-]+\.)?ohm\.localhost:3000$",
-    ).split(",")
-    if regex.strip()
-]
+
 
 # --- django-tenants ----------------------------------------------------------
 # Apps listed in BOTH lists get a table in the public schema (platform staff,
@@ -106,8 +92,8 @@ DATABASES = {
 DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 
 MIDDLEWARE = [
-    "apps.platform.middleware.VerifiedDomainTenantMiddleware",  # must be first
     "corsheaders.middleware.CorsMiddleware",
+    "apps.platform.middleware.VerifiedDomainTenantMiddleware",
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -154,9 +140,10 @@ REST_FRAMEWORK = {
         "tenant_registration_create": "20/hour",
         "tenant_request": "10/hour",
     },
-    "NUM_PROXIES": 1,  # Caddy in front
+    "NUM_PROXIES": 1,
 }
 
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = [*default_headers, "x-tenant"]
 
 AUTH_PASSWORD_VALIDATORS = [
