@@ -19,7 +19,7 @@ from apps.accounts.serializers import (
     UserSerializer,
 )
 
-from .auth_helpers import consume_otp, find_user, has_password, is_eligible, issue_otp
+from .helpers import consume_otp, find_user, has_password, is_eligible, issue_otp
 
 # ------------------------ Shared response helpers ------------------------
 def _invalid(message="Invalid credentials."):
