@@ -11,7 +11,7 @@ urlpatterns = [
     path("api/auth/login/", UnifiedLoginView.as_view(), name="unified-login-public"),
     path("api/auth/otp/", OTPRequestView.as_view(), name="otp-request-public"),
     path("api/auth/password-reset/", OTPPasswordResetView.as_view(), name="otp-password-reset-public"),
-    path("api/auth/access-tokens/", TokenRefreshView.as_view(), name="token-refresh-public"),
+    path("api/auth/refresh-tokens/", TokenRefreshView.as_view(), name="token-refresh-public"),
     path("", include("apps.platform.urls")),
     path("health/", lambda request: JsonResponse({"status": "ok", "schema": "public"}))
 ]
