@@ -97,8 +97,8 @@ DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
-    "apps.platform.middleware.VerifiedDomainTenantMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "apps.platform.middleware.VerifiedDomainTenantMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",

@@ -1,9 +1,9 @@
 from django.db import IntegrityError, transaction
+from django.db.models import ProtectedError
 from django.utils import timezone
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
-from rest_framework.generics import ListAPIView
 from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
@@ -12,6 +12,7 @@ from rest_framework.throttling import AnonRateThrottle
 
 from .models import Plan, Subscription, Tenant, TenantProvisioning
 from .serializers import (
+    PlanAdminSerializer,
     PlanSerializer,
     RejectSerializer,
     ReviewSerializer,
@@ -31,14 +32,41 @@ from .permissions import IsPlatformAdmin
 # Public
 # --------------------------------------------------------------------------
 
-class PlanListView(ListAPIView):
-    """Plans shown on the registration form."""
-
-    permission_classes = [AllowAny]
-    serializer_class = PlanSerializer
+class PlanViewSet(viewsets.ModelViewSet):
+    """
+    GET (list/retrieve): anyone, active plans only.
+    POST/PUT/PATCH/DELETE: ohm admin only.
+    """
     pagination_class = None
-    queryset = Plan.objects.filter(is_active=True).prefetch_related("features")
 
+    def get_permissions(self):
+        if self.action in ("list", "retrieve"):
+            return [AllowAny()]
+        return [IsPlatformAdmin()]
+
+    def _is_admin(self):
+        u = self.request.user
+        return bool(u and u.is_authenticated and u.is_superuser)  # keep in sync with IsPlatformAdmin
+
+    def get_queryset(self):
+        qs = Plan.objects.prefetch_related("features")
+        if self._is_admin():
+            return qs  # admin sees inactive plans too
+        return qs.filter(is_active=True)
+
+    def get_serializer_class(self):
+        if self._is_admin():
+            return PlanAdminSerializer
+        return PlanSerializer
+
+    def destroy(self, request, *args, **kwargs):
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "Plan is in use by tenants. Deactivate it (is_active=false) instead."},
+                status=status.HTTP_409_CONFLICT,
+            )
 
 class SlugAvailabilityView(APIView):
     """GET ?slug=pankaj -> live subdomain check for the registration form."""

@@ -33,6 +33,26 @@ class PlanSerializer(serializers.ModelSerializer):
         model = Plan
         fields = ("id", "code", "name", "description", "features", "max_employees", "max_branches")
 
+class PlanAdminSerializer(serializers.ModelSerializer):
+    """Used by ohm admin for reads and writes."""
+    features = FeatureSerializer(many=True, read_only=True)
+    feature_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Feature.objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        source="features",
+    )
+
+    class Meta:
+        model = Plan
+        fields = (
+            "id", "code", "name", "description",
+            "features", "feature_ids",
+            "max_employees", "max_branches",
+            "is_active", "created_at",
+        )
+        read_only_fields = ("id", "created_at")
 
 # --------------------------------------------------------------------------
 # Onboarding
