@@ -1,24 +1,14 @@
-import secrets
-import time
-from django.conf import settings
-from django.contrib.auth.hashers import check_password, make_password
-from django.core.exceptions import ImproperlyConfigured
-from django.core.cache import cache
-from django.core.mail import send_mail
 from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
-from django.utils.module_loading import import_string
-from rest_framework import mixins, viewsets,status
+from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import AuthenticationFailed
-from rest_framework.permissions import AllowAny,IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
-from rest_framework.views import APIView
 from rest_framework.throttling import ScopedRateThrottle
+from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
-from rest_framework_simplejwt.views import TokenObtainPairView
 
-from apps.accounts.auth import TenantTokenObtainPairSerializer
 from apps.accounts.models import Role, RoleAssignment, User
 from apps.accounts.permissions import IsTenantAdmin
 from apps.accounts.serializers import (
@@ -29,45 +19,15 @@ from apps.accounts.serializers import (
     UserSerializer,
 )
 
+from .auth_helpers import consume_otp, find_user, has_password, is_eligible, issue_otp
 
-class TenantLoginView(TokenObtainPairView):
-    """Log in a tenant user and return tenant-bound JWTs."""
+# ------------------------ Shared response helpers ------------------------
+def _invalid(message="Invalid credentials."):
+    return Response({"error": message}, status=status.HTTP_401_UNAUTHORIZED)
 
-    serializer_class = TenantTokenObtainPairSerializer
-
-
-def _find_user(username):
-    username = username.strip()
-    if "@" in username:
-        matches = User.objects.filter(email__iexact=username)
-    else:
-        matches = User.objects.filter(phone=username)
-    return matches.first() if matches.count() == 1 else None
-
-
-def _otp_key(user, purpose):
-    # User IDs repeat across schemas, so include the active schema in the key.
-    return f"otp:{connection.schema_name}:{user.pk}:{purpose}"
-
-
-def _send_otp(user, username, code, purpose):
-    if "@" in username:
-        send_mail(
-            subject="Your OHM verification code",
-            message=f"Your {purpose.replace('_', ' ')} code is {code}. It expires in 5 minutes.",
-            from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-            recipient_list=[username],
-            fail_silently=False,
-        )
-        return
-    backend_path = getattr(settings, "OHM_SMS_OTP_BACKEND", "")
-    if not backend_path:
-        raise ImproperlyConfigured("Configure OHM_SMS_OTP_BACKEND to send OTPs to phone numbers.")
-    backend = import_string(backend_path)
-    backend(phone=user.phone, code=code, purpose=purpose)
-
+# ------------------------ Authentication: login / logout ------------------------
 class UnifiedLoginView(APIView):
-    """Authenticate against public users or the tenant selected by X-Tenant."""
+    """Login with email or phone, using either password or OTP."""
 
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -75,59 +35,55 @@ class UnifiedLoginView(APIView):
     throttle_scope = "root_login"
 
     def post(self, request):
-        serializer = UnifiedLoginSerializer(data=request.data, context={'request': request})
-        if serializer.is_valid():
-            data = serializer.validated_data
-            user = _find_user(data['username'])
-            if not user:
-                return Response(
-                    {'error': 'Invalid credentials.'},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
+        serializer = UnifiedLoginSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
 
-            if data['method'] == 'password':
-                if not user.check_password(data['password']):
+        user = find_user(data["username"])
+        if not user:
+            return _invalid() if data["method"] == "password" else _invalid("Invalid or expired OTP.")
+
+        # --- Verify credentials (password or OTP) ---
+        if data["method"] == "password":
+            if not has_password(user):
+                if user.is_active and is_eligible(user):
                     return Response(
-                        {'error': 'Invalid credentials.'},
-                        status=status.HTTP_401_UNAUTHORIZED
+                        {
+                            "error": "Password has not been set for this account. Please try OTP login.",
+                            "code": "password_not_set",
+                        },
+                        status=status.HTTP_400_BAD_REQUEST,
                     )
-            else:
-                if not _consume_otp(user, 'login', data['otp']):
-                    return Response(
-                        {'error': 'Invalid or expired OTP.'},
-                        status=status.HTTP_401_UNAUTHORIZED
-                    )
+                return _invalid()
+            if not user.check_password(data["password"]):
+                return _invalid()
+        else:
+            if not consume_otp(user, "login", data["otp"]):
+                return _invalid("Invalid or expired OTP.")
 
-            if not user.is_active:
-                return Response(
-                    {'error': 'Account pending approval by Master Admin.'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        # --- Account state checks (credentials already verified) ---
+        if not user.is_active:
+            return Response(
+                {"error": "Account pending approval by Master Admin."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        if not is_eligible(user):
+            return _invalid()
 
-            if (
-                connection.schema_name == 'public'
-                and not user.is_superuser
-                and not hasattr(user, 'platform_admin_profile')
-            ):
-                return Response(
-                    {'error': 'Invalid credentials.'},
-                    status=status.HTTP_401_UNAUTHORIZED
-                )
+        # --- Issue tokens ---
+        user.last_login = timezone.now()
+        user.save(update_fields=["last_login"])
 
-            user.last_login = timezone.localtime()
-            user.save()
-
-            refresh = RefreshToken.for_user(user)
-            refresh['schema'] = connection.schema_name
-            return Response({
-                'message': f'Login successful!',
-                'user': UserSerializer(user).data,
-                'tokens': {
-                    'refresh': str(refresh),
-                    'access': str(refresh.access_token)
-                }
-            }, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        refresh = RefreshToken.for_user(user)
+        refresh["schema"] = connection.schema_name
+        return Response(
+            {
+                "message": "Login successful!",
+                "user": UserSerializer(user).data,
+                "tokens": {"refresh": str(refresh), "access": str(refresh.access_token)},
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class UnifiedLogoutView(APIView):
@@ -135,37 +91,14 @@ class UnifiedLogoutView(APIView):
 
     def post(self, request):
         try:
-            refresh_token = request.data.get('refresh_token')
+            refresh_token = request.data.get("refresh_token")
             if refresh_token:
-                token = RefreshToken(refresh_token)
-                token.blacklist()
-            return Response({'message': 'Logout successful'}, status=status.HTTP_200_OK)
+                RefreshToken(refresh_token).blacklist()
+            return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
         except Exception:
-            return Response({'error': 'Invalid token or logout failed'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": "Invalid token or logout failed"}, status=status.HTTP_400_BAD_REQUEST)
 
-
-def _consume_otp(user, purpose, code):
-    key = _otp_key(user, purpose)
-    challenge = cache.get(key)
-    if challenge is None or challenge["attempts"] >= 5 or challenge["expires_at"] <= time.time():
-        return False
-    lock_key = f"{key}:verify-lock"
-    if not cache.add(lock_key, "1", timeout=5):
-        return False
-    try:
-        challenge = cache.get(key)
-        if challenge is None or challenge["attempts"] >= 5 or challenge["expires_at"] <= time.time():
-            return False
-        if check_password(code, challenge["code_hash"]):
-            cache.delete(key)
-            return True
-        challenge["attempts"] += 1
-        cache.set(key, challenge, timeout=max(1, int(challenge["expires_at"] - time.time())))
-        return False
-    finally:
-        cache.delete(lock_key)
-
-
+# ------------------------ Authentication: OTP request / password reset ------------------------
 class OTPRequestView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -176,18 +109,15 @@ class OTPRequestView(APIView):
         serializer = OTPRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        user = _find_user(data["username"])
-        # Keep responses identical for unknown, inactive, and ineligible accounts.
-        if user and user.is_active and (connection.schema_name != "public" or user.is_superuser or hasattr(user, "platform_admin_profile")):
-            code = f"{secrets.randbelow(1_000_000):06d}"
-            key = _otp_key(user, data["purpose"])
-            cache.set(key, {"code_hash": make_password(code), "attempts": 0, "expires_at": time.time() + 300}, timeout=300)
-            try:
-                _send_otp(user, data["username"], code, data["purpose"])
-            except Exception:
-                cache.delete(key)
-                raise
-        return Response({"detail": "If the account exists, a verification code has been sent."}, status=202)
+
+        user = find_user(data["username"])
+        # Identical response for unknown, inactive and ineligible accounts.
+        if user and user.is_active and is_eligible(user):
+            issue_otp(user, data["username"], data["purpose"])
+        return Response(
+            {"detail": "If the account exists, a verification code has been sent."},
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class OTPPasswordResetView(APIView):
@@ -200,38 +130,18 @@ class OTPPasswordResetView(APIView):
         serializer = OTPPasswordResetSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        user = _find_user(data["username"])
-        if not user or not user.is_active or (connection.schema_name == "public" and not user.is_superuser and not hasattr(user, "platform_admin_profile")):
+
+        user = find_user(data["username"])
+        if not user or not user.is_active or not is_eligible(user):
             raise AuthenticationFailed("Invalid or expired OTP.")
-        if not _consume_otp(user, "password_reset", data["otp"]):
+        if not consume_otp(user, "password_reset", data["otp"]):
             raise AuthenticationFailed("Invalid or expired OTP.")
+
         user.set_password(data["new_password"])
         user.save(update_fields=("password",))
         return Response({"detail": "Password has been reset."})
 
-
-class TenantCurrentSessionView(APIView):
-    """Return the current authenticated tenant user's profile and workspace."""
-
-    def get(self, request):
-        user = request.user
-        tenant = getattr(connection, "tenant", None)
-        return Response({
-            "email": user.email,
-            "full_name": user.full_name,
-            "workspace": getattr(tenant, "name", None),
-            "modules": getattr(tenant, "modules", []),
-            "roles": [
-                {
-                    "code": assignment.role.code,
-                    "scope_type": assignment.scope_type.model if assignment.scope_type else None,
-                    "scope_id": assignment.scope_id,
-                }
-                for assignment in user.role_assignments.select_related("role", "scope_type")
-            ],
-        })
-
-
+# ------------------------ Tenant: customer self-registration ------------------------
 class TenantRegistrationCreateView(APIView):
     """Let a provider's customers create login accounts in that provider's schema."""
 
@@ -252,9 +162,9 @@ class TenantRegistrationCreateView(APIView):
                 phone=data["phone"],
             )
             RoleAssignment.objects.create(user=user, role=Role.objects.get(code=Role.Code.CUSTOMER))
-        return Response({"email": user.email}, status=201)
+        return Response({"email": user.email}, status=status.HTTP_201_CREATED)
 
-
+# ------------------------ Tenant: user management (Tenant Admin only) ------------------------
 class TenantUserViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
@@ -270,10 +180,16 @@ class TenantUserViewSet(
 
     def get_queryset(self):
         queryset = User.objects.all().order_by("id").prefetch_related("role_assignments__role")
+
         role = self.request.query_params.get("role")
         if role:
-            queryset = queryset.filter(role_assignments__role__code=role, role_assignments__scope_type__isnull=True)
+            queryset = queryset.filter(
+                role_assignments__role__code=role,
+                role_assignments__scope_type__isnull=True,
+            )
+
         search = self.request.query_params.get("q")
         if search:
             queryset = queryset.filter(Q(email__icontains=search) | Q(full_name__icontains=search))
+
         return queryset.distinct()
