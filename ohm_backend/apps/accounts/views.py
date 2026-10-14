@@ -9,9 +9,9 @@ from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
 from django.utils.module_loading import import_string
-from rest_framework import mixins, viewsets
+from rest_framework import mixins, viewsets,status
 from rest_framework.exceptions import AuthenticationFailed
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny,IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.throttling import ScopedRateThrottle
@@ -66,7 +66,6 @@ def _send_otp(user, username, code, purpose):
     backend = import_string(backend_path)
     backend(phone=user.phone, code=code, purpose=purpose)
 
-
 class UnifiedLoginView(APIView):
     """Authenticate against public users or the tenant selected by X-Tenant."""
 
@@ -76,25 +75,73 @@ class UnifiedLoginView(APIView):
     throttle_scope = "root_login"
 
     def post(self, request):
-        serializer = UnifiedLoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        data = serializer.validated_data
-        user = _find_user(data["username"])
-        if not user or not user.is_active:
-            raise AuthenticationFailed("Invalid credentials.")
+        serializer = UnifiedLoginSerializer(data=request.data, context={'request': request})
+        if serializer.is_valid():
+            data = serializer.validated_data
+            user = _find_user(data['username'])
+            if not user:
+                return Response(
+                    {'error': 'Invalid credentials.'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
 
-        if data["method"] == "password":
-            if not user.check_password(data["password"]):
-                raise AuthenticationFailed("Invalid credentials.")
-        else:
-            if not _consume_otp(user, "login", data["otp"]):
-                raise AuthenticationFailed("Invalid or expired OTP.")
+            if data['method'] == 'password':
+                if not user.check_password(data['password']):
+                    return Response(
+                        {'error': 'Invalid credentials.'},
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
+            else:
+                if not _consume_otp(user, 'login', data['otp']):
+                    return Response(
+                        {'error': 'Invalid or expired OTP.'},
+                        status=status.HTTP_401_UNAUTHORIZED
+                    )
 
-        if connection.schema_name == "public" and not user.is_superuser and not hasattr(user, "platform_admin_profile"):
-            raise AuthenticationFailed("Invalid credentials.")
-        refresh = RefreshToken.for_user(user)
-        refresh["schema"] = connection.schema_name
-        return Response({"refresh": str(refresh), "access": str(refresh.access_token)})
+            if not user.is_active:
+                return Response(
+                    {'error': 'Account pending approval by Master Admin.'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+
+            if (
+                connection.schema_name == 'public'
+                and not user.is_superuser
+                and not hasattr(user, 'platform_admin_profile')
+            ):
+                return Response(
+                    {'error': 'Invalid credentials.'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+
+            user.last_login = timezone.localtime()
+            user.save()
+
+            refresh = RefreshToken.for_user(user)
+            refresh['schema'] = connection.schema_name
+            return Response({
+                'message': f'Login successful!',
+                'user': UserSerializer(user).data,
+                'tokens': {
+                    'refresh': str(refresh),
+                    'access': str(refresh.access_token)
+                }
+            }, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class UnifiedLogoutView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        try:
+            refresh_token = request.data.get('refresh_token')
+            if refresh_token:
+                token = RefreshToken(refresh_token)
+                token.blacklist()
+            return Response({'message': 'Logout successful'}, status=status.HTTP_200_OK)
+        except Exception:
+            return Response({'error': 'Invalid token or logout failed'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 def _consume_otp(user, purpose, code):
