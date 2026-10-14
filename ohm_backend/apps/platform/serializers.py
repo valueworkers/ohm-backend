@@ -222,7 +222,7 @@ class TenantProfileSerializer(serializers.ModelSerializer):
         model = Tenant
         fields = (
             "id", "name", "schema_name", "status", "logo", "contact_email", "contact_phone",
-            "timezone", "tags", "default_currency", "modules", "domains",
+            "timezone", "tags", "default_currency", "modules", "domains", "subscriptions"
         )
         read_only_fields = ("id", "schema_name", "status", "modules", "domains")
 
