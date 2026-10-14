@@ -1,3 +1,4 @@
+from datetime import timedelta
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -143,6 +144,14 @@ REST_FRAMEWORK = {
         "tenant_request": "10/hour",
     },
     "NUM_PROXIES": 1,
+}
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=24),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,  # calls our custom blacklist() below
+    'UPDATE_LAST_LOGIN': True,
 }
 
 CORS_ALLOW_ALL_ORIGINS = True
