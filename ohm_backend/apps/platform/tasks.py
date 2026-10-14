@@ -1,8 +1,15 @@
+import logging
+
 import dns.resolver
 from celery import Task, current_app, shared_task
 from django.conf import settings
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
+from dns.exception import Timeout
+from dns.resolver import NXDOMAIN, NoAnswer, NoNameservers, Resolver
+
+
+logger = logging.getLogger(__name__)
 
 
 class TenantTask(Task):
@@ -34,21 +41,35 @@ def fanout(task_name):
 
 
 def _txt_values(name):
+    resolver = Resolver()
+    resolver.lifetime = 3.0
     try:
-        answers = dns.resolver.resolve(name, "TXT")
-    except Exception:
+        answers = resolver.resolve(name, "TXT")
+    except (NXDOMAIN, NoAnswer, NoNameservers, Timeout):
         return set()
     return {b"".join(r.strings).decode() for r in answers}
 
+@shared_task
+def provision_tenant_task(request_id):
+    from .models import TenantProvisioning
+    from .services import provision_tenant
+    provision_tenant(TenantProvisioning.objects.get(pk=request_id))
 
 @shared_task
 def verify_pending_domains():
     """Mark custom domains verified once their TXT record proves ownership."""
     from .models import Domain
 
+    base = getattr(settings, "TENANT_BASE_DOMAIN", "o-hm.com")
     with schema_context(get_public_schema_name()):
-        for d in Domain.objects.filter(verified=False):
+        pending = (
+            Domain.objects.filter(verified=False)
+            .exclude(domain=base)
+            .exclude(domain__endswith=f".{base}")
+        )
+        for d in pending:
             if d.verification_token in _txt_values(f"{settings.DOMAIN_VERIFY_PREFIX}.{d.domain}"):
                 d.verified = True
                 d.verified_at = timezone.now()
                 d.save(update_fields=["verified", "verified_at"])
+                logger.info("Verified domain %s", d.domain)

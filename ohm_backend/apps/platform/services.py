@@ -1,157 +1,136 @@
-from django.conf import settings
-from django.contrib.auth import authenticate
+import logging
+
 from django.db import transaction
+from django.dispatch import Signal
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
-from rest_framework_simplejwt.exceptions import AuthenticationFailed
 
-from .models import Tenant, Domain, TenantProvisioning
-from .utils import schema_for_slug
+from .models import Domain, Subscription, Tenant, TenantProvisioning
+from .serializers import base_domain
+
+logger = logging.getLogger(__name__)
+
+# Sent after the tenant schema, domains and subscription exist, but before the
+# request is marked provisioned. Product apps hook in here to seed data inside
+# the tenant schema (branches, ops admin, tenant admin user). If a receiver
+# raises, provisioning is rolled back and can be retried.
+#   kwargs: provisioning (TenantProvisioning), tenant (Tenant)
+tenant_provisioned = Signal()
 
 
-def authenticate_root_user(request, *, email, password):
-    user = authenticate(request, email=email, password=password)
-    if user is None or not user.is_active or not user.is_superuser:
-        raise AuthenticationFailed("Invalid root account email or password.")
-    return user
+class ProvisioningError(Exception):
+    pass
 
 
-def update_onboarding_request(
-    request_id,
-    *,
-    status,
-    user,
-    review_notes="",
-    applicant_message="",
-    approved_modules=None,
-):
-    """Apply one valid root review transition to an onboarding request."""
-    transitions = {
-        TenantProvisioning.Status.SUBMITTED: {
-            TenantProvisioning.Status.IN_REVIEW,
-            TenantProvisioning.Status.NEEDS_INFO,
-            TenantProvisioning.Status.REJECTED,
-        },
-        TenantProvisioning.Status.NEEDS_INFO: {
-            TenantProvisioning.Status.IN_REVIEW,
-            TenantProvisioning.Status.REJECTED,
-        },
-        TenantProvisioning.Status.IN_REVIEW: {
-            TenantProvisioning.Status.NEEDS_INFO,
-            TenantProvisioning.Status.APPROVED,
-            TenantProvisioning.Status.REJECTED,
-        },
-    }
+def schema_name_for(slug):
+    return slug.replace("-", "_")
 
+
+def _claim(request_id):
+    """APPROVED -> PROVISIONING under a row lock, so two workers can't provision one request."""
     with transaction.atomic():
-        onboarding_request = TenantProvisioning.objects.select_for_update().get(pk=request_id)
-        if status not in transitions.get(onboarding_request.status, set()):
-            raise ValueError(f"Cannot change request status from {onboarding_request.status} to {status}.")
-        if status == TenantProvisioning.Status.NEEDS_INFO and not applicant_message.strip():
-            raise ValueError("An applicant message is required when requesting information.")
-        if status == TenantProvisioning.Status.APPROVED:
-            modules = approved_modules or []
-            if not set(modules).issubset(onboarding_request.requested_modules):
-                raise ValueError("Select only modules requested by the applicant.")
-            onboarding_request.approved_modules = modules
-        if status == TenantProvisioning.Status.REJECTED:
-            onboarding_request.initial_password_hash = ""
-
-        onboarding_request.status = status
-        onboarding_request.review_notes = review_notes
-        onboarding_request.applicant_message = applicant_message
-        onboarding_request.reviewed_by = user
-        onboarding_request.reviewed_at = timezone.now()
-        onboarding_request.save(update_fields=[
-            "status", "review_notes", "applicant_message", "approved_modules", "initial_password_hash",
-            "reviewed_by", "reviewed_at", "updated_at",
-        ])
-        return onboarding_request
+        p = TenantProvisioning.objects.select_for_update().get(pk=request_id)
+        if p.status != TenantProvisioning.Status.APPROVED:
+            raise ProvisioningError(f"Request is {p.status}; expected approved.")
+        p.status = TenantProvisioning.Status.PROVISIONING
+        p.provision_error = ""
+        p.save(update_fields=["status", "provision_error", "updated_at"])
+    return p
 
 
-def provision_tenant(
-    *, name, slug, owner_email, owner_name="", owner_password=None, owner_password_hash="",
-    custom_domain=None, modules=None,
-):
-    """Provision one provider schema and its first tenant admin; roll back on failure."""
-    from apps.accounts.models import Role, RoleAssignment, User
-    from apps.accounts.seed import seed_roles
+def _get_or_create_tenant(p):
+    """Returns (tenant, created). Creating the Tenant also creates and migrates its schema."""
+    schema = schema_name_for(p.slug)
+    existing = Tenant.objects.filter(schema_name=schema).first()
+    if existing:
+        # Leftover from a crashed attempt of this same request is reusable; anything else is a clash.
+        if existing.owner_id == p.applicant_id:
+            return existing, False
+        raise ProvisioningError(f"Schema '{schema}' already belongs to another tenant.")
 
-    schema = schema_for_slug(slug)
-    tenant = None
-    custom = None
-    with schema_context(get_public_schema_name()):
-        try:
-            tenant = Tenant(
-                schema_name=schema,
-                name=name,
-                modules=modules or [],
-            )
-            tenant.save()  # CREATE SCHEMA + migrate tenant apps
+    modules = []
+    if p.requested_plan_id:
+        modules = list(p.requested_plan.features.filter(is_active=True).values_list("code", flat=True))
 
-            Domain.objects.create(
-                domain=f"{slug}.{settings.BASE_DOMAIN}", tenant=tenant,
-                is_primary=True, verified=True, verified_at=timezone.now(),
-            )
-            if custom_domain:
-                custom = Domain.objects.create(domain=custom_domain, tenant=tenant, is_primary=False, verified=False)
-
-            with schema_context(schema):
-                seed_roles()
-                tenant_admin = User.objects.create_user(
-                    email=owner_email, password=owner_password, full_name=owner_name
-                )
-                if owner_password_hash:
-                    tenant_admin.password = owner_password_hash
-                    tenant_admin.save(update_fields=["password"])
-                RoleAssignment.objects.create(user=tenant_admin, role=Role.objects.get(code=Role.Code.TENANT_ADMIN))
-
-            tenant.status = Tenant.Status.ACTIVE
-            tenant.save(update_fields=["status"])
-        except Exception:
-            if tenant is not None and tenant.pk:
-                tenant.auto_drop_schema = True
-                tenant.delete()
-            raise
-    return tenant, custom
+    tenant = Tenant(
+        schema_name=schema,
+        name=p.organization_name,
+        status=Tenant.Status.PROVISIONING,  # stays here until the owner completes setup and activates
+        owner=p.applicant,
+        modules=modules,
+        logo=p.logo.name if p.logo else "",
+        contact_email=p.email,
+        contact_phone=p.contact_phone,
+    )
+    tenant.save()
+    return tenant, True
 
 
-def provision_approved_request(request_id):
-    """Provision an approved request once; requests remain in public schema."""
-    with transaction.atomic():
-        onboarding_request = TenantProvisioning.objects.select_for_update().get(pk=request_id)
-        if onboarding_request.status != TenantProvisioning.Status.APPROVED:
-            raise ValueError("Only an approved onboarding request can be provisioned.")
-        if not onboarding_request.initial_password_hash:
-            raise ValueError("The request has no initial Tenant Admin password.")
-        onboarding_request.status = TenantProvisioning.Status.PROVISIONING
-        onboarding_request.provision_error = ""
-        onboarding_request.save(update_fields=["status", "provision_error", "updated_at"])
+def _ensure_domain(tenant, domain, **defaults):
+    obj, _ = Domain.objects.get_or_create(domain=domain, defaults={"tenant": tenant, **defaults})
+    if obj.tenant_id != tenant.pk:
+        raise ProvisioningError(f"Domain '{domain}' already belongs to another tenant.")
+    return obj
 
-    try:
-        tenant, _custom_domain = provision_tenant(
-            name=onboarding_request.organization_name,
-            slug=onboarding_request.slug,
-            owner_name=onboarding_request.contact_name,
-            owner_email=onboarding_request.contact_email,
-            owner_password_hash=onboarding_request.initial_password_hash,
-            custom_domain=onboarding_request.custom_domain or None,
-            modules=onboarding_request.approved_modules,
+
+def _create_domains_and_subscription(p, tenant):
+    now = timezone.now()
+    # Platform subdomain: we own the DNS, so it is trusted and primary immediately.
+    _ensure_domain(tenant, f"{p.slug}.{base_domain()}", is_primary=True, verified=True, verified_at=now)
+    # Custom domain: stays unverified until the TXT check (verify_pending_domains) passes.
+    if p.custom_domain:
+        _ensure_domain(tenant, p.custom_domain, is_primary=False, verified=False)
+
+    if p.requested_plan_id:
+        Subscription.objects.get_or_create(
+            tenant=tenant,
+            plan_id=p.requested_plan_id,
+            defaults={
+                "status": Subscription.Status.ACTIVE,
+                "starts_at": now,
+                "billing_email": p.email,
+            },
         )
+
+
+def _rollback_tenant(tenant):
+    try:
+        tenant.auto_drop_schema = True
+        tenant.delete(force_drop=True)  # drops the schema; Domain/Subscription cascade
+    except Exception:
+        logger.exception("Could not roll back tenant %s; clean up the schema manually.", tenant.schema_name)
+
+
+def provision_tenant(provisioning):
+    """Turn an approved onboarding request into a tenant. Safe to retry after a failure.
+
+    Success: request -> PROVISIONED, Tenant.status stays PROVISIONING (awaiting the owner).
+    Failure: request -> APPROVED with provision_error set, partial work rolled back.
+    """
+    p = _claim(provisioning.pk)
+    created_tenant = None
+    try:
+        with schema_context(get_public_schema_name()):
+            tenant, created = _get_or_create_tenant(p)
+            if created:
+                created_tenant = tenant
+            with transaction.atomic():
+                _create_domains_and_subscription(p, tenant)
+            tenant_provisioned.send(sender=TenantProvisioning, provisioning=p, tenant=tenant)
+            with transaction.atomic():
+                p.tenant = tenant
+                p.status = TenantProvisioning.Status.PROVISIONED
+                p.provision_error = ""
+                p.save(update_fields=["tenant", "status", "provision_error", "updated_at"])
     except Exception as exc:
-        TenantProvisioning.objects.filter(pk=request_id).update(
+        logger.exception("Provisioning failed for request %s", p.pk)
+        if created_tenant is not None:
+            _rollback_tenant(created_tenant)
+        TenantProvisioning.objects.filter(pk=p.pk).update(
             status=TenantProvisioning.Status.APPROVED,
-            provision_error=f"{type(exc).__name__}: {exc}"[:2000],
+            tenant=None,
+            provision_error=str(exc)[:2000],
             updated_at=timezone.now(),
         )
-        raise
-
-    TenantProvisioning.objects.filter(pk=request_id).update(
-        tenant=tenant,
-        status=TenantProvisioning.Status.PROVISIONED,
-        initial_password_hash="",
-        provision_error="",
-        updated_at=timezone.now(),
-    )
-    onboarding_request.refresh_from_db()
-    return onboarding_request
+        raise ProvisioningError(str(exc)) from exc
+    return tenant

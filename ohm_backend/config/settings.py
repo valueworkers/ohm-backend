@@ -1,3 +1,4 @@
+from datetime import timedelta
 import os
 from pathlib import Path
 from dotenv import load_dotenv
@@ -8,6 +9,8 @@ load_dotenv(BASE_DIR / ".env")
 
 def env(name, default=None):
     return os.environ.get(name, default)
+
+REDIS_URL = env("REDIS_URL", "redis://localhost:6379/0")
 
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-change-me")
@@ -34,26 +37,15 @@ ROOT_HOSTS = {
 
 OHM_URL_SCHEME = env("OHM_URL_SCHEME", "http")   # "https" in production
 OHM_URL_PORT = env("OHM_URL_PORT", ":8000")      # "" in production (used for <slug>.<BASE_DOMAIN> links)
+
 RESERVED_SLUGS = {
-    "admin", "www", "api", "app", "edge", "mail", "static", "media", "root", "platform",
-    "ohm", "support", "help", "docs", "status", "internal", "public", "login", "register",
+    'app','demo','internal','ops','root','ftp',
+    'edge','mail','dashboard','status','staging',
+    'login','register','o-hm','help','public','ohm',
+    'api','smtp','www','docs','support','media',
+    'platform','admin','test','static'
 }
-CORS_ALLOWED_ORIGINS = [
-    origin.strip()
-    for origin in env(
-        "OHM_CORS_ALLOWED_ORIGINS",
-        "https://ohm.com,http://localhost:3000,http://127.0.0.1:3000",
-    ).split(",")
-    if origin.strip()
-]
-CORS_ALLOWED_ORIGIN_REGEXES = [
-    regex.strip()
-    for regex in env(
-        "OHM_CORS_ALLOWED_ORIGIN_REGEXES",
-        r"^https://([a-z0-9-]+\.)?ohm\.com$,^http://([a-z0-9-]+\.)?ohm\.localhost:3000$",
-    ).split(",")
-    if regex.strip()
-]
+
 
 # --- django-tenants ----------------------------------------------------------
 # Apps listed in BOTH lists get a table in the public schema (platform staff,
@@ -104,9 +96,10 @@ DATABASES = {
 DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 
 MIDDLEWARE = [
-    "apps.platform.middleware.VerifiedDomainTenantMiddleware",  # must be first
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
+    "apps.platform.middleware.VerifiedDomainTenantMiddleware",
+    "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
@@ -132,22 +125,38 @@ TEMPLATES = [
 
 AUTH_USER_MODEL = "accounts.User"
 WSGI_APPLICATION = "config.wsgi.application"
+# ASGI_APPLICATION = "config.asgi.application"
 
 REST_FRAMEWORK = {
+    "DEFAULT_PARSER_CLASSES": [
+        "rest_framework.parsers.JSONParser",
+        "rest_framework.parsers.FormParser",
+        "rest_framework.parsers.MultiPartParser",
+    ],
+
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "apps.accounts.auth.TenantJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.BasicAuthentication",
     ],
     "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
     "DEFAULT_THROTTLE_RATES": {
         "root_login": "20/minute",
+        "otp_request": "5/hour",
         "tenant_registration_create": "20/hour",
-        "onboarding_request": "10/hour",
+        "tenant_request": "10/hour",
     },
-    "NUM_PROXIES": 1,  # Caddy in front
+    "NUM_PROXIES": 1,
 }
 
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(days=24),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,  # calls our custom blacklist() below
+    'UPDATE_LAST_LOGIN': True,
+}
+
+CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = [*default_headers, "x-tenant"]
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -158,9 +167,37 @@ AUTH_PASSWORD_VALIDATORS = [
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
+
+
+# --- Storage & static ------------------------------------------------------------------
+STATIC_URL = "/static/"
+STATIC_ROOT = BASE_DIR / "staticfiles"
+STORAGES = {
+    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "staticfiles": {"BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage"},
+}
+
+# --- Email ------------------------------------------------------------------
+EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_HOST = env("EMAIL_HOST", "localhost")
+EMAIL_PORT = int(env("EMAIL_PORT", 25))
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = str(env("EMAIL_USE_TLS", "false")).lower() == "true"
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "noreply@ohm.local")
+OHM_SMS_OTP_BACKEND = env("OHM_SMS_OTP_BACKEND", "")
+
+# --- Cache ------------------------------------------------------------------
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": REDIS_URL,
+        "KEY_PREFIX": "ohm",
+    }
+}
 # --- Celery ------------------------------------------------------------------
-CELERY_BROKER_URL = env("REDIS_URL", "redis://localhost:6379/0")
-CELERY_RESULT_BACKEND = env("REDIS_URL", "redis://localhost:6379/0")
+CELERY_BROKER_URL = REDIS_URL
+CELERY_RESULT_BACKEND = REDIS_URL
 CELERY_BEAT_SCHEDULE = {
     "verify-pending-domains": {
         "task": "apps.platform.tasks.verify_pending_domains",
@@ -172,5 +209,4 @@ LANGUAGE_CODE = "en-us"
 TIME_ZONE = "Asia/Kolkata"
 USE_I18N = True
 USE_TZ = True
-STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"

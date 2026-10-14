@@ -40,6 +40,33 @@ class CustomerRegisterSerializer(serializers.Serializer):
         return _check_password(value)
 
 
+class UnifiedLoginSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=254)
+    method = serializers.ChoiceField(choices=("password", "otp"))
+    password = serializers.CharField(required=False, allow_blank=False, trim_whitespace=False)
+    otp = serializers.CharField(required=False, min_length=6, max_length=6)
+
+    def validate(self, attrs):
+        credential = "password" if attrs["method"] == "password" else "otp"
+        if not attrs.get(credential):
+            raise serializers.ValidationError({credential: "This field is required for the selected login method."})
+        return attrs
+
+
+class OTPRequestSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=254)
+    purpose = serializers.ChoiceField(choices=("login", "password_reset"))
+
+
+class OTPPasswordResetSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=254)
+    otp = serializers.CharField(min_length=6, max_length=6)
+    new_password = serializers.CharField(trim_whitespace=False)
+
+    def validate_new_password(self, value):
+        return _check_password(value)
+
+
 class UserSerializer(serializers.ModelSerializer):
     """Tenant Admin's view of the workspace's users (Tenant Admins and Customers)."""
 
