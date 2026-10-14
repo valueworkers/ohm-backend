@@ -2,6 +2,7 @@ import re
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
+from django.db import transaction
 from rest_framework import serializers
 
 from .models import (
@@ -92,6 +93,10 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("This plan is not available.")
         return value
 
+class TenantProvisioningUpdateSerializer(TenantProvisioningCreateSerializer):
+    class Meta(TenantProvisioningCreateSerializer.Meta):
+        read_only_fields = ("status", "applicant", "tenant", "reviewed_by",
+                            "reviewed_at", "review_notes", "provision_error")
 
 class TenantProvisioningSerializer(serializers.ModelSerializer):
     """Read view. provision_error is only shown to platform admins."""
@@ -159,30 +164,65 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         return attrs
 
 
-class TenantSerializer(serializers.ModelSerializer):
-    domains = DomainSerializer(many=True, read_only=True)
-    subscriptions = SubscriptionSerializer(many=True, read_only=True)
+
+class TenantCreateSerializer(serializers.ModelSerializer):
+    domain = serializers.CharField(write_only=True, required=False, allow_blank=False)
 
     class Meta:
         model = Tenant
         fields = (
-            "id", "name", "schema_name", "status", "owner", "modules", "logo", "contact_email",
-            "contact_phone", "timezone", "default_currency", "domains",
-            "subscriptions", "created_at",
+            "id", "name", "schema_name", "owner", "modules", "logo", "contact_email",
+            "contact_phone", "timezone","tags", "default_currency", "domain",
         )
-        read_only_fields = fields
+        read_only_fields = ("id",)
 
+    def validate_schema_name(self, value):
+        value = value.lower().strip()
+        if not SLUG_RE.match(value):
+            raise serializers.ValidationError(
+                "Use lowercase letters, digits and underscores only; must start with a letter."
+            )
+        if value in settings.RESERVED_SLUGS or value.startswith("pg_"):
+            raise serializers.ValidationError("This schema name is reserved.")
+        if Tenant.objects.filter(schema_name=value).exists():
+            raise serializers.ValidationError("A tenant with this schema name already exists.")
+        return value
+
+    def validate_domain(self, value):
+        value = value.lower().strip()
+        if Domain.objects.filter(domain=value).exists():
+            raise serializers.ValidationError("This domain is already in use.")
+        return value
+
+    @transaction.atomic
+    def create(self, validated_data):
+        domain = validated_data.pop("domain", None)
+        # New tenants start as ACTIVE here because a platform admin is creating them directly.
+        # Change this if direct creation should go through a different initial status.
+        validated_data.setdefault("status", Tenant.Status.ACTIVE)
+        tenant = Tenant.objects.create(**validated_data)
+        if domain:
+            Domain.objects.create(domain=domain, tenant=tenant, is_primary=True)
+        return tenant
+
+class TenantUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Tenant
+        fields = (
+            "name", "owner", "modules", "logo", "contact_email",
+            "contact_phone", "timezone", "tags", "default_currency",
+        )
 
 class TenantProfileSerializer(serializers.ModelSerializer):
     """What a tenant owner may see and edit about their own workspace."""
-
+    subscriptions = SubscriptionSerializer(many=True, read_only=True)
     domains = DomainSerializer(many=True, read_only=True)
 
     class Meta:
         model = Tenant
         fields = (
             "id", "name", "schema_name", "status", "logo", "contact_email", "contact_phone",
-            "timezone", "default_currency", "modules", "domains",
+            "timezone", "tags", "default_currency", "modules", "domains",
         )
         read_only_fields = ("id", "schema_name", "status", "modules", "domains")
 

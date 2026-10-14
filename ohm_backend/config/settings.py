@@ -39,8 +39,11 @@ OHM_URL_SCHEME = env("OHM_URL_SCHEME", "http")   # "https" in production
 OHM_URL_PORT = env("OHM_URL_PORT", ":8000")      # "" in production (used for <slug>.<BASE_DOMAIN> links)
 
 RESERVED_SLUGS = {
-    "admin", "www", "api", "app", "edge", "mail", "static", "media", "root", "platform",
-    "ohm", "support", "help", "docs", "status", "internal", "public", "login", "register",
+    'app','demo','internal','ops','root','ftp',
+    'edge','mail','dashboard','status','staging',
+    'login','register','o-hm','help','public','ohm',
+    'api','smtp','www','docs','support','media',
+    'platform','admin','test','static'
 }
 
 

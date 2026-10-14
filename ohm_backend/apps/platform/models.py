@@ -62,6 +62,7 @@ class Tenant(TenantMixin):
     contact_email = models.EmailField(blank=True)
     contact_phone = models.CharField(max_length=30, blank=True)
     timezone = models.CharField(max_length=64, default="Asia/Kolkata")
+    tags = models.JSONField(default=list, blank=True)  # e.g. ["hospital", "clinic", "lab"]
     default_currency = models.CharField(max_length=3, default="INR")
 
     created_at = models.DateTimeField(auto_now_add=True)

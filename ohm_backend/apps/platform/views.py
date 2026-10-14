@@ -8,6 +8,7 @@ from rest_framework.parsers import FormParser, JSONParser, MultiPartParser
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from rest_framework.throttling import AnonRateThrottle
 
 from .models import Plan, Subscription, Tenant, TenantProvisioning
 from .serializers import (
@@ -16,9 +17,11 @@ from .serializers import (
     ReviewSerializer,
     SubscriptionSerializer,
     TenantProvisioningCreateSerializer,
+    TenantProvisioningUpdateSerializer,
     TenantProfileSerializer,
     TenantProvisioningSerializer,
-    TenantSerializer,
+    TenantCreateSerializer,
+    TenantUpdateSerializer,
     slug_problem,
 )
 from .tasks import provision_tenant_task
@@ -53,48 +56,100 @@ class SlugAvailabilityView(APIView):
 # --------------------------------------------------------------------------
 # Onboarding: applicant submits, platform admin reviews in the "lobby"
 # --------------------------------------------------------------------------
+class TenantRequestThrottle(AnonRateThrottle):
+    scope = "tenant_request"
 
-class TenantProvisioningViewSet(
-    mixins.CreateModelMixin,
-    mixins.ListModelMixin,
-    mixins.RetrieveModelMixin,
-    viewsets.GenericViewSet,
-):
+class TenantProvisioningViewSet(viewsets.ModelViewSet):
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     filterset_fields = ("status",)
 
-    def get_permissions(self):
-        if self.action in ("approve", "reject", "retry"):
-            return [IsPlatformAdmin()]
-        return [IsAuthenticated()]
+    EDITABLE_STATUSES = (TenantProvisioning.Status.SUBMITTED,)
+    DELETABLE_STATUSES = (
+        TenantProvisioning.Status.SUBMITTED,
+        TenantProvisioning.Status.REJECTED,
+    )
 
-    def get_queryset(self):
-        qs = TenantProvisioning.objects.select_related("applicant", "requested_plan", "tenant")
-        user = self.request.user
-        if user.is_superuser or hasattr(user, "platform_admin_profile"):
-            status_filter = self.request.query_params.get("status")
-            return qs.filter(status=status_filter) if status_filter else qs
-        return qs.filter(applicant=user)
+    queryset = TenantProvisioning.objects.select_related(
+        "applicant", "requested_plan", "tenant"
+    ).order_by("-created_at")
+
+    def get_permissions(self):
+        if self.action == "create":
+            return [AllowAny()]
+        return [IsPlatformAdmin()]
+
+    def get_throttles(self):
+        if self.action == "create":
+            return [TenantRequestThrottle()]
+        return super().get_throttles()
+
+    def get_authenticators(self):
+        # Public create shouldn't fail with 401 just because a stale/invalid token
+        # was attached by the frontend. Other actions still authenticate normally.
+        if getattr(self, "action", None) == "create":
+            return []
+        return super().get_authenticators()
 
     def get_serializer_class(self):
         if self.action == "create":
             return TenantProvisioningCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return TenantProvisioningUpdateSerializer
         if self.action == "reject":
             return RejectSerializer
         if self.action in ("approve", "retry"):
             return ReviewSerializer
         return TenantProvisioningSerializer
 
+    # ----- create (public) ------------------------------------------------
+
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         try:
-            instance = serializer.save(applicant=request.user)
+            instance = serializer.save()
         except IntegrityError:
-            # Lost a race against the unique open-request constraints.
             raise ValidationError({"slug": "This subdomain or domain was just requested by someone else."})
-        data = TenantProvisioningSerializer(instance, context=self.get_serializer_context()).data
-        return Response(data, status=status.HTTP_201_CREATED)
+        # Public response: acknowledge only, don't echo internal fields.
+        return Response(
+            {"id": str(instance.pk), "status": instance.status},
+            status=status.HTTP_201_CREATED,
+        )
+
+    # ----- update (PUT / PATCH) -------------------------------------------
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        pk = self.get_object().pk  # applies queryset scoping + 404 for other users' requests
+        try:
+            with transaction.atomic():
+                obj = TenantProvisioning.objects.select_for_update().get(pk=pk)
+                if obj.status not in self.EDITABLE_STATUSES:
+                    raise ValidationError(
+                        {"status": f"A {obj.status} request can no longer be edited."}
+                    )
+                serializer = self.get_serializer(obj, data=request.data, partial=partial)
+                serializer.is_valid(raise_exception=True)
+                obj = serializer.save()
+        except IntegrityError:
+            raise ValidationError({"slug": "This subdomain or domain was just requested by someone else."})
+        data = TenantProvisioningSerializer(obj, context=self.get_serializer_context()).data
+        return Response(data)
+
+
+    # ----- destroy --------------------------------------------------------
+
+    def destroy(self, request, *args, **kwargs):
+        pk = self.get_object().pk
+        with transaction.atomic():
+            obj = TenantProvisioning.objects.select_for_update().get(pk=pk)
+            if obj.status not in self.DELETABLE_STATUSES or obj.tenant_id:
+                raise ValidationError(
+                    {"status": "Approved/provisioned requests can't be deleted. "
+                               "Suspend or delete the tenant instead."}
+                )
+            obj.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
     # ----- review actions -------------------------------------------------
 
@@ -152,9 +207,8 @@ class TenantProvisioningViewSet(
 # Platform admin: tenants and subscriptions
 # --------------------------------------------------------------------------
 
-class TenantViewSet(viewsets.ReadOnlyModelViewSet):
+class TenantViewSet(viewsets.ModelViewSet):
     permission_classes = [IsPlatformAdmin]
-    serializer_class = TenantSerializer
     filterset_fields = ("status",)
     search_fields = ("name", "schema_name", "contact_email", "domains__domain")
     queryset = (
@@ -162,6 +216,43 @@ class TenantViewSet(viewsets.ReadOnlyModelViewSet):
         .prefetch_related("domains", "subscriptions__plan")
         .order_by("-created_at")
     )
+
+    def get_serializer_class(self):
+        if self.action == "create":
+            return TenantCreateSerializer
+        if self.action in ("update", "partial_update"):
+            return TenantUpdateSerializer
+        return TenantProfileSerializer
+
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            tenant = serializer.save()
+        except IntegrityError:
+            raise ValidationError({"schema_name": "A tenant with this schema or domain already exists."})
+        return Response(TenantProfileSerializer(tenant, context=self.get_serializer_context()).data,
+                        status=status.HTTP_201_CREATED)
+
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop("partial", False)
+        tenant = self.get_object()
+        serializer = self.get_serializer(tenant, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(TenantProfileSerializer(tenant, context=self.get_serializer_context()).data)
+
+    def destroy(self, request, *args, **kwargs):
+        tenant = self.get_object()  # "public" is excluded from the queryset, so it 404s
+        if tenant.status != Tenant.Status.SUSPENDED:
+            raise ValidationError({"status": "Suspend the tenant before deleting it."})
+        if request.query_params.get("confirm") != tenant.schema_name:
+            raise ValidationError(
+                {"confirm": "Pass ?confirm=<schema_name> to confirm permanent deletion."}
+            )
+        tenant.delete(force_drop=True)  # drops the schema and all its data
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 
     @action(detail=True, methods=["post"])
     def suspend(self, request, pk=None):
