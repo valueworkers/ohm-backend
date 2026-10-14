@@ -2,7 +2,9 @@ import re
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
-from django.db import transaction
+from django.contrib.auth import get_user_model
+from django.db import IntegrityError, transaction
+
 from rest_framework import serializers
 
 from .models import (
@@ -13,7 +15,6 @@ from .models import (
     Tenant,
     TenantProvisioning,
 )
-
 from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
 # --------------------------------------------------------------------------
 # Catalogue
@@ -92,6 +93,28 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
         if value is not None and not value.is_active:
             raise serializers.ValidationError("This plan is not available.")
         return value
+    
+    def validate_email(self, value):
+        return value.strip().lower()
+
+    def _get_or_create_applicant(self, email):
+        User = get_user_model()
+        user = User.objects.filter(email__iexact=email).first()
+        if user:
+            return user  # reuse; never modify an existing account from a public request
+        try:
+            with transaction.atomic():  # savepoint, so a race doesn't poison the outer transaction
+                user = User(email=email, is_active=False)
+                user.set_unusable_password()
+                user.save()
+        except IntegrityError:
+            user = User.objects.get(email__iexact=email)  # someone created it a moment ago
+        return user
+
+    @transaction.atomic
+    def create(self, validated_data):
+        validated_data["applicant"] = self._get_or_create_applicant(validated_data["email"])
+        return super().create(validated_data)
 
 class TenantProvisioningUpdateSerializer(TenantProvisioningCreateSerializer):
     class Meta(TenantProvisioningCreateSerializer.Meta):

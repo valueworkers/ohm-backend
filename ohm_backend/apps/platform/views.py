@@ -106,11 +106,8 @@ class TenantProvisioningViewSet(viewsets.ModelViewSet):
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        try:
-            instance = serializer.save()
-        except IntegrityError:
-            raise ValidationError({"slug": "This subdomain or domain was just requested by someone else."})
-        # Public response: acknowledge only, don't echo internal fields.
+        instance = serializer.save()
+
         return Response(
             {"id": str(instance.pk), "status": instance.status},
             status=status.HTTP_201_CREATED,
