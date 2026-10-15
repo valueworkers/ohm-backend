@@ -110,7 +110,7 @@ MIDDLEWARE = [
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -179,13 +179,15 @@ STORAGES = {
 }
 
 # --- Email ------------------------------------------------------------------
-EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
 EMAIL_HOST = env("EMAIL_HOST", "localhost")
-EMAIL_PORT = int(env("EMAIL_PORT", 25))
+EMAIL_PORT = int(env("EMAIL_PORT", 587))
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = str(env("EMAIL_USE_TLS", "false")).lower() == "true"
+EMAIL_USE_TLS = bool(env("EMAIL_USE_TLS", True))
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "noreply@ohm.local")
+
 OHM_SMS_OTP_BACKEND = env("OHM_SMS_OTP_BACKEND", "")
 
 # --- Cache ------------------------------------------------------------------

@@ -10,12 +10,3 @@ class TenantJWTAuthentication(JWTAuthentication):
         if validated_token.get("schema") != connection.schema_name:
             raise AuthenticationFailed("Token is not valid for this tenant.", code="token_tenant_mismatch")
         return super().get_user(validated_token)
-
-# class TenantJWTAuthentication(JWTAuthentication):
-#     """User ids repeat across tenant schemas, so a token must be bound to its tenant."""
-
-#     def get_validated_token(self, raw_token):
-#         token = super().get_validated_token(raw_token)
-#         if token.get("schema") != connection.schema_name:
-#             raise AuthenticationFailed("Token is not valid for this tenant.", code="token_tenant_mismatch")
-#         return token

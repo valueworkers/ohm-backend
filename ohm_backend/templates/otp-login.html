@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="color-scheme" content="light only" />
+  <title>O-HM · {{ purpose_display }} code</title>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;700&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet" />
+</head>
+<!--
+  PURPOSE-DRIVEN OTP EMAIL
+  One template serves every OTP purpose. Your _send_otp() passes the purpose
+  string; render it into the placeholders below:
+
+    purpose          raw value, e.g. "login", "password_reset", "signup"
+    purpose_display  purpose with underscores replaced by spaces,
+                     e.g. "login", "password reset"  (purpose.replace('_', ' '))
+    .Token           the one-time code (replace with your code variable)
+
+  Examples:
+    login           -> subject "Your OHM login code"
+                       heading "Your login code"
+    password_reset  -> subject "Your OHM password reset code"
+                       heading "Your password reset code"
+-->
+<body style="margin:0; padding:0; background-color:#f2f8f7; -webkit-text-size-adjust:100%; -ms-text-size-adjust:100%;">
+
+  <!-- Preheader (hidden preview text) -->
+  <div style="display:none; max-height:0; overflow:hidden; mso-hide:all;">
+    Your {{ purpose_display }} code is {{ .Token }}. It expires in 5 minutes.
+  </div>
+
+  <!-- Outer background -->
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2f8f7;">
+    <tr>
+      <td align="center" style="padding:32px 12px;">
+
+        <!-- Email sheet -->
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" style="width:600px; max-width:600px; background-color:#ffffff; border:1px solid #e2eeee; overflow:hidden;">
+
+          <!-- Brand header -->
+          <tr>
+            <td style="background-color:#114d4a; padding:30px 34px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td align="left">
+                    <span style="display:inline-block; width:22px; height:22px; line-height:22px; border-radius:50%; background-color:#ffffff; font-size:22px; vertical-align:-2px;">&nbsp;</span>
+                    <span style="font-family:'Fraunces',Georgia,serif; font-size:29px; font-weight:700; color:#ffffff; letter-spacing:0.5px; vertical-align:middle; margin-left:10px;">O-HM</span>
+                  </td>
+                  <td align="right" style="font-family:'Outfit',Arial,sans-serif; font-size:11px; color:#b9d8d5; letter-spacing:0.3px;">
+                    Care. Connection. Peace of mind.
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding:38px 42px 34px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+
+                <!-- Icon -->
+                <tr>
+                  <td style="padding-bottom:22px;">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="width:46px; height:46px; border:1px solid #e2eeee; background-color:#f2f8f7; border-radius:50%; text-align:center; font-size:19px; line-height:46px; color:#114d4a; font-family:'Outfit',Arial,sans-serif;">
+                          &#128737;
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Eyebrow -->
+                <tr>
+                  <td style="font-family:'Outfit',Arial,sans-serif; font-size:10px; font-weight:600; letter-spacing:1.4px; text-transform:uppercase; color:#d4572a; padding-bottom:10px;">
+                    A little step to keep you safe
+                  </td>
+                </tr>
+
+                <!-- Heading -->
+                <tr>
+                  <td style="font-family:'Fraunces',Georgia,serif; font-size:32px; font-weight:500; line-height:1.24; color:#114d4a; padding-bottom:20px;">
+                    Your {{ purpose_display }} code
+                  </td>
+                </tr>
+
+                <!-- Body -->
+                <tr>
+                  <td style="font-family:'Outfit',Arial,sans-serif; font-size:15px; line-height:1.75; color:#1f3a39; padding-bottom:12px;">
+                    Hello,
+                  </td>
+                </tr>
+                <tr>
+                  <td style="font-family:'Outfit',Arial,sans-serif; font-size:14px; line-height:1.75; color:#5a7472; padding-bottom:24px;">
+                    Your {{ purpose_display }} code is below. It expires in 5 minutes.
+                  </td>
+                </tr>
+
+                <!-- OTP panel -->
+                <tr>
+                  <td style="padding-bottom:24px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f2f8f7; border:1px solid #e2eeee; border-radius:8px;">
+                      <tr>
+                        <td align="center" style="padding:26px 20px 22px;">
+                          <p style="margin:0 0 12px; font-family:'Outfit',Arial,sans-serif; font-size:10px; font-weight:600; letter-spacing:1.6px; text-transform:uppercase; color:#5a7472;">
+                            Your one-time password
+                          </p>
+                          <p style="margin:0 0 14px; font-family:'Fraunces',Georgia,serif; font-size:38px; font-weight:700; letter-spacing:10px; color:#114d4a; padding-left:10px;">
+                            {{ code }}
+                          </p>
+                          <p style="margin:0; font-family:'Outfit',Arial,sans-serif; font-size:12px; color:#5a7472;">
+                            &#9201; For your security, use this code promptly.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Security notice -->
+                <tr>
+                  <td style="font-family:'Outfit',Arial,sans-serif; font-size:12px; line-height:1.7; color:#5a7472; padding-bottom:24px;">
+                    Never share this code with anyone. If you didn’t request it, you can safely ignore this email.
+                  </td>
+                </tr>
+
+                <!-- Divider -->
+                <tr>
+                  <td style="padding-bottom:22px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr><td style="height:1px; background-color:#e9f2f1; font-size:0; line-height:1px;">&nbsp;</td></tr>
+                    </table>
+                  </td>
+                </tr>
+
+                <!-- Signoff -->
+                <tr>
+                  <td style="font-family:'Outfit',Arial,sans-serif; font-size:12px; line-height:1.7; color:#5a7472;">
+                    With care,<br />
+                    <strong style="color:#114d4a; font-weight:500;">The O-HM team</strong>
+                  </td>
+                </tr>
+
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background-color:#f2f8f7; border-top:1px solid #e2eeee; padding:20px 30px; text-align:center;">
+              <a href="https://www.o-hm.com/" target="_blank" style="font-family:'Outfit',Arial,sans-serif; font-size:12px; color:#114d4a; text-decoration:none;">www.o-hm.com ↗</a>
+              <p style="margin:9px 0 0; font-family:'Outfit',Arial,sans-serif; font-size:10px; line-height:1.7; color:#8aa3a1;">
+                You’re receiving this email because a {{ purpose_display }} was requested on O-HM.<br />
+                © O-HM. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+        <!-- /Email sheet -->
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

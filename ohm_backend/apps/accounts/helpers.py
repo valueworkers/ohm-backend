@@ -6,28 +6,26 @@ from django.contrib.auth import get_user_model
 from django.contrib.auth.hashers import check_password, make_password
 from django.core.cache import cache
 from django.core.exceptions import ImproperlyConfigured
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives, send_mail
 from django.db import connection
 from django.utils.module_loading import import_string
+from django.template.loader import render_to_string
 
 User = get_user_model()
 
 OTP_TTL_SECONDS = 300
 OTP_MAX_ATTEMPTS = 5
 
-# apps/accounts/auth.py
-from django.db import connection
-from rest_framework.exceptions import AuthenticationFailed
-from rest_framework_simplejwt.authentication import JWTAuthentication
+OTP_EMAIL_CONFIG = {
+    "password_reset": ("Your OHM password reset code", "password_reset_otp.html"),
+    "login":          ("Your OHM login code",          "otp-login.html"),
+    "signup":         ("Verify your OHM account",      "otp-login.html"),
+}
+DEFAULT_OTP_EMAIL = ("Your OHM verification code", "otp-login.html")
+
+OTP_EXPIRY_MINUTES = OTP_TTL_SECONDS // 60
 
 
-class TenantJWTAuthentication(JWTAuthentication):
-    """JWT auth that only accepts tokens issued for the schema serving this request."""
-
-    def get_user(self, validated_token):
-        if validated_token.get("schema") != connection.schema_name:
-            raise AuthenticationFailed("Token is not valid for this tenant.", code="token_tenant_mismatch")
-        return super().get_user(validated_token)
 # ---------- user lookup / eligibility ----------
 
 def find_user(username):
@@ -53,7 +51,6 @@ def is_eligible(user):
 
 
 # ---------- OTP ----------
-
 def _otp_key(user, purpose):
     # User IDs repeat across schemas, so include the active schema in the key.
     return f"otp:{connection.schema_name}:{user.pk}:{purpose}"
@@ -61,20 +58,30 @@ def _otp_key(user, purpose):
 
 def _send_otp(user, username, code, purpose):
     if "@" in username:
-        send_mail(
-            subject="Your OHM verification code",
-            message=f"Your {purpose.replace('_', ' ')} code is {code}. It expires in 5 minutes.",
+        subject, template = OTP_EMAIL_CONFIG.get(purpose, DEFAULT_OTP_EMAIL)
+        purpose_display = purpose.replace("_", " ")
+        context = {
+            "code": code,
+            "purpose": purpose,
+            "purpose_display": purpose_display,
+            "expiry_minutes": OTP_EXPIRY_MINUTES,
+        }
+
+        msg = EmailMultiAlternatives(
+            subject=subject,
+            body=f"Your {purpose_display} code is {code}. It expires in {OTP_EXPIRY_MINUTES} minutes.",
             from_email=getattr(settings, "DEFAULT_FROM_EMAIL", None),
-            recipient_list=[user.email],
-            fail_silently=False,
+            to=[user.email],
         )
+        msg.attach_alternative(render_to_string(template, context), "text/html")
+        msg.send(fail_silently=False)
         return
+
     backend_path = getattr(settings, "OHM_SMS_OTP_BACKEND", "")
     if not backend_path:
         raise ImproperlyConfigured("Configure OHM_SMS_OTP_BACKEND to send OTPs to phone numbers.")
     backend = import_string(backend_path)
     backend(phone=user.phone, code=code, purpose=purpose)
-
 
 def issue_otp(user, username, purpose):
     """Generate, store and send an OTP. Clears the stored challenge if sending fails."""
