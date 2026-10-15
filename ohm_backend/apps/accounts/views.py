@@ -31,8 +31,8 @@ class UnifiedLoginView(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "root_login"
+    # throttle_classes = [ScopedRateThrottle]
+    # throttle_scope = "root_login"
 
     def post(self, request):
         serializer = UnifiedLoginSerializer(data=request.data)
@@ -102,8 +102,8 @@ class UnifiedLogoutView(APIView):
 class OTPRequestView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "otp_request"
+    # throttle_classes = [ScopedRateThrottle]
+    # throttle_scope = "otp_request"
 
     def post(self, request):
         serializer = OTPRequestSerializer(data=request.data)
@@ -123,8 +123,8 @@ class OTPRequestView(APIView):
 class OTPPasswordResetView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "otp_request"
+    # throttle_classes = [ScopedRateThrottle]
+    # throttle_scope = "otp_request"
 
     def post(self, request):
         serializer = OTPPasswordResetSerializer(data=request.data)
@@ -147,8 +147,8 @@ class TenantRegistrationCreateView(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "tenant_registration_create"
+    # throttle_classes = [ScopedRateThrottle]
+    # throttle_scope = "tenant_registration_create"
 
     def post(self, request):
         serializer = CustomerRegisterSerializer(data=request.data)
