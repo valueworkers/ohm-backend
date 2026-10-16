@@ -10,7 +10,7 @@ from .models import (
 )
 
 # Lowercase, starts with a letter, 3-30 chars, no leading/trailing hyphen.
-SLUG_RE = re.compile(r"^[a-z][a-z0-9-]{1,28}[a-z0-9]$")
+SLUG_RE = re.compile(r"^[a-z][a-z0-9_-]{1,28}[a-z0-9]$")
 HOST_RE = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$")
 
 def base_domain():
@@ -72,5 +72,8 @@ def slug_problem(slug, exclude_pk=None):
 
 
 def schema_for_slug(slug):
-    """Return the database schema name used for a workspace slug."""
-    return "t_" + slug.strip().lower().replace("-", "_")
+    """Return the database schema name used for a workspace slug.
+
+    Must stay in sync with ``services.schema_name_for``.
+    """
+    return slug.strip().lower().replace("-", "_")

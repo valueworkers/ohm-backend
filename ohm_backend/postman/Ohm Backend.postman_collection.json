@@ -1,0 +1,1838 @@
+{
+  "info": {
+    "_postman_id": "7b6fe8dd-14df-4b94-86c0-6d517a25787d",
+    "name": "OHM Backend API",
+    "description": "Detailed collection generated from current Django URLconf, views, serializers, permissions and models. Import the companion local environment. Tenant calls require X-Tenant and tenant-issued JWTs; root/platform calls omit X-Tenant and use platform-admin JWTs. Onboarding approval provisions asynchronously and needs a Celery worker. See request descriptions for access rules and implementation notes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{accessToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://api.ohm.localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "tenantSlug",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "loginUsername",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "newPassword",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "otp",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "onboardingId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "onboardingToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenantId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tenantSchema",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "planId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "subscriptionId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Health and public catalogue",
+      "description": "No authentication. Health is host-level; public plans expose active entries.",
+      "item": [
+        {
+          "name": "Health check",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/health/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Returns {status, schema}. Does not verify tenant routing."
+          }
+        },
+        {
+          "name": "List active plans",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/plans/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Public list of active plans. Platform admins also see inactive plans.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Get plan",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/plans/{{planId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Public read of active plan; platform admins may also read inactive plans.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Check tenant slug",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/onboarding/check-slug/?slug={{tenantSlug}}",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Checks tenant subdomain availability. Query slug is required.",
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Authentication",
+      "description": "For platform/root accounts omit X-Tenant. Tenant accounts must include X-Tenant. JWTs are schema-bound. Login accepts email or phone as username.",
+      "item": [
+        {
+          "name": "Login with password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Unified login. Tenant account: include X-Tenant; platform admin: omit it.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{loginUsername}}\",\n  \"method\": \"password\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===200){const j=pm.response.json();pm.environment.set('accessToken',j.tokens.access);pm.environment.set('refreshToken',j.tokens.refresh);}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request login OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/otp/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Returns 202 with a generic detail regardless of account existence. OTP expires in five minutes; delivery depends on email/SMS configuration.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{loginUsername}}\",\n  \"purpose\": \"login\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Login with OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Use the six digit login OTP.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{loginUsername}}\",\n  \"method\": \"otp\",\n  \"otp\": \"{{otp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===200){const j=pm.response.json();pm.environment.set('accessToken',j.tokens.access);pm.environment.set('refreshToken',j.tokens.refresh);}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh access token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/access-tokens/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "SimpleJWT token refresh. Rotation is enabled; save returned refresh value when present.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===200){const j=pm.response.json();if(j.access)pm.environment.set('accessToken',j.access);if(j.refresh)pm.environment.set('refreshToken',j.refresh);}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Request password-reset OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/otp/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Request a password-reset code. Include X-Tenant for tenant accounts; omit for root.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{loginUsername}}\",\n  \"purpose\": \"password_reset\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/password-reset/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Consumes one password_reset OTP and changes the password. Django password validators apply.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{loginUsername}}\",\n  \"otp\": \"{{otp}}\",\n  \"new_password\": \"{{newPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        },
+        {
+          "name": "Logout / blacklist refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Requires access token. Blacklists the supplied refresh token; current access JWT remains valid until expiry.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Tenant customer registration",
+      "description": "Tenant schema only. Set X-Tenant to an active tenant. Registration assigns CUSTOMER role.",
+      "item": [
+        {
+          "name": "Register customer",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/registrations/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "email/password required; full_name and phone optional. Returns 201 with email.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"customer@example.com\",\n  \"password\": \"{{newPassword}}\",\n  \"full_name\": \"Alex Customer\",\n  \"phone\": \"+15551234567\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Tenant workspace user management",
+      "description": "Tenant Admin only. Set X-Tenant and use tenant-issued accessToken. Methods supported: GET, POST, PATCH.",
+      "item": [
+        {
+          "name": "List workspace users",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "role",
+                  "value": "CUSTOMER",
+                  "description": "Optional tenant-wide role.",
+                  "disabled": false
+                },
+                {
+                  "key": "q",
+                  "value": "alex",
+                  "description": "Case-insensitive email or full name search.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Optional filters role=TENANT_ADMIN|CUSTOMER and q for email/name substring.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create workspace user",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Create CUSTOMER or TENANT_ADMIN. Password required; role defaults to CUSTOMER.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"staff@example.com\",\n  \"full_name\": \"Sam Staff\",\n  \"phone\": \"+15550001111\",\n  \"password\": \"{{newPassword}}\",\n  \"role\": \"CUSTOMER\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===201)pm.environment.set('userId',pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get workspace user",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Retrieve a tenant user.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update workspace user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/{{userId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Email cannot be changed. Password in updates is ignored. Cannot deactivate yourself or remove the last active Tenant Admin.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Sam Updated\",\n  \"phone\": \"+15550002222\",\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Provider onboarding",
+      "description": "Public schema submission is open. Current code requires platform admin for every follow-up request; applicant token access described in README is not implemented.",
+      "item": [
+        {
+          "name": "Create onboarding request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/onboarding/requests/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Accepts JSON, multipart, or form. Required: organization_name, email, contact_phone, slug. requested_plan is active plan ID or null. Saves response id as onboardingId; response itself has id/status only.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_name\": \"Example Health\",\n  \"email\": \"owner@example.com\",\n  \"contact_phone\": \"+15551234567\",\n  \"address\": \"123 Example Street\",\n  \"branches\": [\n    {\n      \"name\": \"Main Clinic\",\n      \"address\": \"123 Example Street\"\n    }\n  ],\n  \"ops_admin_email\": \"ops@example.com\",\n  \"slug\": \"example-health\",\n  \"custom_domain\": \"\",\n  \"wants_custom_website\": false,\n  \"requested_plan\": \"{{planId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===201)pm.environment.set('onboardingId',pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List requests (platform admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/onboarding/requests/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "submitted",
+                  "description": "submitted, approved, rejected, provisioning, provisioned",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Platform admin only. Optional status filter.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get request (platform admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/onboarding/requests/{{onboardingId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only. X-Onboarding-Token is not honored by current code.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Edit submitted request",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/onboarding/requests/{{onboardingId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only; only submitted requests may be edited.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"organization_name\": \"Example Health Group\",\n  \"address\": \"456 Updated Street\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Approve and enqueue provisioning",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/onboarding/requests/{{onboardingId}}/approve/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only; submitted requests only. Returns 202. Requires a running Celery worker to provision.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"review_notes\": \"Application reviewed and approved.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Reject request",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/onboarding/requests/{{onboardingId}}/reject/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only; submitted requests only; review_notes is required and non-empty.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"review_notes\": \"Please provide updated organization documents.\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Retry provisioning",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/onboarding/requests/{{onboardingId}}/retry/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only; approved request with a provisioning error only.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete request",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/onboarding/requests/{{onboardingId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only; submitted or rejected request without linked tenant. Returns 204.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Platform tenant administration",
+      "description": "Public schema only; platform admin required. List supports status and DRF search filters.",
+      "item": [
+        {
+          "name": "List tenants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/tenants/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "Optional status.",
+                  "disabled": false
+                },
+                {
+                  "key": "search",
+                  "value": "clinic",
+                  "description": "Search name, schema, contact email, domain.",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Public tenant excluded. ?status=active and ?search=clinic are supported.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create tenant directly",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/tenants/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Creates schema directly in ACTIVE status; domain optional and primary. Distinct from approval-driven onboarding.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Direct Tenant\",\n  \"schema_name\": \"direct_tenant\",\n  \"modules\": [\n    \"patients\"\n  ],\n  \"contact_email\": \"admin@example.com\",\n  \"contact_phone\": \"+15551234567\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"tags\": [\n    \"clinic\"\n  ],\n  \"default_currency\": \"INR\",\n  \"domain\": \"direct.example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===201){const j=pm.response.json();pm.environment.set('tenantId',j.id);pm.environment.set('tenantSchema',j.schema_name);}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/tenants/{{tenantId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update tenant",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/tenants/{{tenantId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Writable fields: name, owner, modules, logo, contact_email, contact_phone, timezone, tags, default_currency.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Direct Tenant Updated\",\n  \"modules\": [\n    \"patients\",\n    \"booking\"\n  ],\n  \"contact_email\": \"admin@example.com\",\n  \"contact_phone\": \"+15551234567\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"tags\": [\n    \"clinic\"\n  ],\n  \"default_currency\": \"INR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Suspend tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/tenants/{{tenantId}}/suspend/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Only active tenants can be suspended; middleware blocks tenant requests while suspended.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Activate tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/tenants/{{tenantId}}/activate/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Only suspended tenants can be reactivated.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete tenant schema",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/tenants/{{tenantId}}/?confirm={{tenantSchema}}",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Destructive. Tenant must be suspended and confirm must exactly match schema_name. Permanently drops schema/data; returns 204.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Tenant owner profile and activation",
+      "description": "Owner-only endpoints. Requires tenant-bound token and X-Tenant. Profile accepts JSON, multipart, or form data.",
+      "item": [
+        {
+          "name": "List my tenants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/my/tenants/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "List tenants owned by caller.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Get my tenant",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/my/tenants/{{tenantId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Retrieve one owned tenant.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update my tenant profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/my/tenants/{{tenantId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Editable: name, contact_email, contact_phone, timezone, tags, default_currency, logo. Activation requires name/contact_email/contact_phone/timezone/default_currency.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Example Health\",\n  \"contact_email\": \"owner@example.com\",\n  \"contact_phone\": \"+15551234567\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"tags\": [\n    \"clinic\"\n  ],\n  \"default_currency\": \"INR\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Activate my tenant",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant",
+                "value": "{{tenantSlug}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/my/tenants/{{tenantId}}/activate/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Owner can activate only a provisioning tenant after required profile fields are complete.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "08 - Plans and subscriptions",
+      "description": "Plan reads are public; plan writes and subscription CRUD require platform admin.",
+      "item": [
+        {
+          "name": "Create plan",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/plans/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Writes use feature_ids; returned representation includes features.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"code\": \"standard\",\n  \"name\": \"Standard\",\n  \"description\": \"Standard clinic plan\",\n  \"feature_ids\": [],\n  \"max_employees\": 25,\n  \"max_branches\": 3,\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===201)pm.environment.set('planId',pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update plan",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/plans/{{planId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Plan deletion when in use returns 409; deactivate it instead.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Standard Plus\",\n  \"description\": \"Updated plan\",\n  \"feature_ids\": [],\n  \"max_employees\": 50,\n  \"max_branches\": 5,\n  \"is_active\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete plan",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/plans/{{planId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only; 204 if unused, 409 if referenced by tenants.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List subscriptions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/subscriptions/",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [
+                {
+                  "key": "tenant",
+                  "value": "{{tenantId}}",
+                  "description": "Tenant ID",
+                  "disabled": false
+                },
+                {
+                  "key": "plan",
+                  "value": "{{planId}}",
+                  "description": "Plan ID",
+                  "disabled": false
+                },
+                {
+                  "key": "status",
+                  "value": "active",
+                  "description": "trial, active, expired, suspended",
+                  "disabled": false
+                }
+              ]
+            },
+            "description": "Optional filters: tenant, plan, status.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Create subscription",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/subscriptions/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "starts_at required; ends_at must be after starts_at. Response includes plan_name.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"tenant\": \"{{tenantId}}\",\n  \"plan\": \"{{planId}}\",\n  \"status\": \"trial\",\n  \"starts_at\": \"2026-10-16T00:00:00Z\",\n  \"ends_at\": \"2026-11-16T00:00:00Z\",\n  \"trial_ends_at\": \"2026-10-30T00:00:00Z\",\n  \"billing_email\": \"billing@example.com\",\n  \"features\": []\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if(pm.response.code===201)pm.environment.set('subscriptionId',pm.response.json().id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get subscription",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/subscriptions/{{subscriptionId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Update subscription",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/subscriptions/{{subscriptionId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Partial update of subscription fields.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"active\",\n  \"billing_email\": \"billing@example.com\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Delete subscription",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/subscriptions/{{subscriptionId}}/",
+              "host": [
+                "{{baseUrl}}"
+              ]
+            },
+            "description": "Platform admin only; returns 204.",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

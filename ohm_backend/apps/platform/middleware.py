@@ -1,55 +1,62 @@
-from django.conf import settings
+"""
+Single-domain tenant middleware.
+
+All requests arrive on one API host (e.g. api.o-hm.com).
+The active schema is selected by the ``X-Tenant`` header:
+
+  * Header absent  → public schema  (platform admin / root user)
+  * Header present → tenant schema  (tenant users)
+"""
 from django.db import connection
-from django.http import HttpResponse
+from django.http import JsonResponse
 from django_tenants.middleware.main import TenantMainMiddleware
 from django_tenants.utils import get_public_schema_name, get_tenant_model
 
 from .utils import SLUG_RE, schema_for_slug
 
-# Caddy uses this endpoint before normal tenant host resolution.
-INTERNAL_PATHS = ("/internal/domain-check/",)
 
-
-class VerifiedDomainTenantMiddleware(TenantMainMiddleware):
-    """Resolve tenants from verified hostnames or the API's X-Tenant workspace header."""
-
-    def get_tenant(self, domain_model, hostname):
-        domain = domain_model.objects.select_related("tenant").get(domain__iexact=hostname, verified=True)
-        return domain.tenant
+class TenantHeaderMiddleware(TenantMainMiddleware):
+    """Resolve tenants exclusively from the ``X-Tenant`` request header."""
 
     def process_request(self, request):
-        if request.path in INTERNAL_PATHS:
-            connection.set_schema_to_public()
-            request.urlconf = settings.PUBLIC_SCHEMA_URLCONF
-            return None
-
-        hostname = self.hostname_from_request(request).lower()
         tenant_slug = request.headers.get("X-Tenant", "").strip().lower()
-        if hostname in settings.API_HOSTS and tenant_slug:
+
+        # ---- No header → public schema (root / platform admin) ----
+        if not tenant_slug:
             connection.set_schema_to_public()
-            if not SLUG_RE.fullmatch(tenant_slug):
-                return HttpResponse("Invalid tenant.", status=404)
-            tenant_model = get_tenant_model()
             try:
-                tenant = tenant_model.objects.get(schema_name=schema_for_slug(tenant_slug))
-            except tenant_model.DoesNotExist:
-                return HttpResponse("Tenant not found.", status=404)
-            if tenant.schema_name == get_public_schema_name() or not tenant.domains.filter(verified=True).exists():
-                return HttpResponse("Tenant not found.", status=404)
-            if tenant.status == "suspended":
-                return HttpResponse("This workspace is suspended.", status=403)
-            if tenant.status != "active":
-                return HttpResponse("Tenant not found.", status=404)
-            connection.set_tenant(tenant)
-            request.tenant = tenant
-            request.urlconf = settings.ROOT_URLCONF
+                request.tenant = get_tenant_model().objects.get(
+                    schema_name=get_public_schema_name()
+                )
+            except get_tenant_model().DoesNotExist:
+                # First run before bootstrap_platform; let Django keep going.
+                request.tenant = None
             return None
 
-        response = super().process_request(request)
-        if response is not None:
-            return response
+        # ---- X-Tenant present → resolve tenant schema ----
+        if not SLUG_RE.fullmatch(tenant_slug):
+            return JsonResponse({"error": "Invalid tenant slug."}, status=400)
 
-        tenant = getattr(request, "tenant", None)
-        if tenant is not None and getattr(tenant, "status", None) == "suspended":
-            return HttpResponse("This workspace is suspended.", status=403)
+        tenant_model = get_tenant_model()
+        schema = schema_for_slug(tenant_slug)
+        try:
+            tenant = tenant_model.objects.get(schema_name=schema)
+        except tenant_model.DoesNotExist:
+            return JsonResponse({"error": "Tenant not found."}, status=404)
+        print(f"tenant:{tenant}")
+        print(f"schema:{schema}")
+        print(f"All schemas: {list(tenant_model.objects.values_list("schema_name",flat=True))}")
+        
+        # if tenant.schema_name == get_public_schema_name():
+        #     return JsonResponse({"error": "Tenant not found."}, status=404)
+
+        if tenant.status == "suspended":
+            return JsonResponse(
+                {"error": "This workspace is suspended."},
+                status=403,
+            )
+
+
+        connection.set_tenant(tenant)
+        request.tenant = tenant
         return None

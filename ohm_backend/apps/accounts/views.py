@@ -45,6 +45,7 @@ class UnifiedLoginView(APIView):
 
         # --- Verify credentials (password or OTP) ---
         if data["method"] == "password":
+            print(f"has_password:{has_password(user)}")
             if not has_password(user):
                 if user.is_active:
                     return Response(
