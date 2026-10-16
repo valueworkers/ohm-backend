@@ -43,12 +43,6 @@ def has_password(user):
     return bool(user.password) and user.has_usable_password()
 
 
-def is_eligible(user):
-    """Public schema: platform admins only. Tenant schemas: any user."""
-    if connection.schema_name == "public":
-        return user.is_superuser or hasattr(user, "platform_admin_profile")
-    return True
-
 
 # ---------- OTP ----------
 def _otp_key(user, purpose):
@@ -112,7 +106,7 @@ def consume_otp(user, purpose, code):
     key = _otp_key(user, purpose)
     if not _challenge_usable(cache.get(key)):
         return False
-
+    print(f"user:{user}, purpose:{purpose}, code:{code}")
     lock_key = f"{key}:verify-lock"
     if not cache.add(lock_key, "1", timeout=5):
         return False

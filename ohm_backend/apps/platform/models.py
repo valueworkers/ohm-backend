@@ -158,6 +158,7 @@ class TenantProvisioning(models.Model):
     tenant = models.ForeignKey(
         Tenant, null=True, blank=True, on_delete=models.SET_NULL, related_name="provisioning_requests"
     )
+    welcome_email_sent_at = models.DateTimeField(null=True, blank=True)
     provision_error = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -5,8 +5,13 @@ from django.dispatch import Signal
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
 
+from apps.accounts.models import User
+from apps.platform.tasks import send_tenant_welcome_email_task
+
 from .models import Domain, Subscription, Tenant, TenantProvisioning
 from .serializers import base_domain
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +123,9 @@ def provision_tenant(provisioning):
                 _create_domains_and_subscription(p, tenant)
             tenant_provisioned.send(sender=TenantProvisioning, provisioning=p, tenant=tenant)
             with transaction.atomic():
+                User.objects.filter(
+                    pk=p.applicant_id, is_active=False
+                ).update(is_active=True)
                 p.tenant = tenant
                 p.status = TenantProvisioning.Status.PROVISIONED
                 p.provision_error = ""
@@ -133,4 +141,5 @@ def provision_tenant(provisioning):
             updated_at=timezone.now(),
         )
         raise ProvisioningError(str(exc)) from exc
+    transaction.on_commit(lambda: send_tenant_welcome_email_task.delay(str(p.pk)))
     return tenant

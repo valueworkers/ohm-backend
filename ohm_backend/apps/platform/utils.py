@@ -1,5 +1,7 @@
 import re
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
+from django.template.loader import render_to_string
 
 from .models import (
     Domain,
@@ -13,6 +15,39 @@ HOST_RE = re.compile(r"^(?=.{4,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z
 
 def base_domain():
     return getattr(settings, "TENANT_BASE_DOMAIN", "o-hm.com")
+
+
+def tenant_url(slug, path=""):
+    scheme = getattr(settings, "TENANT_URL_SCHEME", "https")
+    return f"{scheme}://{slug}.{base_domain()}{path}"
+
+
+
+def send_tenant_welcome_email(p, tenant):
+    login_url = "https://admin.o-hm.com/login"
+    profile_url = "TBD"  # TODO: link to the profile page in the tenant schema, once that exists)
+
+    ctx = {
+        "organization_name": p.organization_name,
+        "email": p.email,
+        "workspace_host": f"{p.slug}.{base_domain()}",
+        "login_url": login_url,
+        "profile_url": profile_url,
+    }
+    subject = f"Welcome to O-HM, {p.organization_name} is approved"
+    text = (
+        f"Hi,\n\n"
+        f"Your request for {p.organization_name} has been approved and your workspace is ready.\n\n"
+        f"1. Open {login_url}, enter {p.email} and choose 'Login with OTP'.\n"
+        f"2. Complete your profile at {profile_url}, then activate your workspace.\n\n"
+        f"If you didn't request this, please ignore this email.\n\n"
+        f"The O-HM team"
+    )
+    html = render_to_string("tenant_welcome.html", ctx)
+
+    msg = EmailMultiAlternatives(subject, text, settings.DEFAULT_FROM_EMAIL, [p.email])
+    msg.attach_alternative(html, "text/html")
+    msg.send()
 
 
 def slug_problem(slug, exclude_pk=None):

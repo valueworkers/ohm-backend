@@ -7,7 +7,7 @@ from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
 from dns.exception import Timeout
 from dns.resolver import NXDOMAIN, NoAnswer, NoNameservers, Resolver
-
+from .utils import send_tenant_welcome_email
 
 logger = logging.getLogger(__name__)
 
@@ -54,6 +54,17 @@ def provision_tenant_task(request_id):
     from .models import TenantProvisioning
     from .services import provision_tenant
     provision_tenant(TenantProvisioning.objects.get(pk=request_id))
+
+@shared_task(bind=True, autoretry_for=(Exception,), retry_backoff=True, max_retries=5)
+def send_tenant_welcome_email_task(self, request_id):
+    from .models import TenantProvisioning
+
+    with schema_context(get_public_schema_name()):
+        p = TenantProvisioning.objects.select_related("tenant").get(pk=request_id)
+        if p.welcome_email_sent_at or p.status != TenantProvisioning.Status.PROVISIONED:
+            return
+        send_tenant_welcome_email(p, p.tenant)
+        TenantProvisioning.objects.filter(pk=p.pk).update(welcome_email_sent_at=timezone.now())
 
 @shared_task
 def verify_pending_domains():

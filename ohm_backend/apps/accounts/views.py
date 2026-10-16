@@ -19,7 +19,7 @@ from apps.accounts.serializers import (
     UserSerializer,
 )
 
-from .helpers import consume_otp, find_user, has_password, is_eligible, issue_otp
+from .helpers import consume_otp, find_user, has_password, issue_otp
 
 # ------------------------ Shared response helpers ------------------------
 def _invalid(message="Invalid credentials."):
@@ -46,7 +46,7 @@ class UnifiedLoginView(APIView):
         # --- Verify credentials (password or OTP) ---
         if data["method"] == "password":
             if not has_password(user):
-                if user.is_active and is_eligible(user):
+                if user.is_active:
                     return Response(
                         {
                             "error": "Password has not been set for this account. Please try OTP login.",
@@ -67,8 +67,6 @@ class UnifiedLoginView(APIView):
                 {"error": "Account pending approval by Master Admin."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        if not is_eligible(user):
-            return _invalid()
 
         # --- Issue tokens ---
         user.last_login = timezone.now()
@@ -112,7 +110,7 @@ class OTPRequestView(APIView):
 
         user = find_user(data["username"])
         # Identical response for unknown, inactive and ineligible accounts.
-        if user and user.is_active and is_eligible(user):
+        if user and user.is_active:
             issue_otp(user, data["username"], data["purpose"])
         return Response(
             {"detail": "If the account exists, a verification code has been sent."},
@@ -132,7 +130,7 @@ class OTPPasswordResetView(APIView):
         data = serializer.validated_data
 
         user = find_user(data["username"])
-        if not user or not user.is_active or not is_eligible(user):
+        if not user or not user.is_active:
             raise AuthenticationFailed("Invalid or expired OTP.")
         if not consume_otp(user, "password_reset", data["otp"]):
             raise AuthenticationFailed("Invalid or expired OTP.")
