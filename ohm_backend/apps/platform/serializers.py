@@ -59,9 +59,14 @@ class PlanAdminSerializer(serializers.ModelSerializer):
 # --------------------------------------------------------------------------
 
 class BranchSerializer(serializers.Serializer):
-    name = serializers.CharField(max_length=200)
-    address = serializers.CharField(max_length=500)
-
+    name= serializers.CharField(max_length=100)
+    line1 = serializers.CharField(max_length=255)
+    line2 = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    locality = serializers.CharField(max_length=120, required=False, allow_blank=True, default="")
+    city = serializers.CharField(max_length=100)
+    pincode = serializers.RegexField(
+        r"^[1-9]\d{5}$", error_messages={"invalid": "Enter a valid 6-digit pincode."}
+    )
 
 class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
     # JSONField (not a nested serializer) so branches also works in multipart
