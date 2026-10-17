@@ -325,7 +325,7 @@ class MyTenantViewSet(
 
     def get_queryset(self):
         return (
-            Tenant.objects.filter(owner=self.request.user)
+            Tenant.objects.filter(owners=self.request.user)
             .prefetch_related("domains")
             .order_by("-created_at")
         )

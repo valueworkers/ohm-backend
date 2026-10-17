@@ -64,6 +64,11 @@ def send_tenant_welcome_email_task(self, request_id):
         if p.welcome_email_sent_at or p.status != TenantProvisioning.Status.PROVISIONED:
             return
         send_tenant_welcome_email(p, p.tenant)
+        # Also send to co-owners who aren't the primary applicant.
+        for email in (p.co_owner_emails or []):
+            email = email.strip().lower()
+            if email and email != p.email.lower():
+                send_tenant_welcome_email(p, p.tenant, recipient_email=email)
         TenantProvisioning.objects.filter(pk=p.pk).update(welcome_email_sent_at=timezone.now())
 
 @shared_task

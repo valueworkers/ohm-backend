@@ -54,9 +54,9 @@ class Tenant(TenantMixin):
     name = models.CharField(max_length=200)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PROVISIONING)
     modules = models.JSONField(default=list, blank=True)  # enabled product modules, e.g. ["patients", "booking"]
-    # The user who requested the tenant; manages its profile and activates it.
-    owner = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="owned_tenants"
+    # Users who own this tenant; all have equal access to manage the workspace.
+    owners = models.ManyToManyField(
+        settings.AUTH_USER_MODEL, blank=True, related_name="owned_tenants"
     )
 
     # --- Organization profile (copied from the approved onboarding request) ---

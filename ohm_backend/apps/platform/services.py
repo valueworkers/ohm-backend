@@ -47,7 +47,7 @@ def _get_or_create_tenant(p):
     existing = Tenant.objects.filter(schema_name=schema).first()
     if existing:
         # Leftover from a crashed attempt of this same request is reusable; anything else is a clash.
-        if existing.owner_id == p.applicant_id:
+        if existing.owners.filter(pk=p.applicant_id).exists():
             return existing, False
         raise ProvisioningError(f"Schema '{schema}' already belongs to another tenant.")
 
@@ -59,7 +59,6 @@ def _get_or_create_tenant(p):
         schema_name=schema,
         name=p.organization_name,
         status=Tenant.Status.PROVISIONING,  # stays here until the owner completes setup and activates
-        owner=p.applicant,
         modules=modules,
         logo=p.logo.name if p.logo else "",
         contact_email=p.email,
@@ -67,6 +66,7 @@ def _get_or_create_tenant(p):
         gst_number=p.gst_number or None,
     )
     tenant.save()
+    tenant.owners.add(p.applicant)
     return tenant, True
 
 
@@ -124,6 +124,12 @@ def provision_tenant(provisioning):
                 User.objects.filter(
                     pk=p.applicant_id, is_active=False
                 ).update(is_active=True)
+                # Also activate any co-owner accounts that were created as stubs.
+                co_emails = [e.strip().lower() for e in (p.co_owner_emails or []) if e.strip()]
+                if co_emails:
+                    User.objects.filter(
+                        email__in=co_emails, is_active=False
+                    ).update(is_active=True)
                 p.tenant = tenant
                 p.status = TenantProvisioning.Status.PROVISIONED
                 p.provision_error = ""

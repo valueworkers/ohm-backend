@@ -213,11 +213,18 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
 class TenantCreateSerializer(serializers.ModelSerializer):
     domain = serializers.CharField(write_only=True, required=False, allow_blank=False)
+    owner_ids = serializers.PrimaryKeyRelatedField(
+        queryset=get_user_model().objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        source="owners",
+    )
 
     class Meta:
         model = Tenant
         fields = (
-            "id", "name", "schema_name", "owner", "modules", "logo", "contact_email",
+            "id", "name", "schema_name", "owner_ids", "modules", "logo", "contact_email",
             "contact_phone", "timezone","tags", "default_currency", "domain",
         )
         read_only_fields = ("id",)
@@ -243,34 +250,53 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated_data):
         domain = validated_data.pop("domain", None)
+        owners = validated_data.pop("owners", [])
         # New tenants start as ACTIVE here because a platform admin is creating them directly.
         # Change this if direct creation should go through a different initial status.
         validated_data.setdefault("status", Tenant.Status.ACTIVE)
         tenant = Tenant.objects.create(**validated_data)
+        if owners:
+            tenant.owners.set(owners)
         if domain:
             Domain.objects.create(domain=domain, tenant=tenant, is_primary=True)
         return tenant
 
 class TenantUpdateSerializer(serializers.ModelSerializer):
+    owner_ids = serializers.PrimaryKeyRelatedField(
+        queryset=get_user_model().objects.all(),
+        many=True,
+        write_only=True,
+        required=False,
+        source="owners",
+    )
+
     class Meta:
         model = Tenant
         fields = (
-            "name", "owner", "modules", "logo", "contact_email",
+            "name", "owner_ids", "modules", "logo", "contact_email",
             "contact_phone", "timezone", "tags", "default_currency",
         )
+
+class OwnerBriefSerializer(serializers.Serializer):
+    """Lightweight representation of a tenant owner for read views."""
+    id = serializers.IntegerField(read_only=True)
+    email = serializers.EmailField(read_only=True)
+    full_name = serializers.CharField(read_only=True)
 
 class TenantProfileSerializer(serializers.ModelSerializer):
     """What a tenant owner may see and edit about their own workspace."""
     subscriptions = SubscriptionSerializer(many=True, read_only=True)
     domains = DomainSerializer(many=True, read_only=True)
+    owners = OwnerBriefSerializer(many=True, read_only=True)
 
     class Meta:
         model = Tenant
         fields = (
             "id", "name", "schema_name", "status", "logo", "contact_email", "contact_phone",
-            "timezone", "tags", "default_currency", "modules", "domains", "subscriptions"
+            "timezone", "tags", "default_currency", "modules", "domains", "subscriptions",
+            "owners",
         )
-        read_only_fields = ("id", "schema_name", "status", "modules", "domains")
+        read_only_fields = ("id", "schema_name", "status", "modules", "domains", "owners")
 
     def validate_name(self, value):
         value = value.strip()
