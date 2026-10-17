@@ -10,6 +10,7 @@ from apps.platform.tasks import send_tenant_welcome_email_task
 
 from .models import Domain, Subscription, Tenant, TenantProvisioning
 from .serializers import base_domain
+from .utils import base_domain, schema_for_slug
 
 
 
@@ -27,10 +28,6 @@ class ProvisioningError(Exception):
     pass
 
 
-def schema_name_for(slug):
-    return slug.replace("-", "_")
-
-
 def _claim(request_id):
     """APPROVED -> PROVISIONING under a row lock, so two workers can't provision one request."""
     with transaction.atomic():
@@ -43,9 +40,10 @@ def _claim(request_id):
     return p
 
 
+
 def _get_or_create_tenant(p):
     """Returns (tenant, created). Creating the Tenant also creates and migrates its schema."""
-    schema = schema_name_for(p.slug)
+    schema = schema_for_slug(p.slug)
     existing = Tenant.objects.filter(schema_name=schema).first()
     if existing:
         # Leftover from a crashed attempt of this same request is reusable; anything else is a clash.
@@ -66,6 +64,7 @@ def _get_or_create_tenant(p):
         logo=p.logo.name if p.logo else "",
         contact_email=p.email,
         contact_phone=p.contact_phone,
+        gst_number=p.gst_number or None,
     )
     tenant.save()
     return tenant, True
@@ -76,7 +75,6 @@ def _ensure_domain(tenant, domain, **defaults):
     if obj.tenant_id != tenant.pk:
         raise ProvisioningError(f"Domain '{domain}' already belongs to another tenant.")
     return obj
-
 
 def _create_domains_and_subscription(p, tenant):
     now = timezone.now()

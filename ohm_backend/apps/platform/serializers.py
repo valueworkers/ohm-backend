@@ -68,35 +68,33 @@ class BranchSerializer(serializers.Serializer):
         r"^[1-9]\d{5}$", error_messages={"invalid": "Enter a valid 6-digit pincode."}
     )
 
-class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
-    # JSONField (not a nested serializer) so branches also works in multipart
-    # requests, where the client sends it as a JSON string next to the logo.
-    branches = serializers.JSONField(required=False)
 
+class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
+    branches = serializers.JSONField(required=False)
+ 
     class Meta:
         model = TenantProvisioning
         fields = (
-            "id", "organization_name", "logo", "email", "contact_phone", "address",
-            "branches", "ops_admin_email", "slug", "custom_domain",
+            "id", "organization_name", "logo", "email", "contact_phone", "gst_number",
+            "branches", "ops_admin_email", "co_owner_emails", "slug", "custom_domain",
             "wants_custom_website", "requested_plan", "status", "created_at",
         )
         read_only_fields = ("id", "status", "created_at")
-
-    def validate_organization_name(self, value):
-        return value.strip()
-
+  
     def validate_branches(self, value):
         serializer = BranchSerializer(data=value or [], many=True)
         serializer.is_valid(raise_exception=True)
         return [dict(item) for item in serializer.validated_data]
-
+ 
+ 
     def validate_slug(self, value):
         value = value.strip().lower()
-        problem = slug_problem(value)
+        # exclude self so editing a request doesn't clash with its own slug
+        problem = slug_problem(value, exclude_pk=self.instance.pk if self.instance else None)
         if problem:
             raise serializers.ValidationError(problem)
         return value
-
+ 
     def validate_custom_domain(self, value):
         value = value.strip().lower()
         if not value:
@@ -108,20 +106,15 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f"Use the subdomain field for hosts under {base}.")
         if Domain.objects.filter(domain=value).exists():
             raise serializers.ValidationError("This domain is already in use.")
-        if TenantProvisioning.objects.filter(
+        open_requests = TenantProvisioning.objects.filter(
             custom_domain=value, status__in=TenantProvisioning.OPEN_STATUSES
-        ).exists():
+        )
+        if self.instance:
+            open_requests = open_requests.exclude(pk=self.instance.pk)
+        if open_requests.exists():
             raise serializers.ValidationError("This domain is already requested.")
         return value
-
-    def validate_requested_plan(self, value):
-        if value is not None and not value.is_active:
-            raise serializers.ValidationError("This plan is not available.")
-        return value
-    
-    def validate_email(self, value):
-        return value.strip().lower()
-
+  
     def _get_or_create_applicant(self, email):
         User = get_user_model()
         user = User.objects.filter(email__iexact=email).first()
@@ -135,35 +128,40 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
         except IntegrityError:
             user = User.objects.get(email__iexact=email)  # someone created it a moment ago
         return user
-
+ 
     @transaction.atomic
     def create(self, validated_data):
         validated_data["applicant"] = self._get_or_create_applicant(validated_data["email"])
         return super().create(validated_data)
-
+  
 class TenantProvisioningUpdateSerializer(TenantProvisioningCreateSerializer):
-    class Meta(TenantProvisioningCreateSerializer.Meta):
-        read_only_fields = ("status", "applicant", "tenant", "reviewed_by",
-                            "reviewed_at", "review_notes", "provision_error")
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        # not a validation: keeps the applicant (tenant owner) in sync with an email change
+        email = validated_data.get("email")
+        if email and email != instance.applicant.email.lower():
+            validated_data["applicant"] = self._get_or_create_applicant(email)
+        return super().update(instance, validated_data)
+ 
 
 class TenantProvisioningSerializer(serializers.ModelSerializer):
     """Read view. provision_error is only shown to platform admins."""
-
+    
     applicant_email = serializers.EmailField(source="applicant.email", read_only=True)
     requested_plan_name = serializers.CharField(source="requested_plan.name", read_only=True, default=None)
     tenant_schema = serializers.CharField(source="tenant.schema_name", read_only=True, default=None)
-
+    
     class Meta:
         model = TenantProvisioning
         fields = (
             "id", "applicant_email", "organization_name", "logo", "email", "contact_phone",
-            "address", "branches", "ops_admin_email", "slug", "custom_domain",
-            "wants_custom_website", "requested_plan", "requested_plan_name",
+            "gst_number", "branches", "ops_admin_email", "co_owner_emails", "slug",
+            "custom_domain", "wants_custom_website", "requested_plan", "requested_plan_name",
             "status", "review_notes", "reviewed_at", "tenant_schema",
             "provision_error", "created_at", "updated_at",
         )
         read_only_fields = fields
-
+    
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get("request")

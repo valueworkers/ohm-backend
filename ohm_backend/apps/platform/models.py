@@ -4,7 +4,9 @@ import uuid
 from django.conf import settings
 from django.db import models
 from django_tenants.models import DomainMixin, TenantMixin
+from django.core.validators import RegexValidator
 
+GSTIN_RE = r"^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"
 
 def _verification_token():
     return secrets.token_hex(16)
@@ -61,6 +63,10 @@ class Tenant(TenantMixin):
     logo = models.ImageField(upload_to="tenants/logos/", null=True, blank=True)
     contact_email = models.EmailField(blank=True)
     contact_phone = models.CharField(max_length=30, blank=True)
+    gst_number = models.CharField(
+        max_length=15, null=True, blank=True,
+        validators=[RegexValidator(GSTIN_RE, "Enter a valid 15-character GSTIN, e.g. 22AAAAA0000A1Z5.")],
+    )
     timezone = models.CharField(max_length=64, default="Asia/Kolkata")
     tags = models.JSONField(default=list, blank=True)  # e.g. ["hospital", "clinic", "lab"]
     default_currency = models.CharField(max_length=3, default="INR")
@@ -114,7 +120,7 @@ class Domain(DomainMixin):
 
 class TenantProvisioning(models.Model):
     """Provider application stored in public until a root admin approves it."""
-
+    
     class Status(models.TextChoices):
         SUBMITTED = "submitted", "Submitted"
         APPROVED = "approved", "Approved"
@@ -134,17 +140,24 @@ class TenantProvisioning(models.Model):
     logo = models.ImageField(upload_to="onboarding/logos/", null=True, blank=True)
     email = models.EmailField()                                   # Email
     contact_phone = models.CharField(max_length=30)               # Phone number
-    address = models.TextField(blank=True)                        # Organization address
     branches = models.JSONField(
-        default=list, blank=True,
-        help_text='List of branches: [{"name": "...", "address": "..."}]',
+        default=list,
+        help_text='{"name": "","line1": "", "line2": "", "locality": "", "city": "", "pincode": ""}',
     )
-    ops_admin_email = models.EmailField(blank=True)               # blank = no ops admin
+    ops_admin_email = models.EmailField(blank=True,null=True)               # null=True = no ops admin
     slug = models.SlugField(max_length=30)                        # Subdomain -> slug.o-hm.com
     custom_domain = models.CharField(max_length=253, blank=True)  # blank = no own domain
     wants_custom_website = models.BooleanField(default=False)     # Customized website
     requested_plan = models.ForeignKey(
         Plan, null=True, blank=True, on_delete=models.SET_NULL, related_name="onboarding_requests"
+    )
+    gst_number = models.CharField(max_length=15,null=True, blank=True, validators=[
+        RegexValidator(GSTIN_RE,"Enter a valid 15-character GSTIN, e.g. 22AAAAA0000A1Z5.")
+    ])
+    
+    co_owner_emails = models.JSONField(
+        default=list, blank=True, null=True,
+        help_text="Up to 3 co-owner emails; only used when needs_co_owners."
     )
 
     # --- Workflow fields (not on the form, needed for the lobby/approval flow) ---
