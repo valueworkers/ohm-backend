@@ -120,6 +120,7 @@ temp/
 *.bak
 *.orig
 *.dir
+*.dat
 
 # ==========================================
 
@@ -288,6 +289,7 @@ temp/
 
 celerybeat-schedule
 celerybeat.pid
+celerybeat-schedule.dat
 
 # ==========================================
 
@@ -318,3 +320,4 @@ pnpm-debug.log*
 
 static/
 staticfiles/
+onboarding/

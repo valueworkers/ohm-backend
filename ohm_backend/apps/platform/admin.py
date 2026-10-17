@@ -49,7 +49,7 @@ class TenantAdmin(admin.ModelAdmin):
     list_filter = ("status",)
     search_fields = ("name", "schema_name", "contact_email", "domains__domain")
     readonly_fields = ("schema_name", "created_at")
-    raw_id_fields = ("owner",)
+    filter_horizontal = ("owners",)
     inlines = [DomainInline, SubscriptionInline]
 
     def get_readonly_fields(self, request, obj=None):
@@ -103,8 +103,8 @@ class TenantProvisioningAdmin(admin.ModelAdmin):
         "provision_error", "created_at", "updated_at",
     )
     fieldsets = (
-        ("Organization", {"fields": ("organization_name", "logo", "email", "contact_phone", "address", "branches")}),
-        ("Hosting", {"fields": ("slug", "custom_domain", "wants_custom_website", "ops_admin_email", "requested_plan")}),
+        ("Organization", {"fields": ("organization_name", "logo", "email", "contact_phone", "gst_number", "branches")}),
+        ("Hosting", {"fields": ("slug", "custom_domain", "wants_custom_website", "ops_admin_email", "co_owner_emails", "requested_plan")}),
         ("Review", {"fields": ("id", "applicant", "status", "review_notes", "reviewed_by", "reviewed_at")}),
         ("Provisioning", {"fields": ("tenant", "provision_error", "created_at", "updated_at")}),
     )

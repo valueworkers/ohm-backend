@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import User
+from .models import User, Role, RoleAssignment
 from .services import set_role
 
 ROLE_CHOICES = [("TENANT_ADMIN", "Tenant Admin"), ("CUSTOMER", "Customer / User")]
@@ -66,6 +66,42 @@ class OTPPasswordResetSerializer(serializers.Serializer):
     def validate_new_password(self, value):
         return _check_password(value)
 
+
+class OwnerSerializer(serializers.ModelSerializer):
+    """Read + self/owner update. Email is the OTP login identity, so it is read-only."""
+
+    class Meta:
+        model = User
+        fields = ["id", "email", "full_name", "phone", "is_active", "date_joined"]
+        read_only_fields = ["id", "email", "is_active", "date_joined"]
+
+
+class OwnerCreateSerializer(serializers.ModelSerializer):
+    """Add a co-owner. No password: owners sign in with OTP only."""
+
+    class Meta:
+        model = User
+        fields = ["id", "email", "full_name", "phone"]
+        read_only_fields = ["id"]
+
+    def validate_email(self, value):
+        value = value.strip().lower()
+        if User.objects.filter(email__iexact=value).exists():
+            raise serializers.ValidationError("A user with this email already exists.")
+        return value
+    
+    @transaction.atomic
+    def create(self, validated_data):
+        user = User(**validated_data, is_active=True)
+        user.set_unusable_password()
+        user.save()
+        RoleAssignment.objects.create(
+            user=user,
+            role=Role.objects.get(code=Role.Code.TENANT_ADMIN),
+            scope_type=None,  # tenant-wide
+        )
+        # transaction.on_commit(lambda: send_owner_welcome_email.delay(user.pk))
+        return user
 
 class UserSerializer(serializers.ModelSerializer):
     """Tenant Admin's view of the workspace's users (Tenant Admins and Customers)."""

@@ -4,9 +4,13 @@ from django.db import transaction
 from django.dispatch import Signal
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
-
+from apps.platform.tasks import send_tenant_welcome_email_task
+from apps.accounts.models import Role, RoleAssignment, User
 from .models import Domain, Subscription, Tenant, TenantProvisioning
 from .serializers import base_domain
+from .utils import base_domain, schema_for_slug
+
+
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +26,6 @@ class ProvisioningError(Exception):
     pass
 
 
-def schema_name_for(slug):
-    return slug.replace("-", "_")
-
-
 def _claim(request_id):
     """APPROVED -> PROVISIONING under a row lock, so two workers can't provision one request."""
     with transaction.atomic():
@@ -38,13 +38,38 @@ def _claim(request_id):
     return p
 
 
+def _assign_owner_role(tenant, applicant):
+    """Idempotent: mirror the applicant into the tenant schema and give them TENANT_ADMIN."""
+    with schema_context(tenant.schema_name):
+        role, _ = Role.objects.get_or_create(
+            code=Role.Code.TENANT_ADMIN,
+            defaults={"name": "Tenant Admin", "rank": 100},
+        )
+        user, created = User.objects.get_or_create(
+            email=applicant.email,
+            defaults={
+                "full_name": applicant.full_name,
+                "phone": applicant.phone,
+                "is_active": True,
+            },
+        )
+        if created:
+            user.set_unusable_password()
+            user.save(update_fields=["password"])
+        RoleAssignment.objects.get_or_create(
+            user=user,
+            role=role,
+            scope_type=None,
+            scope_id=None,  # tenant-wide
+        )
+
 def _get_or_create_tenant(p):
     """Returns (tenant, created). Creating the Tenant also creates and migrates its schema."""
-    schema = schema_name_for(p.slug)
+    schema = schema_for_slug(p.slug)
     existing = Tenant.objects.filter(schema_name=schema).first()
     if existing:
         # Leftover from a crashed attempt of this same request is reusable; anything else is a clash.
-        if existing.owner_id == p.applicant_id:
+        if existing.owners.filter(pk=p.applicant_id).exists():
             return existing, False
         raise ProvisioningError(f"Schema '{schema}' already belongs to another tenant.")
 
@@ -56,13 +81,15 @@ def _get_or_create_tenant(p):
         schema_name=schema,
         name=p.organization_name,
         status=Tenant.Status.PROVISIONING,  # stays here until the owner completes setup and activates
-        owner=p.applicant,
         modules=modules,
         logo=p.logo.name if p.logo else "",
         contact_email=p.email,
         contact_phone=p.contact_phone,
+        gst_number=p.gst_number or None,
     )
     tenant.save()
+    tenant.owners.add(p.applicant)
+    _assign_owner_role(tenant, p.applicant)
     return tenant, True
 
 
@@ -71,7 +98,6 @@ def _ensure_domain(tenant, domain, **defaults):
     if obj.tenant_id != tenant.pk:
         raise ProvisioningError(f"Domain '{domain}' already belongs to another tenant.")
     return obj
-
 
 def _create_domains_and_subscription(p, tenant):
     now = timezone.now()
@@ -118,6 +144,15 @@ def provision_tenant(provisioning):
                 _create_domains_and_subscription(p, tenant)
             tenant_provisioned.send(sender=TenantProvisioning, provisioning=p, tenant=tenant)
             with transaction.atomic():
+                User.objects.filter(
+                    pk=p.applicant_id, is_active=False
+                ).update(is_active=True)
+                # Also activate any co-owner accounts that were created as stubs.
+                co_emails = [e.strip().lower() for e in (p.co_owner_emails or []) if e.strip()]
+                if co_emails:
+                    User.objects.filter(
+                        email__in=co_emails, is_active=False
+                    ).update(is_active=True)
                 p.tenant = tenant
                 p.status = TenantProvisioning.Status.PROVISIONED
                 p.provision_error = ""
@@ -133,4 +168,5 @@ def provision_tenant(provisioning):
             updated_at=timezone.now(),
         )
         raise ProvisioningError(str(exc)) from exc
+    transaction.on_commit(lambda: send_tenant_welcome_email_task.delay(str(p.pk)))
     return tenant

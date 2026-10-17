@@ -22,21 +22,10 @@ ALLOWED_HOSTS = ["*"]
 
 # --- ohm platform settings -------------------------------------------------
 BASE_DOMAIN   = env("OHM_BASE_DOMAIN", "localhost")
-PLATFORM_HOST = env("OHM_PLATFORM_HOST", BASE_DOMAIN)
-API_HOST = env("OHM_API_HOST", f"api.{BASE_DOMAIN}")
-API_HOSTS = {host.strip().lower() for host in env("OHM_API_HOSTS", API_HOST).split(",") if host.strip()}
-EDGE_HOST     = env("OHM_EDGE_HOST", f"edge.{BASE_DOMAIN}")
-INTERNAL_TOKEN = env("OHM_INTERNAL_TOKEN", "dev-internal-token")  
-DOMAIN_VERIFY_PREFIX = "_ohm-verify"                              # TXT record: _ohm-verify.<domain>
-
-ROOT_HOSTS = {
-    h.strip().lower()
-    for h in env("OHM_ROOT_HOSTS", "127.0.0.1,localhost,ohm.com").split(",")
-    if h.strip()
-}
+API_HOST      = env("OHM_API_HOST", f"api.{BASE_DOMAIN}")
+INTERNAL_TOKEN = env("OHM_INTERNAL_TOKEN", "dev-internal-token")
 
 OHM_URL_SCHEME = env("OHM_URL_SCHEME", "http")   # "https" in production
-OHM_URL_PORT = env("OHM_URL_PORT", ":8000")      # "" in production (used for <slug>.<BASE_DOMAIN> links)
 
 RESERVED_SLUGS = {
     'app','demo','internal','ops','root','ftp',
@@ -79,7 +68,6 @@ INSTALLED_APPS = list(SHARED_APPS) + [a for a in TENANT_APPS if a not in SHARED_
 TENANT_MODEL = "tenants.Tenant"
 TENANT_DOMAIN_MODEL = "tenants.Domain"
 PUBLIC_SCHEMA_NAME = "public"
-PUBLIC_SCHEMA_URLCONF = "config.urls_public"
 ROOT_URLCONF = "config.urls"
 SHOW_PUBLIC_IF_NO_TENANT_FOUND = False
 
@@ -98,7 +86,7 @@ DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
 MIDDLEWARE = [
     "corsheaders.middleware.CorsMiddleware",
     "django.middleware.security.SecurityMiddleware",
-    "apps.platform.middleware.VerifiedDomainTenantMiddleware",
+    "apps.platform.middleware.TenantHeaderMiddleware",
     "whitenoise.middleware.WhiteNoiseMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -110,7 +98,7 @@ MIDDLEWARE = [
 TEMPLATES = [
     {
         "BACKEND": "django.template.backends.django.DjangoTemplates",
-        "DIRS": [],
+        "DIRS": [BASE_DIR / "templates"],
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
@@ -135,6 +123,7 @@ REST_FRAMEWORK = {
     ],
 
     "DEFAULT_AUTHENTICATION_CLASSES": [
+        "apps.accounts.auth.TenantJWTAuthentication",
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.BasicAuthentication",
     ],
@@ -158,12 +147,12 @@ SIMPLE_JWT = {
 
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_HEADERS = [*default_headers, "x-tenant"]
-
-AUTH_PASSWORD_VALIDATORS = [
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-]
+if not DEBUG:
+    AUTH_PASSWORD_VALIDATORS = [
+        {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+        {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+        {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+    ]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 
@@ -178,13 +167,15 @@ STORAGES = {
 }
 
 # --- Email ------------------------------------------------------------------
-EMAIL_BACKEND = env("EMAIL_BACKEND", "django.core.mail.backends.smtp.EmailBackend")
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+
 EMAIL_HOST = env("EMAIL_HOST", "localhost")
-EMAIL_PORT = int(env("EMAIL_PORT", 25))
+EMAIL_PORT = int(env("EMAIL_PORT", 587))
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = str(env("EMAIL_USE_TLS", "false")).lower() == "true"
+EMAIL_USE_TLS = bool(env("EMAIL_USE_TLS", True))
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "noreply@ohm.local")
+
 OHM_SMS_OTP_BACKEND = env("OHM_SMS_OTP_BACKEND", "")
 
 # --- Cache ------------------------------------------------------------------

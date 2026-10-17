@@ -1,6 +1,7 @@
 from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
+from rest_framework.decorators import action
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -16,10 +17,12 @@ from apps.accounts.serializers import (
     OTPPasswordResetSerializer,
     OTPRequestSerializer,
     UnifiedLoginSerializer,
+    OwnerCreateSerializer,
+    OwnerSerializer,
     UserSerializer,
 )
 
-from .helpers import consume_otp, find_user, has_password, is_eligible, issue_otp
+from .helpers import consume_otp, find_user, has_password, issue_otp
 
 # ------------------------ Shared response helpers ------------------------
 def _invalid(message="Invalid credentials."):
@@ -31,8 +34,8 @@ class UnifiedLoginView(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "root_login"
+    # throttle_classes = [ScopedRateThrottle]
+    # throttle_scope = "root_login"
 
     def post(self, request):
         serializer = UnifiedLoginSerializer(data=request.data)
@@ -45,8 +48,9 @@ class UnifiedLoginView(APIView):
 
         # --- Verify credentials (password or OTP) ---
         if data["method"] == "password":
+            print(f"has_password:{has_password(user)}")
             if not has_password(user):
-                if user.is_active and is_eligible(user):
+                if user.is_active:
                     return Response(
                         {
                             "error": "Password has not been set for this account. Please try OTP login.",
@@ -67,8 +71,6 @@ class UnifiedLoginView(APIView):
                 {"error": "Account pending approval by Master Admin."},
                 status=status.HTTP_403_FORBIDDEN,
             )
-        if not is_eligible(user):
-            return _invalid()
 
         # --- Issue tokens ---
         user.last_login = timezone.now()
@@ -98,12 +100,60 @@ class UnifiedLogoutView(APIView):
         except Exception:
             return Response({"error": "Invalid token or logout failed"}, status=status.HTTP_400_BAD_REQUEST)
 
+
+class OwnerViewSet(viewsets.ModelViewSet):
+    """
+    /owners/            GET list, POST add co-owner
+    /owners/{id}/       GET, PATCH/PUT, DELETE (soft: deactivates)
+    /owners/me/         GET, PATCH own profile
+    """
+
+    permission_classes = []
+    http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
+
+    def owners_qs(self):
+        return User.objects.filter(
+            role_assignments__role__code=Role.Code.TENANT_ADMIN,
+            role_assignments__scope_type__isnull=True,
+        ).distinct()
+
+    def get_queryset(self):
+        return self.owners_qs().order_by("date_joined")
+
+    def get_serializer_class(self):
+        return OwnerCreateSerializer if self.action == "create" else OwnerSerializer
+
+    def create(self, request, *args, **kwargs):
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        user = ser.save()
+        return Response(OwnerSerializer(user).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get", "patch"], url_path="me")
+    def me(self, request):
+        if request.method == "GET":
+            return Response(OwnerSerializer(request.user).data)
+        ser = OwnerSerializer(request.user, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data)
+
+    def destroy(self, request, *args, **kwargs):
+        owner = self.get_object()
+        if owner.pk == request.user.pk:
+            return Response({"detail": "You cannot remove yourself."}, status=400)
+        if not owners_qs().filter(is_active=True).exclude(pk=owner.pk).exists():
+            return Response({"detail": "Cannot remove the last owner."}, status=400)
+        owner.is_active = False
+        owner.save(update_fields=["is_active"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 # ------------------------ Authentication: OTP request / password reset ------------------------
 class OTPRequestView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "otp_request"
+    # throttle_classes = [ScopedRateThrottle]
+    # throttle_scope = "otp_request"
 
     def post(self, request):
         serializer = OTPRequestSerializer(data=request.data)
@@ -112,7 +162,7 @@ class OTPRequestView(APIView):
 
         user = find_user(data["username"])
         # Identical response for unknown, inactive and ineligible accounts.
-        if user and user.is_active and is_eligible(user):
+        if user and user.is_active:
             issue_otp(user, data["username"], data["purpose"])
         return Response(
             {"detail": "If the account exists, a verification code has been sent."},
@@ -123,8 +173,8 @@ class OTPRequestView(APIView):
 class OTPPasswordResetView(APIView):
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "otp_request"
+    # throttle_classes = [ScopedRateThrottle]
+    # throttle_scope = "otp_request"
 
     def post(self, request):
         serializer = OTPPasswordResetSerializer(data=request.data)
@@ -132,7 +182,7 @@ class OTPPasswordResetView(APIView):
         data = serializer.validated_data
 
         user = find_user(data["username"])
-        if not user or not user.is_active or not is_eligible(user):
+        if not user or not user.is_active:
             raise AuthenticationFailed("Invalid or expired OTP.")
         if not consume_otp(user, "password_reset", data["otp"]):
             raise AuthenticationFailed("Invalid or expired OTP.")
@@ -147,8 +197,8 @@ class TenantRegistrationCreateView(APIView):
 
     authentication_classes = []
     permission_classes = [AllowAny]
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "tenant_registration_create"
+    # throttle_classes = [ScopedRateThrottle]
+    # throttle_scope = "tenant_registration_create"
 
     def post(self, request):
         serializer = CustomerRegisterSerializer(data=request.data)
@@ -165,7 +215,7 @@ class TenantRegistrationCreateView(APIView):
         return Response({"email": user.email}, status=status.HTTP_201_CREATED)
 
 # ------------------------ Tenant: user management (Tenant Admin only) ------------------------
-class TenantUserViewSet(
+class UserViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
