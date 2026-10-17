@@ -1,10 +1,12 @@
 from django.urls import include, path
 from rest_framework.routers import SimpleRouter
 
-from .views import TenantUserViewSet
+from .views import UserViewSet,OwnerViewSet
 
 router = SimpleRouter()
-router.register("users", TenantUserViewSet, basename="tenant-user")
+router.register("users", UserViewSet, basename="tenant-user")
+router.register("users", OwnerViewSet, basename="tenant-user")
+
 
 urlpatterns = [
     # Tenant Admin operations on other accounts in this workspace.

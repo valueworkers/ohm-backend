@@ -1,6 +1,7 @@
 from django.db import connection, transaction
 from django.db.models import Q
 from django.utils import timezone
+from rest_framework.decorators import action
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.permissions import AllowAny, IsAuthenticated
@@ -16,6 +17,8 @@ from apps.accounts.serializers import (
     OTPPasswordResetSerializer,
     OTPRequestSerializer,
     UnifiedLoginSerializer,
+    OwnerCreateSerializer,
+    OwnerSerializer,
     UserSerializer,
 )
 
@@ -97,6 +100,54 @@ class UnifiedLogoutView(APIView):
         except Exception:
             return Response({"error": "Invalid token or logout failed"}, status=status.HTTP_400_BAD_REQUEST)
 
+
+class OwnerViewSet(viewsets.ModelViewSet):
+    """
+    /owners/            GET list, POST add co-owner
+    /owners/{id}/       GET, PATCH/PUT, DELETE (soft: deactivates)
+    /owners/me/         GET, PATCH own profile
+    """
+
+    permission_classes = []
+    http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
+
+    def owners_qs(self):
+        return User.objects.filter(
+            role_assignments__role__code=Role.Code.TENANT_ADMIN,
+            role_assignments__scope_type__isnull=True,
+        ).distinct()
+
+    def get_queryset(self):
+        return self.owners_qs().order_by("date_joined")
+
+    def get_serializer_class(self):
+        return OwnerCreateSerializer if self.action == "create" else OwnerSerializer
+
+    def create(self, request, *args, **kwargs):
+        ser = self.get_serializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        user = ser.save()
+        return Response(OwnerSerializer(user).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=False, methods=["get", "patch"], url_path="me")
+    def me(self, request):
+        if request.method == "GET":
+            return Response(OwnerSerializer(request.user).data)
+        ser = OwnerSerializer(request.user, data=request.data, partial=True)
+        ser.is_valid(raise_exception=True)
+        ser.save()
+        return Response(ser.data)
+
+    def destroy(self, request, *args, **kwargs):
+        owner = self.get_object()
+        if owner.pk == request.user.pk:
+            return Response({"detail": "You cannot remove yourself."}, status=400)
+        if not owners_qs().filter(is_active=True).exclude(pk=owner.pk).exists():
+            return Response({"detail": "Cannot remove the last owner."}, status=400)
+        owner.is_active = False
+        owner.save(update_fields=["is_active"])
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
 # ------------------------ Authentication: OTP request / password reset ------------------------
 class OTPRequestView(APIView):
     authentication_classes = []
@@ -164,7 +215,7 @@ class TenantRegistrationCreateView(APIView):
         return Response({"email": user.email}, status=status.HTTP_201_CREATED)
 
 # ------------------------ Tenant: user management (Tenant Admin only) ------------------------
-class TenantUserViewSet(
+class UserViewSet(
     mixins.ListModelMixin,
     mixins.CreateModelMixin,
     mixins.RetrieveModelMixin,
