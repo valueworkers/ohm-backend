@@ -57,6 +57,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 class Role(models.Model):
     class Code(models.TextChoices):
+        SUPER_ADMIN = "SUPER_ADMIN", "Super Admin"
         TENANT_ADMIN = "TENANT_ADMIN", "Tenant Admin"
         CUSTOMER = "CUSTOMER", "Customer / User"
         # Reserved for later: sub-roles that will sit under Tenant Admin (not seeded yet)
