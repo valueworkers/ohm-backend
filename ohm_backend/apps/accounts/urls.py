@@ -5,7 +5,7 @@ from .views import UserViewSet,OwnerViewSet
 
 router = SimpleRouter()
 router.register("users", UserViewSet, basename="tenant-user")
-router.register("owner", OwnerViewSet, basename="tenant-user")
+router.register("owner", OwnerViewSet, basename="owner")
 
 
 urlpatterns = [
