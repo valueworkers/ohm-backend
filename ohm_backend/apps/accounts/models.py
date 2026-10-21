@@ -52,7 +52,7 @@ class User(AbstractBaseUser, PermissionsMixin):
         for a in self.role_assignments.all():
             if a.scope_type_id is None and (best is None or a.role.rank > best.rank):
                 best = a.role
-        return best.code if best else None
+        return best.name if best else None
 
 
 class Role(models.Model):
