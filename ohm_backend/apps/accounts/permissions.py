@@ -37,4 +37,15 @@ def MinRank(rank):
     return _MinRank
 
 
-IsTenantAdmin = RequireRole("TENANT_ADMIN")
+class IsTenantAdmin(BasePermission):
+    """Require a tenant-wide Tenant Admin grant; object-scoped grants are insufficient."""
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return RoleAssignment.objects.filter(
+            user=request.user,
+            role__code="TENANT_ADMIN",
+            scope_type__isnull=True,
+            scope_id__isnull=True,
+        ).exists()

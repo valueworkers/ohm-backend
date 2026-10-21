@@ -47,12 +47,17 @@ Configure `OHM_CORS_ALLOWED_ORIGINS` and `OHM_CORS_ALLOWED_ORIGIN_REGEXES` for t
 - `/api/platform/tenants/`  root-only tenant collection; the public platform tenant is excluded
 - `GET /api/platform/tenants/` and `GET /api/platform/tenants/{id}/`  list or inspect tenants
 - `PUT/PATCH /api/platform/tenants/{id}/`  update a tenant's name, status, or enabled modules
+- `GET/PATCH /api/platform/tenants/{id}/permissions/`  inspect app/module access or patch `enabled_modules` with active feature codes
+- `GET/POST/DELETE /api/platform/tenants/{id}/object-permissions/`  list, grant, or revoke object-scoped role access within that tenant schema. POST accepts `user_id`, `role_code`, `object_type` (for example `booking.venue`), and `object_id`; DELETE accepts `assignment_id`.
 - `DELETE /api/platform/tenants/{id}/`  permanently delete the tenant and its schema
 - `POST /api/platform/login/`  `{email, password}` -> JWTs for an active root superuser (omit `X-Tenant`)
 - `POST /api/auth/registrations/`  create a customer account (include `X-Tenant`)
 - `POST /api/auth/login/`  `{email, password}` -> tenant-bound JWTs (include `X-Tenant`)
 - `POST /api/auth/access-tokens/`  exchange a refresh token for a new access token
 - `GET /api/auth/session/`  return the current authenticated tenant user and workspace
+- `/api/roles/`  tenant-admin role catalogue and CRUD; POST/PATCH accepts `code`, `name`, `rank`, and optional `permissions` (permission IDs). Built-in roles are protected.
+- `GET /api/roles/permissions/`  list permission codes available for role configuration.
+- `GET/POST/DELETE /api/role-assignments/`  list, create, or remove role grants. POST accepts `user_id` and `role_id`; optionally include `object_type` (for example `booking.venue`) and `object_id` for an object-scoped grant. Filter with `?user_id=` or `?role_id=`.
 
 The onboarding form submits `contact_name`, `contact_email`, `contact_phone`, `organization_name`,
 `organization_type`, `organization_address`, `slug`, `custom_domain`, `requested_modules`, and the initial admin

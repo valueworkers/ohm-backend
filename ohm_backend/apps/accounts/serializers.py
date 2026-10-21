@@ -1,9 +1,14 @@
+import re
+
 from django.contrib.auth.password_validation import validate_password as django_validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from rest_framework import serializers
 
-from .models import User, Role, RoleAssignment
+from django.contrib.contenttypes.models import ContentType
+from django.conf import settings
+
+from .models import User, Role, RoleAssignment, Permission
 from .services import set_role
 
 ROLE_CHOICES = [("TENANT_ADMIN", "Tenant Admin"), ("CUSTOMER", "Customer / User")]
@@ -168,3 +173,111 @@ class UserSerializer(serializers.ModelSerializer):
         if role:
             set_role(instance, role, assigned_by=self.context["request"].user)
         return instance
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    code = serializers.CharField(max_length=30)
+    permissions = serializers.PrimaryKeyRelatedField(
+        queryset=Permission.objects.all(), many=True, required=False, write_only=True
+    )
+    permission_details = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Role
+        fields = ("id", "code", "name", "rank", "permissions", "permission_details")
+        read_only_fields = ("id", "permission_details")
+
+    def get_permission_details(self, role):
+        return [
+            {"id": permission.id, "code": permission.code, "name": permission.name,
+             "description": permission.description}
+            for permission in role.permissions.order_by("code")
+        ]
+
+    def validate_code(self, value):
+        value = value.strip().upper()
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]{0,29}", value):
+            raise serializers.ValidationError("Use 1–30 uppercase letters, numbers, or underscores; start with a letter.")
+        if value in {Role.Code.TENANT_ADMIN, Role.Code.CUSTOMER} and not (
+            self.instance and self.instance.code == value
+        ):
+            raise serializers.ValidationError("This code is reserved for a built-in role.")
+        existing = Role.objects.filter(code=value)
+        if self.instance:
+            existing = existing.exclude(pk=self.instance.pk)
+        if existing.exists():
+            raise serializers.ValidationError("A role with this code already exists.")
+        return value
+
+    def validate_rank(self, value):
+        if value < 1 or value >= 100:
+            raise serializers.ValidationError("Custom role rank must be between 1 and 99.")
+        return value
+
+    def validate(self, attrs):
+        if self.instance and self.instance.code in {Role.Code.TENANT_ADMIN, Role.Code.CUSTOMER}:
+            if attrs.get("code", self.instance.code) != self.instance.code:
+                raise serializers.ValidationError({"code": "Built-in role codes cannot be changed."})
+            if attrs.get("rank", self.instance.rank) != self.instance.rank:
+                raise serializers.ValidationError({"rank": "Built-in role ranks cannot be changed."})
+        return attrs
+
+
+class RoleAssignmentSerializer(serializers.ModelSerializer):
+    user_id = serializers.PrimaryKeyRelatedField(source="user", queryset=User.objects.all(), write_only=True)
+    role_id = serializers.PrimaryKeyRelatedField(source="role", queryset=Role.objects.all(), write_only=True)
+    user_email = serializers.EmailField(source="user.email", read_only=True)
+    role_code = serializers.CharField(source="role.code", read_only=True)
+    role_name = serializers.CharField(source="role.name", read_only=True)
+    object_type = serializers.CharField(write_only=True, required=False, allow_blank=True)
+    object_id = serializers.IntegerField(write_only=True, required=False, min_value=1)
+    scope = serializers.SerializerMethodField()
+
+    class Meta:
+        model = RoleAssignment
+        fields = (
+            "id", "user_id", "user_email", "role_id", "role_code", "role_name",
+            "object_type", "object_id", "scope", "created_at",
+        )
+        read_only_fields = ("id", "created_at", "scope")
+
+    def get_scope(self, assignment):
+        if assignment.scope_type_id is None:
+            return None
+        return {"object_type": f"{assignment.scope_type.app_label}.{assignment.scope_type.model}",
+                "object_id": assignment.scope_id}
+
+    def validate(self, attrs):
+        object_type = attrs.pop("object_type", "")
+        object_id = attrs.pop("object_id", None)
+        if bool(object_type) != bool(object_id):
+            raise serializers.ValidationError({"scope": "Provide both object_type and object_id, or neither."})
+        attrs["scope_type"] = None
+        attrs["scope_id"] = None
+        if object_type:
+            try:
+                app_label, model_name = object_type.lower().split(".", 1)
+                content_type = ContentType.objects.get(app_label=app_label, model=model_name)
+                model = content_type.model_class()
+                tenant_app_labels = {app.split(".")[-1] for app in settings.TENANT_APPS}
+                if (model is None or model._meta.proxy or model._meta.app_label not in tenant_app_labels
+                        or model._meta.app_label == "accounts"):
+                    raise ContentType.DoesNotExist
+                model.objects.get(pk=object_id)
+            except (ValueError, ContentType.DoesNotExist):
+                raise serializers.ValidationError({"object_type": "Choose an existing object type and object in this tenant."})
+            except model.DoesNotExist:
+                raise serializers.ValidationError({"object_id": "The object was not found in this tenant."})
+            attrs["scope_type"] = content_type
+            attrs["scope_id"] = object_id
+        return attrs
+
+    def create(self, validated_data):
+        validated_data["assigned_by"] = self.context["request"].user
+        assigned_by = validated_data.pop("assigned_by")
+        assignment, _ = RoleAssignment.objects.get_or_create(
+            user=validated_data["user"], role=validated_data["role"],
+            scope_type=validated_data["scope_type"], scope_id=validated_data["scope_id"],
+            defaults={"assigned_by": assigned_by},
+        )
+        return assignment

@@ -1,16 +1,17 @@
 from django.db import connection, transaction
 from django.db.models import Q
+from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from rest_framework.decorators import action
 from rest_framework import mixins, status, viewsets
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed,ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.models import Role, RoleAssignment, User
+from apps.accounts.models import Permission, Role, RoleAssignment, User
 from apps.accounts.permissions import IsTenantAdmin
 from apps.accounts.serializers import (
     CustomerRegisterSerializer,
@@ -20,6 +21,8 @@ from apps.accounts.serializers import (
     OwnerCreateSerializer,
     OwnerSerializer,
     UserSerializer,
+    RoleSerializer,
+    RoleAssignmentSerializer,
 )
 
 from .helpers import consume_otp, find_user, has_password, issue_otp
@@ -243,3 +246,69 @@ class UserViewSet(
             queryset = queryset.filter(Q(email__icontains=search) | Q(full_name__icontains=search))
 
         return queryset.distinct()
+
+
+class RoleViewSet(viewsets.ModelViewSet):
+    """Tenant Admin CRUD for workspace roles; core roles remain protected."""
+
+    serializer_class = RoleSerializer
+    permission_classes = [IsTenantAdmin]
+    queryset = Role.objects.prefetch_related("permissions").order_by("rank", "name")
+    http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
+
+    @action(detail=False, methods=["get"])
+    def permissions(self, request):
+        permissions = Permission.objects.order_by("code")
+        return Response([
+            {"id": permission.id, "code": permission.code, "name": permission.name,
+             "description": permission.description}
+            for permission in permissions
+        ])
+
+    def destroy(self, request, *args, **kwargs):
+        role = self.get_object()
+        if role.code in {Role.Code.TENANT_ADMIN, Role.Code.CUSTOMER}:
+            raise ValidationError({"code": "Built-in roles cannot be deleted."})
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "This role is assigned to users. Remove its assignments before deleting it."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+
+class RoleAssignmentViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Tenant Admin role grants, optionally scoped to an object in this tenant."""
+
+    serializer_class = RoleAssignmentSerializer
+    permission_classes = [IsTenantAdmin]
+    queryset = RoleAssignment.objects.select_related("user", "role", "scope_type").order_by("id")
+    http_method_names = ["get", "post", "delete", "head", "options"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user_id = self.request.query_params.get("user_id")
+        role_id = self.request.query_params.get("role_id")
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        if role_id:
+            queryset = queryset.filter(role_id=role_id)
+        return queryset
+
+    def perform_destroy(self, instance):
+        if (instance.scope_type_id is None and instance.role.code == Role.Code.TENANT_ADMIN
+                and instance.user.is_active):
+            another_admin = User.objects.filter(
+                is_active=True,
+                role_assignments__role__code=Role.Code.TENANT_ADMIN,
+                role_assignments__scope_type__isnull=True,
+            ).exclude(pk=instance.user_id).exists()
+            if not another_admin:
+                raise ValidationError({"detail": "A workspace must keep at least one active Tenant Admin."})
+        instance.delete()
