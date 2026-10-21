@@ -147,7 +147,7 @@ class OwnerViewSet(viewsets.ModelViewSet):
         owner = self.get_object()
         if owner.pk == request.user.pk:
             return Response({"detail": "You cannot remove yourself."}, status=400)
-        if not owners_qs().filter(is_active=True).exclude(pk=owner.pk).exists():
+        if not self.owners_qs().filter(is_active=True).exclude(pk=owner.pk).exists():
             return Response({"detail": "Cannot remove the last owner."}, status=400)
         owner.is_active = False
         owner.save(update_fields=["is_active"])

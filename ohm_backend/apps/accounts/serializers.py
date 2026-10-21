@@ -9,7 +9,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
 
 from .models import User, Role, RoleAssignment, Permission
-from .services import set_role
+from .services import assign_tenant_admin_permissions, set_role
 
 ROLE_CHOICES = [("TENANT_ADMIN", "Tenant Admin"), ("CUSTOMER", "Customer / User")]
 
@@ -100,11 +100,34 @@ class OwnerCreateSerializer(serializers.ModelSerializer):
         user = User(**validated_data, is_active=True)
         user.set_unusable_password()
         user.save()
-        RoleAssignment.objects.create(
-            user=user,
-            role=Role.objects.get(code=Role.Code.TENANT_ADMIN),
-            scope_type=None,  # tenant-wide
-        )
+        assign_tenant_admin_permissions(user)
+
+        from django.db import connection
+        from django_tenants.utils import get_public_schema_name, schema_context
+        from apps.accounts.signals import _get_or_create_public_user
+        from apps.platform.models import Tenant
+
+        current_schema = connection.schema_name
+        if current_schema != get_public_schema_name():
+            public_user = _get_or_create_public_user(user.email)
+            updated_fields = []
+            if user.full_name and public_user.full_name != user.full_name:
+                public_user.full_name = user.full_name
+                updated_fields.append("full_name")
+            if user.phone and public_user.phone != user.phone:
+                public_user.phone = user.phone
+                updated_fields.append("phone")
+            if not public_user.is_active:
+                public_user.is_active = True
+                updated_fields.append("is_active")
+            if updated_fields:
+                public_user.save(update_fields=updated_fields)
+
+            with schema_context(get_public_schema_name()):
+                tenant = Tenant.objects.filter(schema_name=current_schema).first()
+                if tenant:
+                    tenant.owners.add(public_user)
+
         # transaction.on_commit(lambda: send_owner_welcome_email.delay(user.pk))
         return user
 
