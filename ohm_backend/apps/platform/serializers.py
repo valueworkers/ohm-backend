@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django_tenants.utils import schema_context
 
 from rest_framework import serializers
 
@@ -15,6 +16,7 @@ from .models import (
     Tenant,
     TenantProvisioning,
 )
+from apps.accounts.services import ensure_tenant_admin
 from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
 # --------------------------------------------------------------------------
 # Catalogue
@@ -257,6 +259,9 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         tenant = Tenant.objects.create(**validated_data)
         if owners:
             tenant.owners.set(owners)
+            with schema_context(tenant.schema_name):
+                for owner in owners:
+                    ensure_tenant_admin(owner)
         if domain:
             Domain.objects.create(domain=domain, tenant=tenant, is_primary=True)
         return tenant
