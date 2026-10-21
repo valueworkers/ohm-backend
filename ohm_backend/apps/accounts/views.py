@@ -80,10 +80,12 @@ class UnifiedLoginView(APIView):
         user.save(update_fields=["last_login"])
 
         refresh = RefreshToken.for_user(user)
-        refresh["schema"] = connection.schema_name
+        schema_name = connection.schema_name
+        refresh["schema"] = schema_name
         return Response(
             {
                 "message": "Login successful!",
+                "schema_name": schema_name,
                 "user": UserSerializer(user).data,
                 "tokens": {"refresh": str(refresh), "access": str(refresh.access_token)},
             },
