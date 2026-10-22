@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import Permission, Role, RoleAssignment, User
-from apps.accounts.permissions import IsTenantAdmin, IsTenantSchema
+from apps.accounts.permissions import DynamicModelPermissions, IsTenantAdmin, IsTenantSchema
 from apps.accounts.serializers import (
     CustomerRegisterSerializer,
     OTPPasswordResetSerializer,
@@ -230,7 +230,7 @@ class UserViewSet(
     """Let a provider's Tenant Admin manage accounts stored in that provider's schema."""
 
     serializer_class = UserSerializer
-    permission_classes = [IsTenantAdmin]
+    permission_classes = [DynamicModelPermissions]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):

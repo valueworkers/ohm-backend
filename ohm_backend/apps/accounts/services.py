@@ -1,67 +1,13 @@
 import logging
-from django.contrib.auth.models import Group, Permission as AuthPermission
-from django.contrib.contenttypes.models import ContentType
+from django.contrib.auth.models import Group
 from django.db import connection
 from django_tenants.utils import get_public_schema_name, schema_context
 
-from .models import Permission as AccountsPermission, Role, RoleAssignment, User
+from .models import Role, RoleAssignment, User
 
 logger = logging.getLogger(__name__)
 
 MANAGED_ROLES = ("TENANT_ADMIN", "CUSTOMER")
-
-# --------------------------------------------------------------------------
-# Role / Group permission mapping rules
-# --------------------------------------------------------------------------
-GROUP_RULES = {
-    # OHM Platform Super Admin gets every permission in the system
-    Role.Code.SUPER_ADMIN: "__all__",
-
-    # Tenant Admin gets full access across tenant modules
-    Role.Code.TENANT_ADMIN: {
-        "apps": ["accounts", "venue_manager", "booking", "payroll", "notification", "analysis", "wallet", "faq"],
-        "actions": "__all__",
-    },
-
-    # Ops Manager can view/change/add across operational apps
-    Role.Code.OPS_MANAGER: {
-        "apps": ["accounts", "venue_manager", "booking", "payroll", "notification", "analysis", "wallet", "faq"],
-        "actions": ["view", "change", "add"],
-    },
-
-    Role.Code.VENUE_ADMIN: {
-        "apps": ["venue_manager", "booking", "payroll", "notification"],
-        "actions": ["view", "change", "add"],
-    },
-
-    Role.Code.SERVICE_ADMIN: {
-        "apps": ["venue_manager", "booking", "payroll", "notification"],
-        "actions": ["view", "change", "add"],
-    },
-
-    Role.Code.RESOURCE_ADMIN: {
-        "apps": ["venue_manager", "booking", "payroll", "notification"],
-        "actions": ["view", "change", "add"],
-    },
-
-    # Staff can view
-    Role.Code.STAFF: {
-        "apps": ["venue_manager", "booking", "payroll", "notification"],
-        "actions": ["view"],
-    },
-
-    # Customer can view & add on booking, wallet, accounts
-    Role.Code.CUSTOMER: {
-        "apps": ["booking", "wallet", "accounts"],
-        "actions": ["view", "add"],
-    },
-}
-
-# Public root user (non-superuser platform staff) default permissions
-PUBLIC_ROOT_RULES = {
-    "apps": ["tenants", "platform", "accounts"],
-    "actions": ["view", "change", "add"],
-}
 
 ROLE_METADATA = {
     Role.Code.SUPER_ADMIN: {"name": "Super Admin", "rank": 100},
@@ -75,85 +21,24 @@ ROLE_METADATA = {
 }
 
 
-def sync_accounts_permissions():
-    """Ensure every auth.Permission in the current schema has a matching accounts.Permission record."""
-    auth_perms = AuthPermission.objects.select_related("content_type").all()
-    created_list = []
-    existing_codes = set(AccountsPermission.objects.values_list("code", flat=True))
-    for ap in auth_perms:
-        code = f"{ap.content_type.app_label}.{ap.codename}"
-        if code not in existing_codes:
-            created_list.append(
-                AccountsPermission(
-                    code=code,
-                    name=ap.name,
-                    description=f"{ap.name} for {ap.content_type.app_label}.{ap.content_type.model}",
-                )
-            )
-            existing_codes.add(code)
-    if created_list:
-        AccountsPermission.objects.bulk_create(created_list, ignore_conflicts=True)
-
-
-def get_auth_permissions_for_rule(rule):
-    """Return auth.Permission queryset matching rule specifications."""
-    if rule == "__all__":
-        return AuthPermission.objects.all()
-
-    apps = rule.get("apps", [])
-    actions = rule.get("actions", [])
-
-    cts = ContentType.objects.filter(app_label__in=apps)
-    if not cts.exists():
-        return AuthPermission.objects.none()
-
-    if actions == "__all__":
-        return AuthPermission.objects.filter(content_type__in=cts)
-
-    actions_pattern = "|".join(actions)
-    return AuthPermission.objects.filter(
-        content_type__in=cts,
-        codename__regex=f"^({actions_pattern})_",
-    )
-
-
-def get_accounts_permissions_for_auth_perms(auth_perms):
-    """Return matching accounts.Permission queryset for given auth.Permission objects."""
-    if not auth_perms.exists():
-        return AccountsPermission.objects.none()
-    codes = [f"{p.content_type.app_label}.{p.codename}" for p in auth_perms.select_related("content_type")]
-    return AccountsPermission.objects.filter(code__in=codes)
-
-
 def seed_roles_and_groups_for_schema(is_public=False):
-    """Seed all default groups, roles, and their assigned permissions in the current schema."""
-    sync_accounts_permissions()
+    """Ensure the built-in role groups exist without overwriting their permissions."""
 
     roles_to_seed = (
         [Role.Code.SUPER_ADMIN, Role.Code.OPS_MANAGER, Role.Code.STAFF]
         if is_public
-        else list(GROUP_RULES.keys())
+        else list(Role.Code.values)
     )
 
     for role_code in roles_to_seed:
-        rule = GROUP_RULES.get(role_code)
-        if not rule:
-            continue
-
         meta = ROLE_METADATA.get(role_code, {"name": role_code.replace("_", " ").title(), "rank": 50})
-
-        # Configure Django auth.Group
-        group, _ = Group.objects.get_or_create(name=role_code)
-        auth_perms = get_auth_permissions_for_rule(rule)
-        group.permissions.set(auth_perms)
+        Group.objects.get_or_create(name=role_code)
 
         # Configure accounts.Role
         role, _ = Role.objects.get_or_create(
             code=role_code,
             defaults={"name": meta["name"], "rank": meta["rank"]},
         )
-        accounts_perms = get_accounts_permissions_for_auth_perms(auth_perms)
-        role.permissions.set(accounts_perms)
 
 
 def assign_all_permissions_to_superuser(user):
@@ -161,9 +46,6 @@ def assign_all_permissions_to_superuser(user):
     public_schema = get_public_schema_name()
     with schema_context(public_schema):
         seed_roles_and_groups_for_schema(is_public=True)
-
-        all_auth_perms = AuthPermission.objects.all()
-        user.user_permissions.set(all_auth_perms)
 
         super_group = Group.objects.filter(name=Role.Code.SUPER_ADMIN).first()
         if super_group:
@@ -196,9 +78,6 @@ def assign_default_permissions_to_public_root_user(user):
     public_schema = get_public_schema_name()
     with schema_context(public_schema):
         seed_roles_and_groups_for_schema(is_public=True)
-
-        default_perms = get_auth_permissions_for_rule(PUBLIC_ROOT_RULES)
-        user.user_permissions.set(default_perms)
 
         staff_group = (
             Group.objects.filter(name=Role.Code.OPS_MANAGER).first()
@@ -234,7 +113,7 @@ def seed_tenant_default_permissions(schema_name):
 
 
 def assign_tenant_admin_permissions(user):
-    """Assign full tenant-admin default permissions and group to a tenant admin user."""
+    """Assign the tenant-admin group; its permissions are managed through Django."""
     role, _ = Role.objects.get_or_create(
         code=Role.Code.TENANT_ADMIN,
         defaults={"name": "Tenant Admin", "rank": 100},
@@ -245,30 +124,21 @@ def assign_tenant_admin_permissions(user):
         scope_type=None,
         scope_id=None,
     )
-    admin_group = Group.objects.filter(name=Role.Code.TENANT_ADMIN).first()
-    if admin_group:
-        user.groups.add(admin_group)
-
-    tenant_admin_perms = get_auth_permissions_for_rule(GROUP_RULES[Role.Code.TENANT_ADMIN])
-    user.user_permissions.set(tenant_admin_perms)
-    logger.info("Assigned default tenant admin permissions to %s in current schema.", user.email)
+    admin_group, _ = Group.objects.get_or_create(name=Role.Code.TENANT_ADMIN)
+    user.groups.add(admin_group)
+    logger.info("Assigned Tenant Admin group to %s in current schema.", user.email)
 
 
 def assign_role_default_permissions(user, role_code):
-    """Assign default permissions and group matching a role code to a user."""
-    group = Group.objects.filter(name=role_code).first()
-    if group:
-        user.groups.add(group)
-
-    rule = GROUP_RULES.get(role_code)
-    if rule:
-        perms = get_auth_permissions_for_rule(rule)
-        user.user_permissions.set(perms)
+    """Assign the same-named built-in Django group to a user."""
+    group, _ = Group.objects.get_or_create(name=role_code)
+    user.groups.add(group)
 
 
 def set_role(user, code, assigned_by=None):
-    """Give the user exactly one of the managed tenant-wide roles and matching default permissions."""
+    """Give the user exactly one managed tenant-wide role and its Django group."""
     RoleAssignment.objects.filter(user=user, scope_type__isnull=True, role__code__in=MANAGED_ROLES).delete()
+    user.groups.remove(*user.groups.filter(name__in=MANAGED_ROLES))
     role = Role.objects.get(code=code)
     RoleAssignment.objects.create(user=user, role=role, assigned_by=assigned_by)
     assign_role_default_permissions(user, code)
