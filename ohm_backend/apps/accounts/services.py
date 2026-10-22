@@ -299,10 +299,11 @@ def assign_roles_and_permissions_to_existing_tenants_and_owners(target_schema=No
     if not target_schema or target_schema == public_schema:
         results[public_schema] = sync_public_schema_roles_and_permissions()
 
-    if target_schema and target_schema != public_schema:
-        tenants = Tenant.objects.filter(schema_name=target_schema)
-    else:
-        tenants = Tenant.objects.exclude(schema_name=public_schema)
+    with schema_context(public_schema):
+        if target_schema and target_schema != public_schema:
+            tenants = list(Tenant.objects.filter(schema_name=target_schema))
+        else:
+            tenants = list(Tenant.objects.exclude(schema_name=public_schema))
 
     for tenant in tenants:
         results[tenant.schema_name] = sync_tenant_roles_and_permissions(tenant)
