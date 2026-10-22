@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import Permission, Role, RoleAssignment, User
-from apps.accounts.permissions import DynamicModelPermissions, IsTenantAdmin, IsTenantSchema
+from apps.accounts.permissions import IsTenantAdmin, IsTenantSchema
 from apps.accounts.serializers import (
     CustomerRegisterSerializer,
     OTPPasswordResetSerializer,
@@ -112,7 +112,6 @@ class OwnerViewSet(viewsets.ModelViewSet):
     /owners/me/         GET, PATCH own profile
     """
 
-    permission_classes = [IsTenantAdmin]
     http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
 
     def owners_qs(self):
@@ -200,7 +199,7 @@ class TenantRegistrationCreateView(APIView):
     """Let a provider's customers create login accounts in that provider's schema."""
 
     authentication_classes = []
-    permission_classes = [IsTenantSchema]
+    permission_classes = [AllowAny, IsTenantSchema]
     # throttle_classes = [ScopedRateThrottle]
     # throttle_scope = "tenant_registration_create"
 
@@ -229,7 +228,6 @@ class UserViewSet(
     """Let a provider's Tenant Admin manage accounts stored in that provider's schema."""
 
     serializer_class = UserSerializer
-    permission_classes = [DynamicModelPermissions]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
@@ -253,7 +251,6 @@ class RoleViewSet(viewsets.ModelViewSet):
     """Tenant Admin CRUD for workspace roles; core roles remain protected."""
 
     serializer_class = RoleSerializer
-    permission_classes = [IsTenantAdmin]
     queryset = Role.objects.prefetch_related("permissions").order_by("rank", "name")
     http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
 
@@ -288,7 +285,6 @@ class RoleAssignmentViewSet(
     """Tenant Admin role grants, optionally scoped to an object in this tenant."""
 
     serializer_class = RoleAssignmentSerializer
-    permission_classes = [IsTenantAdmin]
     queryset = RoleAssignment.objects.select_related("user", "role", "scope_type").order_by("id")
     http_method_names = ["get", "post", "delete", "head", "options"]
 

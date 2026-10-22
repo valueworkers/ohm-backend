@@ -1,6 +1,6 @@
 from django.db import connection
 from django_tenants.utils import get_public_schema_name
-from rest_framework.permissions import BasePermission
+from rest_framework.permissions import BasePermission, DjangoModelPermissions
 
 
 class IsTenantAdmin(BasePermission):
@@ -12,7 +12,7 @@ class IsTenantAdmin(BasePermission):
         return request.user.groups.filter(name="TENANT_ADMIN").exists()
 
 
-class DynamicModelPermissions(BasePermission):
+class DynamicModelPermissions(DjangoModelPermissions):
     """Apply the Django model permission matching the HTTP method and view model.
 
     Permissions are resolved at request time, so permissions created by Django
@@ -30,27 +30,6 @@ class DynamicModelPermissions(BasePermission):
         "PATCH": ["%(app_label)s.change_%(model_name)s"],
         "DELETE": ["%(app_label)s.delete_%(model_name)s"],
     }
-
-    def has_permission(self, request, view):
-        user = request.user
-        if not (user and user.is_authenticated):
-            return False
-        if user.is_superuser:
-            return True
-
-        queryset = getattr(view, "queryset", None)
-        if queryset is None:
-            get_queryset = getattr(view, "get_queryset", None)
-            if get_queryset is None:
-                return False
-            queryset = get_queryset()
-        model = queryset.model
-        required = self.perms_map.get(request.method, [])
-        return all(user.has_perm(perm % {
-            "app_label": model._meta.app_label,
-            "model_name": model._meta.model_name,
-        }) for perm in required)
-
 
 class IsTenantSchema(BasePermission):
     """Allow an endpoint only when the request is routed to a provider schema."""

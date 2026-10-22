@@ -21,6 +21,7 @@ from apps.accounts.models import User
 from apps.accounts.services import (
     assign_all_permissions_to_superuser,
     assign_default_permissions_to_public_root_user,
+    assign_public_tenant_owner_role,
     ensure_tenant_admin,
     seed_tenant_default_permissions,
 )
@@ -61,15 +62,21 @@ def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
     # Seed default permissions, roles, and groups for this tenant
     seed_tenant_default_permissions(tenant.schema_name)
 
-    # Seed primary applicant with full tenant admin default permissions
+    # Resolve the applicant while the public schema is active. The applicant
+    # row does not exist in the tenant schema until ensure_tenant_admin mirrors it.
+    public_schema = get_public_schema_name()
+    with schema_context(public_schema):
+        applicant = User.objects.get(pk=provisioning.applicant_id)
+
+    # Seed primary applicant with the tenant admin role and group
     with schema_context(tenant.schema_name):
-        ensure_tenant_admin(provisioning.applicant)
+        ensure_tenant_admin(applicant)
 
     # Seed co-owners
     co_emails = provisioning.co_owner_emails or []
     for email in co_emails:
         email = email.strip().lower()
-        if not email or email == provisioning.applicant.email.lower():
+        if not email or email == applicant.email.lower():
             continue
         public_user = _get_or_create_public_user(email)
         # Add as tenant owner in the public schema
@@ -88,10 +95,16 @@ def on_tenant_owners_changed(sender, instance, action, pk_set, **kwargs):
         public_schema = get_public_schema_name()
         if tenant.schema_name == public_schema:
             return
-        users = User.objects.filter(pk__in=pk_set)
+
+        # Materialize public users before switching schemas; evaluating this
+        # queryset in the tenant schema would look up unrelated tenant users.
+        with schema_context(public_schema):
+            users = list(User.objects.filter(pk__in=pk_set))
+            for public_user in users:
+                assign_public_tenant_owner_role(tenant, public_user)
         with schema_context(tenant.schema_name):
-            for u in users:
-                ensure_tenant_admin(u)
+            for public_user in users:
+                ensure_tenant_admin(public_user)
 
 
 @receiver(post_save, sender=User)

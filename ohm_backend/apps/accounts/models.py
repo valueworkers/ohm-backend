@@ -111,7 +111,7 @@ class EmployeeProfile(models.Model):
 
 
 class RoleAssignment(models.Model):
-    """Grants a role either tenant-wide (scope null) or on one object (Venue/Service/Resource)."""
+    """Grants a role tenant-wide or on one object (Tenant, Venue, Service, Resource)."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="role_assignments")
     role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="assignments")

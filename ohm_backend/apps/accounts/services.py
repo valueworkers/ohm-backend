@@ -3,6 +3,7 @@ from django.contrib.auth.models import Group
 from django.db import connection
 from django_tenants.utils import get_public_schema_name, schema_context
 
+from .access import TenantAccessManager
 from .models import Role, RoleAssignment, User
 
 logger = logging.getLogger(__name__)
@@ -47,9 +48,7 @@ def assign_all_permissions_to_superuser(user):
     with schema_context(public_schema):
         seed_roles_and_groups_for_schema(is_public=True)
 
-        super_group = Group.objects.filter(name=Role.Code.SUPER_ADMIN).first()
-        if super_group:
-            user.groups.add(super_group)
+        TenantAccessManager(public_schema).assign_group(user, Role.Code.SUPER_ADMIN)
 
         super_role = Role.objects.filter(code=Role.Code.SUPER_ADMIN).first()
         if super_role:
@@ -79,12 +78,7 @@ def assign_default_permissions_to_public_root_user(user):
     with schema_context(public_schema):
         seed_roles_and_groups_for_schema(is_public=True)
 
-        staff_group = (
-            Group.objects.filter(name=Role.Code.OPS_MANAGER).first()
-            or Group.objects.filter(name=Role.Code.STAFF).first()
-        )
-        if staff_group:
-            user.groups.add(staff_group)
+        TenantAccessManager(public_schema).assign_group(user, Role.Code.OPS_MANAGER)
 
         staff_role = (
             Role.objects.filter(code=Role.Code.OPS_MANAGER).first()
@@ -124,15 +118,44 @@ def assign_tenant_admin_permissions(user):
         scope_type=None,
         scope_id=None,
     )
-    admin_group, _ = Group.objects.get_or_create(name=Role.Code.TENANT_ADMIN)
-    user.groups.add(admin_group)
+    access = TenantAccessManager(connection.schema_name)
+    access.assign_group(user, Role.Code.TENANT_ADMIN)
+    access.grant_all_permissions(Role.Code.TENANT_ADMIN)
     logger.info("Assigned Tenant Admin group to %s in current schema.", user.email)
+
+
+def assign_public_tenant_owner_role(tenant, public_user):
+    """Grant the public owner tenant-scoped role access and Django permissions."""
+    from django.contrib.contenttypes.models import ContentType
+
+    public_schema = get_public_schema_name()
+    with schema_context(public_schema):
+        owner = User.objects.get(email__iexact=public_user.email)
+        role, _ = Role.objects.get_or_create(
+            code=Role.Code.TENANT_ADMIN,
+            defaults={"name": "Tenant Admin", "rank": 100},
+        )
+        access = TenantAccessManager(public_schema)
+        access.assign_group(owner, Role.Code.TENANT_ADMIN)
+        access.grant_all_permissions(Role.Code.TENANT_ADMIN)
+        tenant_type = ContentType.objects.get_for_model(tenant, for_concrete_model=False)
+        assignment, _ = RoleAssignment.objects.get_or_create(
+            user=owner,
+            role=role,
+            scope_type=tenant_type,
+            scope_id=tenant.pk,
+        )
+        logger.info(
+            "Assigned public TENANT_ADMIN access to %s for tenant %s.",
+            owner.email,
+            tenant.schema_name,
+        )
+        return assignment
 
 
 def assign_role_default_permissions(user, role_code):
     """Assign the same-named built-in Django group to a user."""
-    group, _ = Group.objects.get_or_create(name=role_code)
-    user.groups.add(group)
+    TenantAccessManager(connection.schema_name).assign_group(user, role_code)
 
 
 def set_role(user, code, assigned_by=None):
@@ -218,6 +241,9 @@ def sync_tenant_roles_and_permissions(tenant):
                         co_user = _get_or_create_public_user(email)
                         tenant.owners.add(co_user)
                         owners.append(co_user)
+
+        for owner in owners:
+            assign_public_tenant_owner_role(tenant, owner)
 
     assigned_owners = []
     synced_users = []
