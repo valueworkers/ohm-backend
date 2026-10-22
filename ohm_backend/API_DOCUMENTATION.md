@@ -6,6 +6,8 @@ All endpoints are hosted on the unified API host (`api.ohm.com` in production, `
 
 > [!NOTE]
 > Postman collection and environment files are packaged in [`OHM Backend API.zip`](OHM%20Backend%20API.zip). You can import them directly into Postman.
+>
+> The collection is grouped by access context: **Public / Shared**, **Root / Super Admin** (public schema, no `X-Tenant`), **Tenant Workspace** (`X-Tenant: {{tenantSlug}}`), and **Tenant Owner Portal** (owner account in the public schema, no `X-Tenant`). Root and tenant login requests save tokens to separate environment variables so they are not mixed up.
 
 ---
 

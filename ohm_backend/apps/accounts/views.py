@@ -12,7 +12,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from apps.accounts.models import Permission, Role, RoleAssignment, User
-from apps.accounts.permissions import IsTenantAdmin
+from apps.accounts.permissions import IsTenantAdmin, IsTenantSchema
 from apps.accounts.serializers import (
     CustomerRegisterSerializer,
     OTPPasswordResetSerializer,
@@ -113,7 +113,7 @@ class OwnerViewSet(viewsets.ModelViewSet):
     /owners/me/         GET, PATCH own profile
     """
 
-    permission_classes = []
+    permission_classes = [IsTenantAdmin]
     http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
 
     def owners_qs(self):
@@ -201,7 +201,7 @@ class TenantRegistrationCreateView(APIView):
     """Let a provider's customers create login accounts in that provider's schema."""
 
     authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [IsTenantSchema]
     # throttle_classes = [ScopedRateThrottle]
     # throttle_scope = "tenant_registration_create"
 

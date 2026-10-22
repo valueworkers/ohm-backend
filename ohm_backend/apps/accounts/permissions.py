@@ -1,5 +1,7 @@
 from django.contrib.contenttypes.models import ContentType
+from django.db import connection
 from django.db.models import Q
+from django_tenants.utils import get_public_schema_name
 from rest_framework.permissions import BasePermission
 
 from .models import RoleAssignment
@@ -49,3 +51,12 @@ class IsTenantAdmin(BasePermission):
             scope_type__isnull=True,
             scope_id__isnull=True,
         ).exists()
+
+
+class IsTenantSchema(BasePermission):
+    """Allow an endpoint only when the request is routed to a provider schema."""
+
+    message = "This endpoint is only available inside a tenant workspace."
+
+    def has_permission(self, request, view):
+        return connection.schema_name != get_public_schema_name()
