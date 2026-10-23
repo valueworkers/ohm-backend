@@ -138,15 +138,15 @@ def provision_tenant(provisioning):
             tenant_provisioned.send(sender=TenantProvisioning, provisioning=p, tenant=tenant)
             _assign_roles_to_tenant_owners(tenant)
             with transaction.atomic():
-                User.objects.filter(
-                    pk=p.applicant_id, is_active=False
-                ).update(is_active=True)
+                applicant = User.objects.filter(pk=p.applicant_id, is_active=False).first()
+                if applicant:
+                    applicant.is_active = True
+                    applicant.save(update_fields=["is_active"])
                 # Also activate any co-owner accounts that were created as stubs.
                 co_emails = [e.strip().lower() for e in (p.co_owner_emails or []) if e.strip()]
-                if co_emails:
-                    User.objects.filter(
-                        email__in=co_emails, is_active=False
-                    ).update(is_active=True)
+                for co_owner in User.objects.filter(email__in=co_emails, is_active=False):
+                    co_owner.is_active = True
+                    co_owner.save(update_fields=["is_active"])
                 p.tenant = tenant
                 p.status = TenantProvisioning.Status.PROVISIONED
                 p.provision_error = ""

@@ -175,36 +175,71 @@ def ensure_tenant_admin(public_user):
         code=Role.Code.TENANT_ADMIN,
         defaults={"name": "Tenant Admin", "rank": 100},
     )
-    user, created = User.objects.get_or_create(
+    user, _ = User.objects.get_or_create(
         email=public_user.email.lower(),
         defaults={
             "full_name": public_user.full_name,
             "phone": public_user.phone,
-            "is_active": True,
+            "is_active": public_user.is_active,
+            "password": public_user.password,
         },
     )
-    if created:
-        user.password = public_user.password
-        user.save(update_fields=["password"])
-    else:
-        updated_fields = []
-        if not user.is_active:
-            user.is_active = True
-            updated_fields.append("is_active")
-        if public_user.password and user.password != public_user.password:
-            user.password = public_user.password
-            updated_fields.append("password")
-        if not user.full_name and public_user.full_name:
-            user.full_name = public_user.full_name
-            updated_fields.append("full_name")
-        if not user.phone and public_user.phone:
-            user.phone = public_user.phone
-            updated_fields.append("phone")
-        if updated_fields:
-            user.save(update_fields=updated_fields)
+    # The public owner record is the source when provisioning or reconciling a
+    # tenant. Keep every mirrored profile field current, including values that
+    # were previously populated in the tenant schema.
+    updated_fields = []
+    for field in ("full_name", "phone", "is_active", "password"):
+        value = getattr(public_user, field)
+        if getattr(user, field) != value:
+            setattr(user, field, value)
+            updated_fields.append(field)
+    if updated_fields:
+        user.save(update_fields=updated_fields)
 
     assign_tenant_admin_permissions(user)
     return user
+
+
+def sync_owner_profile(user, update_fields=None):
+    """Copy shared identity fields between an owner and their schema mirrors.
+
+    The User table is schema-local, so synchronization is deliberately limited
+    to users linked to a Tenant as an owner. Tenant-specific users with the
+    same email are not affected.
+    """
+    from apps.platform.models import Tenant
+
+    public_schema = get_public_schema_name()
+    current_schema = connection.schema_name
+    fields = ("full_name", "phone", "is_active", "password")
+    if update_fields is not None:
+        fields = tuple(field for field in fields if field in update_fields)
+    if not fields:
+        return
+    if current_schema == public_schema:
+        source_email = user.email
+        with schema_context(public_schema):
+            public_user = User.objects.filter(email__iexact=source_email).first()
+            if not public_user:
+                return
+            tenants = list(Tenant.objects.filter(owners__pk=public_user.pk).exclude(schema_name=public_schema))
+    else:
+        source_email = user.email
+        with schema_context(public_schema):
+            public_user = User.objects.filter(email__iexact=source_email).first()
+            if not public_user:
+                return
+            is_owner = Tenant.objects.filter(schema_name=current_schema, owners__pk=public_user.pk).exists()
+            if not is_owner:
+                return
+            tenants = list(Tenant.objects.filter(owners__pk=public_user.pk).exclude(schema_name=public_schema))
+
+    values = {field: getattr(user, field) for field in fields}
+    with schema_context(public_schema):
+        User.objects.filter(pk=public_user.pk).update(**values)
+    for tenant in tenants:
+        with schema_context(tenant.schema_name):
+            User.objects.filter(email__iexact=source_email).update(**values)
 
 
 def sync_tenant_roles_and_permissions(tenant):

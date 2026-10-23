@@ -24,6 +24,7 @@ from apps.accounts.services import (
     assign_public_tenant_owner_role,
     ensure_tenant_admin,
     seed_tenant_default_permissions,
+    sync_owner_profile,
 )
 from apps.platform.models import PlatformAdmin, Tenant
 from apps.platform.services import tenant_provisioned
@@ -109,7 +110,7 @@ def on_tenant_owners_changed(sender, instance, action, pk_set, **kwargs):
 
 @receiver(post_save, sender=User)
 def on_user_saved(sender, instance, created, **kwargs):
-    """Ensure superusers of public schema have ALL permissions, and public root users have default permissions."""
+    """Maintain platform permissions and synchronize tenant-owner identity."""
     if kwargs.get("raw", False):
         return
 
@@ -124,6 +125,11 @@ def on_user_saved(sender, instance, created, **kwargs):
         elif instance.is_staff or hasattr(instance, "platform_admin_profile"):
             # When creating public root user provide some default permissions
             assign_default_permissions_to_public_root_user(instance)
+
+    # Mirror only shared identity fields for registered tenant owners. The
+    # service uses queryset updates in the other schemas, avoiding recursive
+    # post_save signals and leaving tenant-specific roles untouched.
+    sync_owner_profile(instance, update_fields=kwargs.get("update_fields"))
 
 
 @receiver(post_save, sender=PlatformAdmin)

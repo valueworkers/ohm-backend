@@ -273,7 +273,7 @@ All endpoints are hosted on the unified API host (`api.ohm.com`).
 - `GET /api/owner/` — List workspace co-owners.
 - `POST /api/owner/` — Add a co-owner (seeded with `TENANT_ADMIN` role).
 - `GET /api/owner/me/` — Retrieve authenticated user's owner profile.
-- `PATCH /api/owner/me/` — Update authenticated user's owner profile.
+- `PATCH /api/owner/me/` — Update authenticated user's owner profile. Changes to name, phone, active status, or password are synchronized with the public-schema owner account and the user's other tenant-owner mirrors.
 - `GET/PUT/PATCH /api/owner/{id}/` — Inspect or update owner account.
 - `DELETE /api/owner/{id}/` — Soft-deactivate co-owner (protected: cannot remove self or last active owner).
 
