@@ -20,12 +20,21 @@ class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra):
         extra.setdefault("is_staff", False)
         extra.setdefault("is_superuser", False)
-        return self._create(email, password, **extra)
+        user = self._create(email, password, **extra)
+        from django.db import connection
+        from django_tenants.utils import get_public_schema_name
+        if connection.schema_name == get_public_schema_name() and user.is_staff and not user.is_superuser:
+            from apps.accounts.services import assign_default_permissions_to_public_root_user
+            assign_default_permissions_to_public_root_user(user)
+        return user
 
     def create_superuser(self, email, password=None, **extra):
         extra["is_staff"] = True
         extra["is_superuser"] = True
-        return self._create(email, password, **extra)
+        user = self._create(email, password, **extra)
+        from apps.accounts.services import assign_all_permissions_to_superuser
+        assign_all_permissions_to_superuser(user)
+        return user
 
 
 class User(AbstractBaseUser, PermissionsMixin):
@@ -52,11 +61,12 @@ class User(AbstractBaseUser, PermissionsMixin):
         for a in self.role_assignments.all():
             if a.scope_type_id is None and (best is None or a.role.rank > best.rank):
                 best = a.role
-        return best.code if best else None
+        return best.name if best else None
 
 
 class Role(models.Model):
     class Code(models.TextChoices):
+        SUPER_ADMIN = "SUPER_ADMIN", "Super Admin"
         TENANT_ADMIN = "TENANT_ADMIN", "Tenant Admin"
         CUSTOMER = "CUSTOMER", "Customer / User"
         # Reserved for later: sub-roles that will sit under Tenant Admin (not seeded yet)
@@ -101,7 +111,7 @@ class EmployeeProfile(models.Model):
 
 
 class RoleAssignment(models.Model):
-    """Grants a role either tenant-wide (scope null) or on one object (Venue/Service/Resource)."""
+    """Grants a role tenant-wide or on one object (Tenant, Venue, Service, Resource)."""
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="role_assignments")
     role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="assignments")

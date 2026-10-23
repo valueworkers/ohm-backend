@@ -1,6 +1,10 @@
 from django.db import IntegrityError, transaction
 from django.db.models import ProtectedError
+from django.contrib.contenttypes.models import ContentType
+from django.apps import apps
+from django.conf import settings
 from django.utils import timezone
+from django_tenants.utils import schema_context
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -10,7 +14,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.throttling import AnonRateThrottle
 
-from .models import Plan, Subscription, Tenant, TenantProvisioning
+from .models import Feature, Plan, Subscription, Tenant, TenantProvisioning
 from .serializers import (
     PlanAdminSerializer,
     PlanSerializer,
@@ -277,6 +281,119 @@ class TenantViewSet(viewsets.ModelViewSet):
             )
         tenant.delete(force_drop=True)  # drops the schema and all its data
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["get", "patch"])
+    def permissions(self, request, pk=None):
+        """Read or update the tenant's app/module access from the platform console."""
+        tenant = self.get_object()
+        if request.method == "PATCH":
+            modules = request.data.get("enabled_modules")
+            if not isinstance(modules, list) or any(not isinstance(code, str) for code in modules):
+                raise ValidationError({"enabled_modules": "Provide a list of feature codes."})
+            modules = list(dict.fromkeys(code.strip() for code in modules))
+            valid = set(Feature.objects.filter(is_active=True, code__in=modules).values_list("code", flat=True))
+            unknown = sorted(set(modules) - valid)
+            if unknown:
+                raise ValidationError({"enabled_modules": {"unknown_or_inactive": unknown}})
+            tenant.modules = modules
+            tenant.save(update_fields=["modules"])
+
+        features = Feature.objects.filter(is_active=True).order_by("name")
+        return Response({
+            "tenant_id": tenant.pk,
+            "enabled_modules": tenant.modules or [],
+            "app_permissions": [
+                {"code": feature.code, "name": feature.name, "description": feature.description,
+                 "enabled": feature.code in (tenant.modules or [])}
+                for feature in features
+            ],
+        })
+
+    @action(detail=True, methods=["get", "post", "delete"], url_path="object-permissions")
+    def object_permissions(self, request, pk=None):
+        """Manage role grants scoped to concrete objects in a tenant schema."""
+        from apps.accounts.models import Role, RoleAssignment
+
+        tenant = self.get_object()
+        with schema_context(tenant.schema_name):
+            if request.method == "POST":
+                user_id = request.data.get("user_id")
+                role_code = request.data.get("role_code")
+                object_type = request.data.get("object_type", "")
+                object_id = request.data.get("object_id")
+                if not all((user_id, role_code, object_type, object_id)):
+                    raise ValidationError({"detail": "user_id, role_code, object_type, and object_id are required."})
+                try:
+                    object_id = int(object_id)
+                except (TypeError, ValueError):
+                    raise ValidationError({"object_id": "Object IDs must be positive integers."})
+                if object_id < 1:
+                    raise ValidationError({"object_id": "Object IDs must be positive integers."})
+                try:
+                    app_label, model_name = object_type.lower().split(".", 1)
+                    content_type = ContentType.objects.get(app_label=app_label, model=model_name)
+                    model = content_type.model_class()
+                    tenant_app_labels = {app.split(".")[-1] for app in settings.TENANT_APPS}
+                    if (model is None or model._meta.proxy or model._meta.app_label not in tenant_app_labels
+                            or model._meta.app_label == "accounts"):
+                        raise ContentType.DoesNotExist
+                except (ValueError, ContentType.DoesNotExist):
+                    raise ValidationError({"detail": "The user, role, or target object was not found in this tenant."})
+                try:
+                    model.objects.get(pk=object_id)
+                except model.DoesNotExist:
+                    raise ValidationError({"detail": "The user, role, or target object was not found in this tenant."})
+                User = apps.get_model("accounts", "User")
+                try:
+                    user = User.objects.get(pk=user_id)
+                    role = Role.objects.get(code=role_code)
+                except (User.DoesNotExist, Role.DoesNotExist):
+                    raise ValidationError({"detail": "The user, role, or target object was not found in this tenant."})
+                assignment, created = RoleAssignment.objects.get_or_create(
+                    user=user, role=role, scope_type=content_type, scope_id=object_id,
+                )
+                return Response(self._object_permission_data(assignment), status=201 if created else 200)
+
+            if request.method == "DELETE":
+                assignment_id = request.data.get("assignment_id") or request.query_params.get("assignment_id")
+                if not assignment_id:
+                    raise ValidationError({"assignment_id": "This field is required."})
+                deleted, _ = RoleAssignment.objects.filter(pk=assignment_id, scope_type__isnull=False).delete()
+                if not deleted:
+                    raise ValidationError({"assignment_id": "Object permission grant not found."})
+                return Response(status=204)
+
+            assignments = RoleAssignment.objects.filter(scope_type__isnull=False).select_related(
+                "user", "role", "scope_type", "assigned_by"
+            ).prefetch_related("role__permissions").order_by("id")
+            object_types = []
+            tenant_app_labels = {app.split(".")[-1] for app in settings.TENANT_APPS}
+            for model in apps.get_models():
+                if model._meta.proxy or model._meta.auto_created or not model._meta.managed:
+                    continue
+                if model._meta.app_label not in tenant_app_labels or model._meta.app_label == "accounts":
+                    continue
+                object_types.append({"code": f"{model._meta.app_label}.{model._meta.model_name}",
+                                     "name": model._meta.verbose_name.title()})
+            return Response({
+                "tenant_id": tenant.pk,
+                "object_types": sorted(object_types, key=lambda item: item["name"].lower()),
+                "roles": [{"code": role.code, "name": role.name} for role in Role.objects.order_by("rank", "name")],
+                "grants": [self._object_permission_data(assignment) for assignment in assignments],
+            })
+
+    @staticmethod
+    def _object_permission_data(assignment):
+        return {
+            "assignment_id": assignment.pk,
+            "user_id": assignment.user_id,
+            "user_email": assignment.user.email,
+            "role_code": assignment.role.code,
+            "role_name": assignment.role.name,
+            "object_type": f"{assignment.scope_type.app_label}.{assignment.scope_type.model}",
+            "object_id": assignment.scope_id,
+            "permission_codes": list(assignment.role.permissions.order_by("code").values_list("code", flat=True)),
+        }
 
 
     @action(detail=True, methods=["post"])

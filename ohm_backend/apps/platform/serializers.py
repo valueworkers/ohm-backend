@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django_tenants.utils import schema_context
 
 from rest_framework import serializers
 
@@ -15,6 +16,7 @@ from .models import (
     Tenant,
     TenantProvisioning,
 )
+from apps.accounts.services import ensure_tenant_admin, seed_tenant_default_permissions
 from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
 # --------------------------------------------------------------------------
 # Catalogue
@@ -255,8 +257,12 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         # Change this if direct creation should go through a different initial status.
         validated_data.setdefault("status", Tenant.Status.ACTIVE)
         tenant = Tenant.objects.create(**validated_data)
+        seed_tenant_default_permissions(tenant.schema_name)
         if owners:
             tenant.owners.set(owners)
+            with schema_context(tenant.schema_name):
+                for owner in owners:
+                    ensure_tenant_admin(owner)
         if domain:
             Domain.objects.create(domain=domain, tenant=tenant, is_primary=True)
         return tenant

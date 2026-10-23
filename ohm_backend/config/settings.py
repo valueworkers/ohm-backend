@@ -127,7 +127,9 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.SessionAuthentication",
         "rest_framework.authentication.BasicAuthentication",
     ],
-    "DEFAULT_PERMISSION_CLASSES": ["rest_framework.permissions.IsAuthenticated"],
+    "DEFAULT_PERMISSION_CLASSES": [
+        "apps.accounts.permissions.DynamicModelPermissions",
+    ],
     "DEFAULT_THROTTLE_RATES": {
         "root_login": "20/minute",
         "otp_request": "5/hour",

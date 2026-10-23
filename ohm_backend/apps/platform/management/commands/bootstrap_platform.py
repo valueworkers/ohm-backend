@@ -5,6 +5,7 @@ from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from apps.accounts.models import User
+from apps.accounts.services import assign_all_permissions_to_superuser
 from apps.platform.models import Domain, PlatformAdmin, Tenant
 
 # python manage.py bootstrap_platform --email admin@ohm.com --password admin --full-name "OHM Admin" --phone "+919999999999" --title "Super Admin"
@@ -116,6 +117,8 @@ class Command(BaseCommand):
             if opts["title"] and profile.title != opts["title"]:
                 profile.title = opts["title"]
                 profile.save(update_fields=["title"])
+
+            assign_all_permissions_to_superuser(user)
 
         self.stdout.write(self.style.SUCCESS(
             f"Platform ready on: {', '.join(hosts)}\n"

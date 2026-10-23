@@ -39,16 +39,22 @@ class TenantHeaderMiddleware(TenantMainMiddleware):
 
         tenant_model = get_tenant_model()
         schema = schema_for_slug(tenant_slug)
+        # A schema name supplied through X-Tenant must never select the
+        # platform control plane. The public Tenant row exists for routing
+        # root requests, but it is not a provider workspace.
+        if schema == get_public_schema_name():
+            return JsonResponse({"error": "Tenant not found."}, status=404)
+
         try:
             tenant = tenant_model.objects.get(schema_name=schema)
         except tenant_model.DoesNotExist:
             return JsonResponse({"error": "Tenant not found."}, status=404)
-        print(f"tenant:{tenant}")
-        print(f"schema:{schema}")
-        print(f"All schemas: {list(tenant_model.objects.values_list("schema_name",flat=True))}")
-        
-        # if tenant.schema_name == get_public_schema_name():
-        #     return JsonResponse({"error": "Tenant not found."}, status=404)
+
+        # Keep this check even though `schema` is normalized above: the
+        # resolved Tenant record is the final authority for the selected
+        # schema.
+        if tenant.schema_name == get_public_schema_name():
+            return JsonResponse({"error": "Tenant not found."}, status=404)
 
         if tenant.status == "suspended":
             return JsonResponse(

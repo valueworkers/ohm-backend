@@ -1,17 +1,18 @@
 from django.db import connection, transaction
 from django.db.models import Q
+from django.db.models.deletion import ProtectedError
 from django.utils import timezone
 from rest_framework.decorators import action
 from rest_framework import mixins, status, viewsets
-from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.exceptions import AuthenticationFailed,ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from apps.accounts.models import Role, RoleAssignment, User
-from apps.accounts.permissions import IsTenantAdmin
+from apps.accounts.models import Permission, Role, RoleAssignment, User
+from apps.accounts.permissions import IsTenantAdmin, IsTenantSchema
 from apps.accounts.serializers import (
     CustomerRegisterSerializer,
     OTPPasswordResetSerializer,
@@ -20,6 +21,8 @@ from apps.accounts.serializers import (
     OwnerCreateSerializer,
     OwnerSerializer,
     UserSerializer,
+    RoleSerializer,
+    RoleAssignmentSerializer,
 )
 
 from .helpers import consume_otp, find_user, has_password, issue_otp
@@ -48,7 +51,6 @@ class UnifiedLoginView(APIView):
 
         # --- Verify credentials (password or OTP) ---
         if data["method"] == "password":
-            print(f"has_password:{has_password(user)}")
             if not has_password(user):
                 if user.is_active:
                     return Response(
@@ -77,10 +79,12 @@ class UnifiedLoginView(APIView):
         user.save(update_fields=["last_login"])
 
         refresh = RefreshToken.for_user(user)
-        refresh["schema"] = connection.schema_name
+        schema_name = connection.schema_name
+        refresh["schema"] = schema_name
         return Response(
             {
                 "message": "Login successful!",
+                "schema_name": schema_name,
                 "user": UserSerializer(user).data,
                 "tokens": {"refresh": str(refresh), "access": str(refresh.access_token)},
             },
@@ -108,7 +112,6 @@ class OwnerViewSet(viewsets.ModelViewSet):
     /owners/me/         GET, PATCH own profile
     """
 
-    permission_classes = []
     http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
 
     def owners_qs(self):
@@ -142,7 +145,7 @@ class OwnerViewSet(viewsets.ModelViewSet):
         owner = self.get_object()
         if owner.pk == request.user.pk:
             return Response({"detail": "You cannot remove yourself."}, status=400)
-        if not owners_qs().filter(is_active=True).exclude(pk=owner.pk).exists():
+        if not self.owners_qs().filter(is_active=True).exclude(pk=owner.pk).exists():
             return Response({"detail": "Cannot remove the last owner."}, status=400)
         owner.is_active = False
         owner.save(update_fields=["is_active"])
@@ -196,7 +199,7 @@ class TenantRegistrationCreateView(APIView):
     """Let a provider's customers create login accounts in that provider's schema."""
 
     authentication_classes = []
-    permission_classes = [AllowAny]
+    permission_classes = [AllowAny, IsTenantSchema]
     # throttle_classes = [ScopedRateThrottle]
     # throttle_scope = "tenant_registration_create"
 
@@ -225,7 +228,6 @@ class UserViewSet(
     """Let a provider's Tenant Admin manage accounts stored in that provider's schema."""
 
     serializer_class = UserSerializer
-    permission_classes = [IsTenantAdmin]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
@@ -243,3 +245,67 @@ class UserViewSet(
             queryset = queryset.filter(Q(email__icontains=search) | Q(full_name__icontains=search))
 
         return queryset.distinct()
+
+
+class RoleViewSet(viewsets.ModelViewSet):
+    """Tenant Admin CRUD for workspace roles; core roles remain protected."""
+
+    serializer_class = RoleSerializer
+    queryset = Role.objects.prefetch_related("permissions").order_by("rank", "name")
+    http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
+
+    @action(detail=False, methods=["get"])
+    def permissions(self, request):
+        permissions = Permission.objects.order_by("code")
+        return Response([
+            {"id": permission.id, "code": permission.code, "name": permission.name,
+             "description": permission.description}
+            for permission in permissions
+        ])
+
+    def destroy(self, request, *args, **kwargs):
+        role = self.get_object()
+        if role.code in {Role.Code.TENANT_ADMIN, Role.Code.CUSTOMER}:
+            raise ValidationError({"code": "Built-in roles cannot be deleted."})
+        try:
+            return super().destroy(request, *args, **kwargs)
+        except ProtectedError:
+            return Response(
+                {"detail": "This role is assigned to users. Remove its assignments before deleting it."},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+
+class RoleAssignmentViewSet(
+    mixins.ListModelMixin,
+    mixins.CreateModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    """Tenant Admin role grants, optionally scoped to an object in this tenant."""
+
+    serializer_class = RoleAssignmentSerializer
+    queryset = RoleAssignment.objects.select_related("user", "role", "scope_type").order_by("id")
+    http_method_names = ["get", "post", "delete", "head", "options"]
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user_id = self.request.query_params.get("user_id")
+        role_id = self.request.query_params.get("role_id")
+        if user_id:
+            queryset = queryset.filter(user_id=user_id)
+        if role_id:
+            queryset = queryset.filter(role_id=role_id)
+        return queryset
+
+    def perform_destroy(self, instance):
+        if (instance.scope_type_id is None and instance.role.code == Role.Code.TENANT_ADMIN
+                and instance.user.is_active):
+            another_admin = User.objects.filter(
+                is_active=True,
+                role_assignments__role__code=Role.Code.TENANT_ADMIN,
+                role_assignments__scope_type__isnull=True,
+            ).exclude(pk=instance.user_id).exists()
+            if not another_admin:
+                raise ValidationError({"detail": "A workspace must keep at least one active Tenant Admin."})
+        instance.delete()

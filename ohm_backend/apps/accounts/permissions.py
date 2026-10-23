@@ -1,40 +1,40 @@
-from django.contrib.contenttypes.models import ContentType
-from django.db.models import Q
-from rest_framework.permissions import BasePermission
-
-from .models import RoleAssignment
+from django.db import connection
+from django_tenants.utils import get_public_schema_name
+from rest_framework.permissions import BasePermission, DjangoModelPermissions
 
 
-def has_role(user, *, codes=None, min_rank=None, scope=None):
-    """True if user holds a matching role. Tenant-wide assignments satisfy any scope;
-    scoped assignments only satisfy their own object."""
-    if not (user and user.is_authenticated):
-        return False
-    qs = RoleAssignment.objects.filter(user=user)
-    if codes:
-        qs = qs.filter(role__code__in=codes)
-    if min_rank is not None:
-        qs = qs.filter(role__rank__gte=min_rank)
-    if scope is not None:
-        ct = ContentType.objects.get_for_model(scope)
-        qs = qs.filter(Q(scope_type__isnull=True) | Q(scope_type=ct, scope_id=scope.pk))
-    return qs.exists()
+class IsTenantAdmin(BasePermission):
+    """Require membership in the built-in Tenant Admin group."""
+
+    def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        return request.user.groups.filter(name="TENANT_ADMIN").exists()
 
 
-def RequireRole(*codes):
-    class _RequireRole(BasePermission):
-        def has_permission(self, request, view):
-            return has_role(request.user, codes=codes)
+class DynamicModelPermissions(DjangoModelPermissions):
+    """Apply the Django model permission matching the HTTP method and view model.
 
-    return _RequireRole
+    Permissions are resolved at request time, so permissions created by Django
+    migrations and assigned through Groups take effect without code changes.
+    Safe methods require ``view_<model>``; writes require their matching
+    ``add/change/delete_<model>`` permission.
+    """
 
+    perms_map = {
+        "GET": ["%(app_label)s.view_%(model_name)s"],
+        "OPTIONS": [],
+        "HEAD": ["%(app_label)s.view_%(model_name)s"],
+        "POST": ["%(app_label)s.add_%(model_name)s"],
+        "PUT": ["%(app_label)s.change_%(model_name)s"],
+        "PATCH": ["%(app_label)s.change_%(model_name)s"],
+        "DELETE": ["%(app_label)s.delete_%(model_name)s"],
+    }
 
-def MinRank(rank):
-    class _MinRank(BasePermission):
-        def has_permission(self, request, view):
-            return has_role(request.user, min_rank=rank)
+class IsTenantSchema(BasePermission):
+    """Allow an endpoint only when the request is routed to a provider schema."""
 
-    return _MinRank
+    message = "This endpoint is only available inside a tenant workspace."
 
-
-IsTenantAdmin = RequireRole("TENANT_ADMIN")
+    def has_permission(self, request, view):
+        return connection.schema_name != get_public_schema_name()

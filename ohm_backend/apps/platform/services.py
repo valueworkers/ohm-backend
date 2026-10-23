@@ -5,7 +5,8 @@ from django.dispatch import Signal
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
 from apps.platform.tasks import send_tenant_welcome_email_task
-from apps.accounts.models import Role, RoleAssignment, User
+from apps.accounts.models import User
+from apps.accounts.services import assign_public_tenant_owner_role, ensure_tenant_admin
 from .models import Domain, Subscription, Tenant, TenantProvisioning
 from .serializers import base_domain
 from .utils import base_domain, schema_for_slug
@@ -41,27 +42,19 @@ def _claim(request_id):
 def _assign_owner_role(tenant, applicant):
     """Idempotent: mirror the applicant into the tenant schema and give them TENANT_ADMIN."""
     with schema_context(tenant.schema_name):
-        role, _ = Role.objects.get_or_create(
-            code=Role.Code.TENANT_ADMIN,
-            defaults={"name": "Tenant Admin", "rank": 100},
-        )
-        user, created = User.objects.get_or_create(
-            email=applicant.email,
-            defaults={
-                "full_name": applicant.full_name,
-                "phone": applicant.phone,
-                "is_active": True,
-            },
-        )
-        if created:
-            user.set_unusable_password()
-            user.save(update_fields=["password"])
-        RoleAssignment.objects.get_or_create(
-            user=user,
-            role=role,
-            scope_type=None,
-            scope_id=None,  # tenant-wide
-        )
+        ensure_tenant_admin(applicant)
+
+
+def _assign_roles_to_tenant_owners(tenant):
+    """Mirror every public-schema tenant owner and grant TENANT_ADMIN in the tenant schema."""
+    with schema_context(get_public_schema_name()):
+        owners = list(tenant.owners.all())
+        for owner in owners:
+            assign_public_tenant_owner_role(tenant, owner)
+
+    with schema_context(tenant.schema_name):
+        for owner in owners:
+            ensure_tenant_admin(owner)
 
 def _get_or_create_tenant(p):
     """Returns (tenant, created). Creating the Tenant also creates and migrates its schema."""
@@ -143,6 +136,7 @@ def provision_tenant(provisioning):
             with transaction.atomic():
                 _create_domains_and_subscription(p, tenant)
             tenant_provisioned.send(sender=TenantProvisioning, provisioning=p, tenant=tenant)
+            _assign_roles_to_tenant_owners(tenant)
             with transaction.atomic():
                 User.objects.filter(
                     pk=p.applicant_id, is_active=False

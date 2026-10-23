@@ -1,57 +1,261 @@
-# OHM multi-tenant architecture
+# OHM Multi-Tenant Architecture & Technical Design
 
-OHM is the platform for healthcare service providers such as Vaishnavi Medicare and Sai Clinic. Each provider gets an isolated tenant schema. OHM manages provider workspaces; each provider manages the people and operations inside its own workspace.
+OHM is a multi-tenant aggregator platform for healthcare service providers (hospitals, clinics, multi-specialty centers). Each healthcare provider operates in an isolated PostgreSQL database schema managed through **django-tenants**, while the platform control plane resides in the `public` schema.
 
-## Ownership boundary
+---
 
-| Area | Owner | Data location |
-| --- | --- | --- |
-| Provider workspace, status, enabled modules, verified domains, subscriptions, features, platform admin profiles, provisioning requests | OHM root users | `public` schema (`Tenant`, `Domain`, `Subscription`, `Feature`, `PlatformAdmin`, `TenantProvisioning`) |
-| Root accounts and platform administration | OHM | `public` schema (`accounts.User`, `PlatformAdmin`) |
-| Provider admin, employee accounts, customer accounts | Provider | That provider's tenant schema |
-| Booking, invoices, payments, and other service records | Provider | That provider's tenant schema, when those modules are added |
+## 1. Core Architectural Principles
 
-`Tenant` is OHM's platform record for one service provider. The `schema_name` on that row identifies the provider's isolated database schema. It is metadata about the provider, not a shared container for the provider's operational records.
+1. **Strict Data Isolation (Healthcare Compliance)**: Operational healthcare records, patient identities, appointments, and financial records never mix across providers. Every provider workspace is allocated its own database schema.
+2. **Unified API Gateway**: React frontends communicate with a single API hostname (`api.ohm.com`). Schema switching is determined dynamically via the `X-Tenant` header or direct verified domain lookup.
+3. **Single Identity, Contextual Access**: The `accounts.User` model exists across schemas. A user's JWT token contains an explicit `schema` claim, binding authorization tokens strictly to the schema in which they were issued.
+4. **Dual-Layer RBAC Engine**: Combines Django's standard `auth.Permission` and `auth.Group` with product-level `accounts.Role`, `accounts.Permission`, and object-scoped `accounts.RoleAssignment`.
+5. **Non-blocking Asynchronous Operations**: Heavy workloads (schema migrations, tenant provisioning, custom domain DNS verification) are offloaded to **Celery** workers backed by **Redis**.
 
-## Request routing
+---
 
-React sends requests to the single API host and identifies the selected workspace with `X-Tenant`:
+## 2. Ownership Boundary & Data Partitioning
 
-```text
-React (ohm.com or a tenant subdomain)
-                 │
-                 ▼
-             api.ohm.com
-                 │
-        X-Tenant: vaishnavi-medicare
-                 │
-                 ▼
-      tenant lookup and schema switch
-                 │
-         Django REST Framework
-                 │
-          django-tenants
-       ┌─────────┼─────────┐
-       ▼         ▼         ▼
-     public   tenant 1   tenant 2
+```
+                     ┌──────────────────────────────────────────────┐
+                     │            PostgreSQL Database               │
+                     └──────────────────────┬───────────────────────┘
+                                            │
+                    ┌───────────────────────┴───────────────────────┐
+                    ▼                                               ▼
+         ┌─────────────────────┐                         ┌─────────────────────┐
+         │    Public Schema    │                         │   Tenant Schemas    │
+         │   (Control Plane)   │                         │(Provider Workspaces)│
+         └──────────┬──────────┘                         └──────────┬──────────┘
+                    │                                               │
+   • Platform Admins & Staff Users                 • Provider Admins & Employees
+   • Tenant Metadata (name, slug, status)          • Customer / Patient Accounts
+   • Custom Domains & Verification Tokens          • Workspace Roles & Assignments
+   • Subscriptions, Plans & Features               • Operational Records (Bookings,
+   • Onboarding Requests & Approvals                 Analysis, Payroll, Wallets)
 ```
 
-On `api.ohm.com`, a request without `X-Tenant` stays in the `public` schema. A request with the header resolves the
-slug to a provisioned tenant, requires an active workspace with a verified domain, then switches the database
-connection to that tenant's schema before URL resolution. Tenant JWTs carry the schema name, and authentication
-rejects a token used with a different `X-Tenant` value. Direct verified tenant domains continue to resolve by host.
-Only authenticated root superusers can manage tenants through `/api/platform/tenants/`.
+### Detailed Boundary Mapping
 
-The public platform tenant is infrastructure for OHM itself. It is excluded from tenant CRUD and must never be provisioned, suspended, or deleted as a provider workspace. `bootstrap_platform` registers `OHM_API_HOST` as a public-schema domain.
+| Entity Area | Managing Persona | Database Schema | Model References |
+| :--- | :--- | :--- | :--- |
+| **Platform Infrastructure** | OHM Super Admins | `public` | `platform.Tenant`, `platform.Domain` |
+| **Subscriptions & Plans** | OHM Super Admins | `public` | `platform.Plan`, `platform.Subscription`, `platform.Feature` |
+| **Platform Staff & Profiles**| OHM Super Admins | `public` | `accounts.User` (`is_staff`/`is_superuser`), `platform.PlatformAdmin` |
+| **Provider Onboarding** | Platform Admin & Applicant | `public` | `platform.TenantProvisioning` |
+| **Workspace Identity & Staff** | Tenant Admin | Tenant Schema | `accounts.User`, `accounts.EmployeeProfile` |
+| **Workspace RBAC & Permissions** | Tenant Admin | Tenant Schema | `accounts.Role`, `accounts.Permission`, `accounts.RoleAssignment` |
+| **Operational Records** | Healthcare Provider | Tenant Schema | Future modules: `booking`, `analysis`, `payroll`, `venue_manager`, `wallet`, `faq` |
 
-## Provisioning a provider
+> [!IMPORTANT]
+> The `public` schema's `Tenant` record is infrastructure for the OHM control plane. It is strictly excluded from provider tenant CRUD operations and must never be deleted, suspended, or used as a healthcare provider workspace.
 
-Applicants submit and update onboarding requests in the public schema. A private request token authorizes the applicant to read or edit their request while it is submitted or waiting for more information. The initial admin password is stored only as a Django password hash and cleared after successful provisioning or rejection.
+---
 
-An OHM root admin reviews the request, can ask for more information, and selects which requested modules are approved by patching the same request resource applicants use. Creating a tenant from an approved request provisions the provider schema, registers domains, seeds tenant roles, and creates the first Tenant Admin. The management command `provision_tenant <request-uuid>` invokes that same approved-request flow; it cannot provision a pending request. Root users are created separately through Django admin or `bootstrap_platform`.
+## 3. Dynamic Request Routing & Schema Switching
 
-## Adding provider features later
+### Ingress Lifecycle Flow
 
-Keep tenant-owned features in their own Django apps, such as `employees`, `customers`, `booking`, `invoices`, and `payments`. Add those apps to `TENANT_APPS` only, mount their endpoints in the tenant URL configuration, and enforce tenant roles and module access there. Do not put provider operational records in the public schema or in the platform's `Tenant` model. Django-tenants currently migrates every configured tenant app into each provider schema; approved modules are feature-access settings, not a per-tenant migration selection mechanism.
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Frontend Client (React)
+    participant Edge as API Host (api.ohm.com)
+    participant MW as TenantHeaderMiddleware
+    participant DB as PostgreSQL (django-tenants)
+    participant DRF as Django REST Framework View
 
-The shared `accounts.User` model authenticates both platform and tenant logins; it is installed in public and tenant schemas. Public platform administrators have a `PlatformAdmin` profile. Tenant `accounts` also contains `Role`, `Permission`, and `EmployeeProfile`. The existing `accounts.User` represents a login identity. A future customer domain model should represent the provider's customer record and can be linked to a login account when needed; the two concepts should not be conflated.
+    Client->>Edge: Request with Header (X-Tenant: city-hospital)
+    Edge->>MW: Process HTTP Request
+    alt X-Tenant header is absent
+        MW->>DB: Set search_path = public
+        MW->>DRF: Dispatch to Public Views (/api/platform/*)
+    else X-Tenant header is present
+        MW->>DB: Query Tenant where schema_name / slug = header
+        alt Tenant inactive or unverified
+            MW-->>Client: 404 Not Found (Invalid Tenant Workspace)
+        else Tenant active and valid
+            MW->>DB: Set search_path = tenant_schema, public
+            MW->>DRF: Dispatch to Tenant Views (/api/*)
+        end
+    end
+    DRF-->>Client: HTTP JSON Response
+```
+
+### Routing Rules
+- **Public Traffic**: Requests without `X-Tenant` stay in the `public` schema. This is used for platform administration, public plan catalog inspection, onboarding request submissions, and platform staff login.
+- **Tenant Workspace Traffic**: Requests with `X-Tenant: <tenant-slug>` resolve the tenant in the database, verify that the workspace is active, and switch the PostgreSQL connection's search path to that tenant's schema before URL resolution.
+- **Direct Domain Traffic**: When a request arrives at a verified custom domain (e.g., `app.cityhospital.com`), `VerifiedDomainTenantMiddleware` extracts the host, matches it against verified `Domain` rows, and automatically routes to the appropriate schema.
+
+---
+
+## 4. Authentication & Token Architecture
+
+OHM implements a unified authentication engine via `UnifiedLoginView`:
+
+```
+                POST /api/auth/login/
+            ┌─────────────┴─────────────┐
+     Password Login                  OTP Login
+            │                             │
+    Verify Hash (Argon2/PBKDF2)     Verify OTP against Redis (5-min TTL)
+            └─────────────┬─────────────┘
+                          ▼
+            Check user.is_active Status
+                          ▼
+          Generate SimpleJWT Refresh & Access Tokens
+               refresh["schema"] = current_schema
+                          ▼
+        Return User Profile, Tokens & Schema Name
+```
+
+### Security Guarantees
+1. **Schema Binding**: The issuing schema's name is embedded directly into the JWT payload (`refresh["schema"] = connection.schema_name`).
+2. **Boundary Enforcement**: In `TenantJWTAuthentication`, every authenticated request checks:
+   ```python
+   token_schema = token.get("schema")
+   if token_schema != connection.schema_name:
+       raise AuthenticationFailed("Token is not valid for this tenant workspace.")
+   ```
+   A token obtained from the public schema or a different tenant is rejected immediately.
+3. **Blacklisting & Invalidation**: Logout requests (`POST /api/auth/logout/`) register the refresh token with the SimpleJWT token blacklist.
+4. **OTP Security**: One-Time Passwords are 6-digit numeric codes cached in Redis with a 5-minute time-to-live (TTL). They are bound to specific purposes (`login` or `password_reset`), rate-limited, and deleted upon first verification (single-use).
+
+---
+
+## 5. Dual-Layer RBAC & Permission Architecture
+
+The authorization layer bridges Django standard permissions and tenant product permissions:
+
+```mermaid
+flowchart TD
+    subgraph Django Auth Layer
+        AP[Django auth.Permission] --> AG[Django auth.Group]
+        AG --> U[accounts.User]
+    end
+
+    subgraph Product RBAC Layer
+        ACP[accounts.Permission] --> R[accounts.Role]
+        R --> RA[accounts.RoleAssignment]
+        RA --> U
+        CT[ContentType + Scope ID] -.->|Optional Object Scope| RA
+    end
+
+    AP -.->|Synchronized to| ACP
+```
+
+### 1. Group Rules & Default Permissions Matrix
+When a schema is created or synced, `seed_roles_and_groups_for_schema` automatically builds `auth.Group` and `accounts.Role` instances based on `GROUP_RULES`:
+
+```python
+GROUP_RULES = {
+    # Public Platform Super Admin: unrestricted access
+    Role.Code.SUPER_ADMIN: "__all__",
+
+    # Tenant Admin: unrestricted access across all tenant product modules
+    Role.Code.TENANT_ADMIN: {
+        "apps": ["accounts", "venue_manager", "booking", "payroll", "notification", "analysis", "wallet", "faq"],
+        "actions": "__all__",
+    },
+
+    # Ops Manager: view, change, add across all operational modules
+    Role.Code.OPS_MANAGER: {
+        "apps": ["accounts", "venue_manager", "booking", "payroll", "notification", "analysis", "wallet", "faq"],
+        "actions": ["view", "change", "add"],
+    },
+
+    # Specific Admins & Staff: scoped module actions
+    Role.Code.VENUE_ADMIN:    {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view", "change", "add"]},
+    Role.Code.SERVICE_ADMIN:  {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view", "change", "add"]},
+    Role.Code.RESOURCE_ADMIN: {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view", "change", "add"]},
+    Role.Code.STAFF:          {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view"]},
+
+    # Customer: view & add on end-user features
+    Role.Code.CUSTOMER:       {"apps": ["booking", "wallet", "accounts"], "actions": ["view", "add"]},
+}
+```
+
+### 2. Tenant-Wide vs. Object-Scoped Permissions
+- **Tenant-Wide**: `RoleAssignment.scope_type = None` and `scope_id = None`. The user holds the role across the entire workspace.
+- **Object-Scoped**: `RoleAssignment` connects to a specific Django `ContentType` and model instance ID (e.g. `booking.Venue` ID 4). This allows fine-grained permissions such as assigning a user as `VENUE_ADMIN` for a specific physical branch.
+
+### 3. Protection Invariants
+- Built-in roles (`TENANT_ADMIN`, `CUSTOMER`) cannot have their codes or ranks modified, and cannot be deleted.
+- Custom roles cannot be assigned ranks $\ge 100$ (reserved for administrators).
+- A workspace cannot deactivate or revoke its last active `TENANT_ADMIN`.
+- Deleting a role that has active assignments returns HTTP 409 Conflict.
+
+---
+
+## 6. Onboarding & Asynchronous Provisioning Pipeline
+
+```mermaid
+flowchart TD
+    A[Healthcare Provider Submits Onboarding Request] -->|POST /api/platform/onboarding/requests/| B[Public Request in 'submitted' State]
+    B -->|X-Onboarding-Token| C[Applicant Can View/Edit Application]
+    B --> D[OHM Platform Admin Reviews Application]
+    D -->|POST .../reject/| E[Rejected with Review Notes]
+    D -->|POST .../approve/| F[Status Marked 'approved']
+    F --> G[Celery Task: provision_tenant_task]
+    
+    subgraph Celery Provisioning Worker
+        G --> H[Create Tenant & PostgreSQL Schema]
+        H --> I[Execute Tenant Schema Migrations]
+        I --> J[Register Default & Custom Domains]
+        J --> K[Seed Default Roles, Groups & Permissions]
+        K --> L[Mirror Applicant & Co-owners as TENANT_ADMIN]
+    end
+    
+    L --> M[Tenant Status: 'provisioning']
+    M --> N[Tenant Owner Completes Profile via /api/platform/my/tenants/]
+    N -->|POST .../activate/| O[Tenant Status: 'active' - Workspace Live]
+```
+
+---
+
+## 7. Custom Domain Verification & SSL Management
+
+```
+                                 DNS Settings
+                         ┌──────────────────────────┐
+                         │ CNAME -> edge.ohm.com    │
+                         │ TXT   -> _ohm-verify=... │
+                         └────────────┬─────────────┘
+                                      │
+                                      ▼
+                        Celery Beat Scheduled Task
+                        verify_pending_domains (5m)
+                                      │
+                         ┌────────────┴────────────┐
+                         ▼                         ▼
+                  TXT / CNAME Valid        Verification Failed
+                         │                         │
+                         ▼                         ▼
+                Domain.verified = True       Remains Pending
+                         │
+                         ▼
+             Caddy SSL Reverse Proxy
+           Calls /internal/domain-check/
+        Issues Let's Encrypt Certificate
+```
+
+1. **DNS Verification**: Celery beat queries public DNS for the expected TXT token prefix and CNAME pointer.
+2. **Certificate Issuance**: When HTTPS requests hit Caddy, Caddy initiates an internal HTTP check to `/internal/domain-check/?domain=<host>`. The backend validates the domain's existence and verification status before Caddy issues the TLS certificate on-demand.
+
+---
+
+## 8. Extending OHM with Future Product Modules
+
+When building new operational features (e.g., `booking`, `payroll`, `analysis`):
+
+1. **Schema Strategy**: All operational healthcare apps belong to `TENANT_APPS` in `config/settings.py`. They run within the tenant schema and use tenant-scoped database tables.
+2. **Cross-Tenant Safety**: Never query across schemas directly. Celery tasks that operate on tenant data must subclass `TenantTask` and receive `schema_name` in keyword arguments:
+   ```python
+   from django_tenants.tasks import TenantTask
+
+   @shared_task(base=TenantTask)
+   def generate_payroll_report(schema_name, pay_period_id):
+       # Automatically executes inside the specified tenant schema context
+       ...
+   ```
+3. **Module Feature Flags**: Tenants have an `enabled_modules` list (`Tenant.modules`). Platform admins grant access via `PATCH /api/platform/tenants/{id}/permissions/`. Custom views can guard access using DRF permissions.
