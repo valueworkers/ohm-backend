@@ -40,4 +40,4 @@ jobs:
             -o IdentitiesOnly=yes \
             -o StrictHostKeyChecking=yes \
             "$DO_USER@$DO_HOST" \
-            'sudo /usr/local/bin/deploy-ohm.sh'
+            'sudo /bin/bash /usr/local/bin/deploy-ohm.sh'
