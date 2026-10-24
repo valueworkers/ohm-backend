@@ -390,7 +390,7 @@ class RoleSerializer(serializers.ModelSerializer):
     def get_permission_details(self, role):
         return [
             {"id": permission.id, "code": permission.codename, "name": permission.name}
-            for permission in role.permissions.order_by("code")
+            for permission in role.permissions.order_by("codename")
         ]
 
     def validate_code(self, value):
