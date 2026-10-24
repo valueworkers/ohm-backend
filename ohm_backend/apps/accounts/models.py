@@ -119,10 +119,6 @@ class User(AbstractBaseUser, PermissionsMixin):
         return " ".join(p for p in (self.first_name, self.middle_name, self.last_name) if p)
 
     @property
-    def full_name(self):  # keeps old `user.full_name` callers working (read-only)
-        return self.get_full_name()
-
-    @property
     def primary_role(self):
         """Highest-ranked tenant-wide role name (None for platform users such as the Super Admin)."""
         best = None

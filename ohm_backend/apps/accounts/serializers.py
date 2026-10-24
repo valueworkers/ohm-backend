@@ -100,7 +100,7 @@ class MedicareUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = (
-            "id", "email", "profile_pic", "first_name", "middle_name", "last_name",
+            "id", "email", "profile_pic", "first_name", "middle_name", "last_name","primary_role",
             "mobile_number", "alternate_phone_number", "emergency_contact_name", "emergency_contact_number",
             "age", "gender", "permanent_address", "current_address", "city", "is_active", "is_deleted",
             "created_by", "date_joined", "password", "confirm_password", "employee_profile",
