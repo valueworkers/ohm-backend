@@ -169,7 +169,7 @@ class Command(BaseCommand):
         hosts = [h.strip().lower() for h in [*DEFAULT_HOSTS, *configured] if h]
         return list(dict.fromkeys(hosts))  # de-dupe, keep order
 
-    def _seed_roles(self, scope):
+    def seed_roles(self, scope):
         """Create/sync Groups + Roles for the current schema ('public' or 'tenant' scope)."""
         for spec in ROLE_SPECS:
             rules = spec["scopes"].get(scope)
@@ -248,7 +248,7 @@ class Command(BaseCommand):
 
             # 2. Groups & roles (public scope)
             self.stdout.write("Seeding groups & roles (public)...")
-            self._seed_roles("public")
+            self.seed_roles("public")
 
             # 3. Default Trial plan
             self.stdout.write("Seeding plans...")
@@ -297,7 +297,7 @@ class Command(BaseCommand):
         for schema in dict.fromkeys(extra_schemas):
             self.stdout.write(f"Seeding groups & roles ({schema})...")
             with schema_context(schema):
-                self._seed_roles("tenant")
+                self.seed_roles("tenant")
 
         self.stdout.write(self.style.SUCCESS(
             f"Platform ready on: {', '.join(hosts)}\n"

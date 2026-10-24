@@ -13,6 +13,7 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
+from django_tenants.signals import post_schema_sync
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from apps.accounts.models import User
@@ -21,6 +22,15 @@ from apps.platform.models import PlatformAdmin, Tenant
 from apps.platform.services import tenant_provisioned
 
 logger = logging.getLogger(__name__)
+
+
+@receiver(post_schema_sync)
+def bootstrap_new_tenant_schema(sender, tenant, **kwargs):
+    """Set up a tenant schema using the bootstrap command's canonical roles."""
+    schema_name = tenant.get("schema_name") if isinstance(tenant, dict) else getattr(tenant, "schema_name", None)
+    if schema_name and schema_name != get_public_schema_name():
+        with schema_context(schema_name):
+            AccountsService.bootstrap_roles_for_schema("tenant")
 
 
 def _get_or_create_public_user(email):

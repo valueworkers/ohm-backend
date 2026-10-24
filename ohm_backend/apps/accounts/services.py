@@ -24,6 +24,13 @@ class AccountsService:
         return ROLE_GROUP_NAMES.get(role_code, role_code)
 
     @classmethod
+    def bootstrap_roles_for_schema(cls, scope):
+        """Run the bootstrap command's canonical role/group setup for a schema."""
+        from apps.platform.management.commands.bootstrap_platform import Command
+
+        Command().seed_roles(scope)
+
+    @classmethod
     def assign_all_permissions_to_superuser(cls, user):
         """Assign the bootstrapped Super User group and role in the public schema."""
         public_schema = get_public_schema_name()
