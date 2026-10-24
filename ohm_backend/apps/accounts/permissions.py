@@ -1,6 +1,7 @@
 from django.db import connection
 from django_tenants.utils import get_public_schema_name
 from rest_framework.permissions import BasePermission, DjangoModelPermissions
+from .models import Role
 
 
 class IsTenantAdmin(BasePermission):
@@ -9,7 +10,14 @@ class IsTenantAdmin(BasePermission):
     def has_permission(self, request, view):
         if not (request.user and request.user.is_authenticated):
             return False
-        return request.user.groups.filter(name="TENANT_ADMIN").exists()
+        return (
+            request.user.groups.filter(name="TENANT_ADMIN").exists()
+            or request.user.role_assignments.filter(
+                role__code=Role.Code.TENANT_ADMIN,
+                scope_type__isnull=True,
+                scope_id__isnull=True,
+            ).exists()
+        )
 
 
 class DynamicModelPermissions(DjangoModelPermissions):

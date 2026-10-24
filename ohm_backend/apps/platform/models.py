@@ -156,8 +156,7 @@ class TenantProvisioning(models.Model):
     ])
     
     co_owner_emails = models.JSONField(
-        default=list, blank=True, null=True,
-        help_text="Up to 3 co-owner emails; only used when needs_co_owners."
+        default=list, blank=True, null=True
     )
 
     # --- Workflow fields (not on the form, needed for the lobby/approval flow) ---

@@ -7,11 +7,15 @@ from rest_framework import serializers
 
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
+from django.contrib.auth.models import Permission
 
-from .models import User, Role, RoleAssignment, Permission
-from .services import assign_tenant_admin_permissions, set_role
+from .models import (
+    EmployeeProfile, Role, RoleAssignment, ShiftSchedule, StaffForHire,
+    User, UserDocument, UserDocumentFile
+)
+from .services import AccountsService
 
-ROLE_CHOICES = [("TENANT_ADMIN", "Tenant Admin"), ("CUSTOMER", "Customer / User")]
+
 
 
 def _check_password(value):
@@ -35,14 +39,187 @@ def _check_email(value, instance=None):
 class CustomerRegisterSerializer(serializers.Serializer):
     email = serializers.EmailField()
     password = serializers.CharField(write_only=True, trim_whitespace=False)
-    full_name = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
-    phone = serializers.CharField(max_length=20, required=False, allow_blank=True, default="")
+    first_name = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
+    middle_name = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
+    last_name = serializers.CharField(max_length=30, required=False, allow_blank=True, default="")
+    mobile_number = serializers.CharField(max_length=10, required=False, allow_blank=True, allow_null=True, default=None)
 
     def validate_email(self, value):
         return _check_email(value)
 
     def validate_password(self, value):
         return _check_password(value)
+
+
+class EmployeeProfileSerializer(serializers.ModelSerializer):
+    shift_detail = serializers.StringRelatedField(source="shift", read_only=True)
+
+    class Meta:
+        model = EmployeeProfile
+        exclude = ("user",)
+        extra_kwargs = {"shift": {"write_only": True, "required": False}}
+
+    def validate(self, attrs):
+        get = lambda name, default=None: attrs.get(name, getattr(self.instance, name, default))
+        category = get("category")
+        if category != EmployeeProfile.EmployeeCategory.VENDOR and (get("vendor_name") or get("vendor_phone")):
+            raise serializers.ValidationError({"vendor_name": "Vendor details apply only to the VENDOR category."})
+        if get("pf_applicable", False) and not (get("pf_number") or get("uan_number")):
+            raise serializers.ValidationError({"pf_number": "PF number or UAN is required when PF is applicable."})
+        if get("esi_applicable", False) and not get("esi_number"):
+            raise serializers.ValidationError({"esi_number": "ESI number is required when ESI is applicable."})
+        return attrs
+
+
+class ShiftScheduleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ShiftSchedule
+        fields = "__all__"
+
+    def validate_weekly_off_days(self, days):
+        if not isinstance(days, list) or any(not isinstance(day, int) or day < 0 or day > 6 for day in days):
+            raise serializers.ValidationError("Use a list of weekday values from 0 to 6.")
+        if len(set(days)) != len(days):
+            raise serializers.ValidationError("Duplicate weekday values are not allowed.")
+        return days
+
+    def validate(self, attrs):
+        start = attrs.get("start_time", getattr(self.instance, "start_time", None))
+        end = attrs.get("end_time", getattr(self.instance, "end_time", None))
+        overnight = attrs.get("is_overnight", getattr(self.instance, "is_overnight", False))
+        if start is not None and end is not None and not overnight and end <= start:
+            raise serializers.ValidationError({"end_time": "End time must be after start time, or mark the shift as overnight."})
+        return attrs
+
+
+class MedicareUserSerializer(serializers.ModelSerializer):
+    password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
+    confirm_password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
+    employee_profile = EmployeeProfileSerializer(read_only=True)
+
+    class Meta:
+        model = User
+        fields = (
+            "id", "email", "profile_pic", "first_name", "middle_name", "last_name",
+            "mobile_number", "alternate_phone_number", "emergency_contact_name", "emergency_contact_number",
+            "age", "gender", "permanent_address", "current_address", "city", "is_active", "is_deleted",
+            "created_by", "date_joined", "password", "confirm_password", "employee_profile",
+        )
+        read_only_fields = ("id", "created_by", "date_joined", "is_deleted")
+
+    def validate(self, attrs):
+        password = attrs.pop("password", None)
+        confirm = attrs.pop("confirm_password", None)
+        if self.instance is None and not password:
+            raise serializers.ValidationError({"password": "This field is required."})
+        if password:
+            if password != confirm:
+                raise serializers.ValidationError({"confirm_password": "Passwords do not match."})
+            password = _check_password(password)
+            attrs["_password"] = password
+        return attrs
+
+    def create(self, validated_data):
+        password = validated_data.pop("_password", None)
+        request = self.context.get("request")
+        if request and request.user.is_authenticated and (request.user.is_owner or request.user.is_manager):
+            validated_data["created_by"] = request.user
+        user = User(**validated_data)
+        user.set_password(password) if password else user.set_unusable_password()
+        user.save()
+        return user
+
+    def update(self, instance, validated_data):
+        password = validated_data.pop("_password", None)
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        if password:
+            instance.set_password(password)
+        instance.save()
+        return instance
+
+
+class MedicareEmployeeSerializer(MedicareUserSerializer):
+    employee_profile = EmployeeProfileSerializer(required=False)
+    role = serializers.ChoiceField(choices=[(code, code.replace("_", " ").title()) for code in (Role.Code.STAFF, Role.Code.OPS_MANAGER, Role.Code.VENUE_ADMIN, Role.Code.SERVICE_ADMIN, Role.Code.RESOURCE_ADMIN)], required=False, write_only=True)
+
+    class Meta(MedicareUserSerializer.Meta):
+        fields = MedicareUserSerializer.Meta.fields + ("role",)
+
+    def create(self, validated_data):
+        profile_data = validated_data.pop("employee_profile", {})
+        role_code = validated_data.pop("role", Role.Code.STAFF)
+        user = super().create(validated_data)
+        EmployeeProfile.objects.create(user=user, **profile_data)
+        role = Role.objects.filter(code=role_code).first()
+        if role:
+            RoleAssignment.objects.get_or_create(user=user, role=role)
+        return user
+
+    def update(self, instance, validated_data):
+        profile_data = validated_data.pop("employee_profile", None)
+        role_code = validated_data.pop("role", None)
+        user = super().update(instance, validated_data)
+        if profile_data is not None:
+            profile, _ = EmployeeProfile.objects.get_or_create(user=user)
+            for key, value in profile_data.items():
+                setattr(profile, key, value)
+            profile.full_clean()
+            profile.save()
+        if role_code:
+            AccountsService.set_role(user, role_code, assigned_by=self.context.get("request").user)
+        return user
+
+
+class CustomerListSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ("id", "profile_pic", "first_name", "middle_name", "last_name", "email", "mobile_number", "city", "is_active")
+
+
+class UserDocumentFileSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserDocumentFile
+        fields = "__all__"
+
+
+class UserDocumentSerializer(serializers.ModelSerializer):
+    files = UserDocumentFileSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = UserDocument
+        fields = "__all__"
+        read_only_fields = ("uploaded_by",)
+
+
+class StaffForHireSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = StaffForHire
+        fields = "__all__"
+        read_only_fields = ("created_by", "created_at", "updated_at")
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request:
+            validated_data["created_by"] = request.user
+        return super().create(validated_data)
+
+
+class BulkEmployeeUploadSerializer(serializers.Serializer):
+    file = serializers.FileField()
+
+    def validate_file(self, value):
+        if not value.name.lower().endswith((".xlsx", ".xlsm")):
+            raise serializers.ValidationError("Upload an .xlsx or .xlsm workbook.")
+        if value.size > 10 * 1024 * 1024:
+            raise serializers.ValidationError("File must be no larger than 10 MB.")
+        return value
+
+
+class EmployeeTerminationSerializer(serializers.Serializer):
+    termination_type = serializers.ChoiceField(choices=EmployeeProfile.TerminationType.choices)
+    reason = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    last_working_day = serializers.DateField(required=False)
 
 
 class UnifiedLoginSerializer(serializers.Serializer):
@@ -60,7 +237,7 @@ class UnifiedLoginSerializer(serializers.Serializer):
 
 class OTPRequestSerializer(serializers.Serializer):
     username = serializers.CharField(max_length=254)
-    purpose = serializers.ChoiceField(choices=("login", "password_reset"))
+    purpose = serializers.ChoiceField(choices=("login", "password_reset"), required=False, default="login")
 
 
 class OTPPasswordResetSerializer(serializers.Serializer):
@@ -77,7 +254,7 @@ class OwnerSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "email", "full_name", "phone", "is_active", "date_joined"]
+        fields = ["id", "email", "first_name", "middle_name", "last_name", "mobile_number", "is_active", "date_joined"]
         read_only_fields = ["id", "email", "is_active", "date_joined"]
 
 
@@ -86,7 +263,7 @@ class OwnerCreateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ["id", "email", "full_name", "phone"]
+        fields = ["id", "email", "first_name", "middle_name", "last_name", "mobile_number"]
         read_only_fields = ["id"]
 
     def validate_email(self, value):
@@ -100,7 +277,7 @@ class OwnerCreateSerializer(serializers.ModelSerializer):
         user = User(**validated_data, is_active=True)
         user.set_unusable_password()
         user.save()
-        assign_tenant_admin_permissions(user)
+        AccountsService.assign_tenant_admin_permissions(user)
 
         from django.db import connection
         from django_tenants.utils import get_public_schema_name, schema_context
@@ -111,12 +288,11 @@ class OwnerCreateSerializer(serializers.ModelSerializer):
         if current_schema != get_public_schema_name():
             public_user = _get_or_create_public_user(user.email)
             updated_fields = []
-            if user.full_name and public_user.full_name != user.full_name:
-                public_user.full_name = user.full_name
-                updated_fields.append("full_name")
-            if user.phone and public_user.phone != user.phone:
-                public_user.phone = user.phone
-                updated_fields.append("phone")
+            for field in ("first_name", "middle_name", "last_name", "mobile_number"):
+                value = getattr(user, field)
+                if value and getattr(public_user, field) != value:
+                    setattr(public_user, field, value)
+                    updated_fields.append(field)
             if not public_user.is_active:
                 public_user.is_active = True
                 updated_fields.append("is_active")
@@ -134,12 +310,13 @@ class OwnerCreateSerializer(serializers.ModelSerializer):
 class UserSerializer(serializers.ModelSerializer):
     """Tenant Admin's view of the workspace's users (Tenant Admins and Customers)."""
 
-    role = serializers.ChoiceField(choices=ROLE_CHOICES, source="primary_role", required=False)
+    role = serializers.ChoiceField(choices=Role.Code.choices, source="primary_role", required=False)
     password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
+    employee_profile = EmployeeProfileSerializer(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "email", "full_name", "phone", "is_active", "role", "password", "date_joined"]
+        fields = ["id", "email", "first_name", "middle_name", "last_name", "mobile_number", "is_active", "role", "password", "date_joined", "employee_profile"]
         read_only_fields = ["id", "date_joined"]
         extra_kwargs = {"email": {"validators": []}}
 
@@ -181,7 +358,7 @@ class UserSerializer(serializers.ModelSerializer):
         role = validated.pop("primary_role", "CUSTOMER")
         password = validated.pop("password")
         user = User.objects.create_user(password=password, **validated)
-        set_role(user, role, assigned_by=self.context["request"].user)
+        AccountsService.set_role(user, role, assigned_by=self.context["request"].user)
         return user
 
     @transaction.atomic
@@ -194,7 +371,7 @@ class UserSerializer(serializers.ModelSerializer):
             setattr(instance, key, value)
         instance.save()
         if role:
-            set_role(instance, role, assigned_by=self.context["request"].user)
+            AccountsService.set_role(instance, role, assigned_by=self.context["request"].user)
         return instance
 
 
@@ -212,8 +389,7 @@ class RoleSerializer(serializers.ModelSerializer):
 
     def get_permission_details(self, role):
         return [
-            {"id": permission.id, "code": permission.code, "name": permission.name,
-             "description": permission.description}
+            {"id": permission.id, "code": permission.codename, "name": permission.name}
             for permission in role.permissions.order_by("code")
         ]
 

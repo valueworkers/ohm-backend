@@ -149,8 +149,7 @@ Roles automatically receive mapped permissions across modules via `GROUP_RULES`:
 | `CUSTOMER` | Customer / User | 10 | `view`, `add` on `booking`, `wallet`, `accounts`. |
 
 ### Automated Lifecycle Signals
-- **`post_schema_sync`**: Automatically executes `seed_tenant_default_permissions` upon schema creation or migration.
-- **`tenant_provisioned`**: Automatically seeds tenant roles, assigns full tenant admin permissions, and creates mirrored user profiles for the applicant and all co-owners.
+- **`tenant_provisioned`**: Assigns the bootstrapped Tenant Admin role/group and creates mirrored user profiles for the applicant and all co-owners. Run `bootstrap_platform` with `--all-tenants` or `--schema <schema>` to set up role groups and permissions for tenant schemas.
 - **`post_save` on `User` & `PlatformAdmin`**: Automatically ensures public superusers receive all system permissions and public root staff receive default operational permissions.
 
 ---

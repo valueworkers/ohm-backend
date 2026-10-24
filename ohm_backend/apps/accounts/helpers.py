@@ -34,7 +34,7 @@ def find_user(username):
     if "@" in username:
         matches = User.objects.filter(email__iexact=username)
     else:
-        matches = User.objects.filter(phone=username)
+        matches = User.objects.filter(mobile_number=username)
     return matches.first() if matches.count() == 1 else None
 
 
@@ -75,7 +75,7 @@ def _send_otp(user, username, code, purpose):
     if not backend_path:
         raise ImproperlyConfigured("Configure OHM_SMS_OTP_BACKEND to send OTPs to phone numbers.")
     backend = import_string(backend_path)
-    backend(phone=user.phone, code=code, purpose=purpose)
+    backend(phone=user.mobile_number, code=code, purpose=purpose)
 
 def issue_otp(user, username, purpose):
     """Generate, store and send an OTP. Clears the stored challenge if sending fails."""
