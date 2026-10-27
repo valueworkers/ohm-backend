@@ -330,11 +330,11 @@ If unavailable or reserved:
   "slug": "city-hospital",
   "custom_domain": "portal.cityhospital.com",
   "requested_plan": 1,
-  "requested_modules": ["booking", "payroll", "notification"],
   "co_owner_emails": ["partner@cityhospital.com"],
   "password": "InitialAdminPassword123!"
 }
 ```
+- `requested_plan` may be omitted; plan ID `1` (the default Trial plan) is used. If supplied, it must reference an active plan. Provisioning subscribes the tenant to the chosen plan and copies its active features to the tenant's enabled modules. The default Trial plan creates a trial subscription with a 14-day trial period.
 - **Response `201 Created`**:
 ```json
 {
@@ -364,10 +364,12 @@ If unavailable or reserved:
 - **Request Body**:
 ```json
 {
+  "requested_plan": 1,
   "review_notes": "All compliance documents verified. Approved for launch."
 }
 ```
-- **Response `202 Accepted`**: Enqueues asynchronous Celery task `provision_tenant_task`.
+- `requested_plan` is optional; the platform admin may provide it to select or change the plan. Otherwise, the application's plan is used, falling back to plan ID `1` (the default Trial plan). Provisioning creates the subscription and enables that plan's active features. Plan ID `1` creates a trial subscription with a 14-day trial period.
+- **Response `202 Accepted`**: Enqueues asynchronous Celery task `provision_tenant_task`; the subscription is created by that provisioning task.
 
 ### 5.6 Reject Request
 - **Endpoint**: `POST /api/platform/onboarding/requests/{id}/reject/`
@@ -405,11 +407,12 @@ If unavailable or reserved:
   "schema_name": "apex_clinic",
   "contact_email": "admin@apexclinic.com",
   "contact_phone": "+919999900000",
-  "modules": ["booking", "wallet"],
+  "plan": 1,
   "owners": [1]
 }
 ```
 - **Response `201 Created`**: Automatically seeds default permissions and groups.
+- `plan` may be omitted; plan ID `1` (the default Trial plan) is used. If supplied, it must reference an active plan. The tenant is subscribed to it during creation; its active features set enabled modules. Plan ID `1` creates a trial subscription with a 14-day trial period.
 
 ### 6.3 Suspend / Re-activate Tenant
 - **Endpoint**: `POST /api/platform/tenants/{id}/suspend/`

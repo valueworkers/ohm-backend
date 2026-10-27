@@ -16,6 +16,7 @@ from rest_framework.throttling import AnonRateThrottle
 
 from .models import Feature, Plan, Subscription, Tenant, TenantProvisioning
 from .serializers import (
+    ApproveSerializer,
     PlanAdminSerializer,
     PlanSerializer,
     RejectSerializer,
@@ -27,6 +28,7 @@ from .serializers import (
     TenantProvisioningSerializer,
     TenantCreateSerializer,
     TenantUpdateSerializer,
+    default_trial_plan,
     slug_problem,
 )
 from .tasks import provision_tenant_task
@@ -129,7 +131,9 @@ class TenantProvisioningViewSet(viewsets.ModelViewSet):
             return TenantProvisioningUpdateSerializer
         if self.action == "reject":
             return RejectSerializer
-        if self.action in ("approve", "retry"):
+        if self.action == "approve":
+            return ApproveSerializer
+        if self.action == "retry":
             return ReviewSerializer
         return TenantProvisioningSerializer
 
@@ -198,6 +202,10 @@ class TenantProvisioningViewSet(viewsets.ModelViewSet):
             obj.reviewed_at = timezone.now()
             if "review_notes" in body.validated_data:
                 obj.review_notes = body.validated_data["review_notes"]
+            if "requested_plan" in body.validated_data:
+                obj.requested_plan = body.validated_data["requested_plan"]
+            if new_status == TenantProvisioning.Status.APPROVED and not obj.requested_plan_id:
+                obj.requested_plan = default_trial_plan()
             obj.provision_error = ""
             obj.save()
         return obj

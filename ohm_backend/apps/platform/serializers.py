@@ -1,9 +1,11 @@
 import re
+from datetime import timedelta
 from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from django_tenants.utils import schema_context
 
 from rest_framework import serializers
@@ -18,6 +20,20 @@ from .models import (
 )
 from apps.accounts.services import AccountsService
 from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
+
+DEFAULT_TRIAL_PLAN_ID = 1
+DEFAULT_TRIAL_DAYS = 14
+
+
+def default_trial_plan():
+    plan = Plan.objects.filter(pk=DEFAULT_TRIAL_PLAN_ID, is_active=True).first()
+    if plan is None:
+        raise serializers.ValidationError(
+            f"Default trial plan (id={DEFAULT_TRIAL_PLAN_ID}) is missing or inactive."
+        )
+    return plan
+
+
 # --------------------------------------------------------------------------
 # Catalogue
 # --------------------------------------------------------------------------
@@ -73,6 +89,9 @@ class BranchSerializer(serializers.Serializer):
 
 class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
     branches = serializers.JSONField(required=False)
+    requested_plan = serializers.PrimaryKeyRelatedField(
+        queryset=Plan.objects.filter(is_active=True), required=False, default=default_trial_plan
+    )
  
     class Meta:
         model = TenantProvisioning
@@ -178,6 +197,13 @@ class ReviewSerializer(serializers.Serializer):
     review_notes = serializers.CharField(required=False, allow_blank=True)
 
 
+class ApproveSerializer(serializers.Serializer):
+    review_notes = serializers.CharField(required=False, allow_blank=True)
+    requested_plan = serializers.PrimaryKeyRelatedField(
+        queryset=Plan.objects.filter(is_active=True), required=False
+    )
+
+
 class RejectSerializer(serializers.Serializer):
     review_notes = serializers.CharField(allow_blank=False)
 
@@ -214,6 +240,10 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
 
 class TenantCreateSerializer(serializers.ModelSerializer):
+    plan = serializers.PrimaryKeyRelatedField(
+        queryset=Plan.objects.filter(is_active=True), write_only=True,
+        required=False, default=default_trial_plan,
+    )
     domain = serializers.CharField(write_only=True, required=False, allow_blank=False)
     owner_ids = serializers.PrimaryKeyRelatedField(
         queryset=get_user_model().objects.all(),
@@ -226,7 +256,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tenant
         fields = (
-            "id", "name", "schema_name", "owner_ids", "modules", "logo", "contact_email",
+            "id", "name", "schema_name", "owner_ids", "plan", "logo", "contact_email",
             "contact_phone", "timezone","tags", "default_currency", "domain",
         )
         read_only_fields = ("id",)
@@ -253,10 +283,23 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         domain = validated_data.pop("domain", None)
         owners = validated_data.pop("owners", [])
+        plan = validated_data.pop("plan")
+        now = timezone.now()
+        validated_data["modules"] = list(
+            plan.features.filter(is_active=True).values_list("code", flat=True)
+        )
         # New tenants start as ACTIVE here because a platform admin is creating them directly.
         # Change this if direct creation should go through a different initial status.
         validated_data.setdefault("status", Tenant.Status.ACTIVE)
         tenant = Tenant.objects.create(**validated_data)
+        Subscription.objects.create(
+            tenant=tenant,
+            plan=plan,
+            status=(Subscription.Status.TRIAL if plan.pk == DEFAULT_TRIAL_PLAN_ID else Subscription.Status.ACTIVE),
+            starts_at=now,
+            trial_ends_at=(now + timedelta(days=DEFAULT_TRIAL_DAYS) if plan.pk == DEFAULT_TRIAL_PLAN_ID else None),
+            billing_email=tenant.contact_email,
+        )
         if owners:
             tenant.owners.set(owners)
             with schema_context(tenant.schema_name):

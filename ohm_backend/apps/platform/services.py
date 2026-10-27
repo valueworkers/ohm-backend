@@ -1,4 +1,5 @@
 import logging
+from datetime import timedelta
 
 from django.db import transaction
 from django.dispatch import Signal
@@ -8,7 +9,7 @@ from apps.platform.tasks import send_tenant_welcome_email_task
 from apps.accounts.models import User
 from apps.accounts.services import AccountsService
 from .models import Domain, Subscription, Tenant, TenantProvisioning
-from .serializers import base_domain
+from .serializers import DEFAULT_TRIAL_DAYS, DEFAULT_TRIAL_PLAN_ID, base_domain
 from .utils import base_domain, schema_for_slug
 
 
@@ -58,6 +59,8 @@ def _assign_roles_to_tenant_owners(tenant):
 
 def _get_or_create_tenant(p):
     """Returns (tenant, created). Creating the Tenant also creates and migrates its schema."""
+    if not p.requested_plan_id or not p.requested_plan.is_active:
+        raise ProvisioningError("An active subscription plan is required to provision this tenant.")
     schema = schema_for_slug(p.slug)
     existing = Tenant.objects.filter(schema_name=schema).first()
     if existing:
@@ -100,16 +103,24 @@ def _create_domains_and_subscription(p, tenant):
     if p.custom_domain:
         _ensure_domain(tenant, p.custom_domain, is_primary=False, verified=False)
 
-    if p.requested_plan_id:
-        Subscription.objects.get_or_create(
-            tenant=tenant,
-            plan_id=p.requested_plan_id,
-            defaults={
-                "status": Subscription.Status.ACTIVE,
-                "starts_at": now,
-                "billing_email": p.email,
-            },
-        )
+    Subscription.objects.get_or_create(
+        tenant=tenant,
+        plan_id=p.requested_plan_id,
+        defaults={
+            "status": (
+                Subscription.Status.TRIAL
+                if p.requested_plan_id == DEFAULT_TRIAL_PLAN_ID
+                else Subscription.Status.ACTIVE
+            ),
+            "starts_at": now,
+            "trial_ends_at": (
+                now + timedelta(days=DEFAULT_TRIAL_DAYS)
+                if p.requested_plan_id == DEFAULT_TRIAL_PLAN_ID
+                else None
+            ),
+            "billing_email": p.email,
+        },
+    )
 
 
 def _rollback_tenant(tenant):
