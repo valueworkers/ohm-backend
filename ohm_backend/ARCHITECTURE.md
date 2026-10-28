@@ -118,8 +118,9 @@ OHM implements a unified authentication engine via `UnifiedLoginView`:
        raise AuthenticationFailed("Token is not valid for this tenant workspace.")
    ```
    A token obtained from the public schema or a different tenant is rejected immediately.
-3. **Blacklisting & Invalidation**: Logout requests (`POST /api/auth/logout/`) register the refresh token with the SimpleJWT token blacklist.
-4. **OTP Security**: One-Time Passwords are 6-digit numeric codes cached in Redis with a 5-minute time-to-live (TTL). They are bound to specific purposes (`login` or `password_reset`), rate-limited, and deleted upon first verification (single-use).
+3. **Session Revocation**: Login creates a schema-local `UserSession`; access tokens are checked against its active state, and refresh tokens must match the latest session JTI. Logout revokes the current session. Password reset revokes all sessions.
+4. **OTP Security**: One-Time Passwords are 6-digit numeric codes cached in Redis with a 5-minute time-to-live (TTL). They are bound to specific purposes (`login` or `password_reset`), rate-limited by client IP and account identifier, and deleted upon first verification (single-use). OTP values are never written to application logs.
+5. **Short-Lived Access**: Access tokens expire after 15 minutes. Refresh tokens rotate and the prior JTI is rejected by the session record.
 
 ---
 

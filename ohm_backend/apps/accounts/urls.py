@@ -1,13 +1,20 @@
 from django.urls import include, path
 from rest_framework.routers import DefaultRouter
-from rest_framework_simplejwt.views import TokenRefreshView
+from apps.accounts.auth import ScopedTokenRefreshView
 
-from .views import (
-    BulkEmployeeUploadAPIView, ChangePasswordView, CustomerViewSet, EmployeeViewSet,
-    OTPPasswordResetView, OTPRequestView, OwnerViewSet, ResetPasswordView,
+from .public_views import (
+    ChangePasswordView, OTPPasswordResetView, OTPRequestView, OwnerViewSet,
+    RevokeAllSessionsView, ResetPasswordView, UnifiedLoginView, UnifiedLogoutView,
+    UserProfileView, UserSessionsView, VerifyOTPView,
+)
+from .tenant_views import (
+    BulkEmployeeUploadAPIView, CustomerViewSet, EmployeeViewSet,
     RoleAssignmentViewSet, RoleViewSet, ShiftScheduleViewSet,
-    StaffForHireViewSet, UnifiedLoginView, UnifiedLogoutView, UserDocumentViewSet,
-    UserProfileView, UserViewSet, VerifyOTPView, TenantRegistrationCreateView,
+    StaffForHireViewSet, TenantRegistrationCreateView, UserDocumentViewSet, UserViewSet,
+)
+from .settings_views import (
+    AppearanceSettingsView, EmailChangeView, EmailResendView, EmailVerifyView,
+    NotificationSettingsView, SettingsProfileView,
 )
 
 router = DefaultRouter()
@@ -31,7 +38,15 @@ urlpatterns = [
     path("reset-password/", ResetPasswordView.as_view(), name="reset-password"),
     path("password-reset/", OTPPasswordResetView.as_view(), name="password-reset"),
     path("register/customer/", TenantRegistrationCreateView.as_view(), name="register-customer"),
-    path("token/refresh/", TokenRefreshView.as_view(), name="token-refresh"),
+    path("token/refresh/", ScopedTokenRefreshView.as_view(), name="token-refresh"),
     path("profile/", UserProfileView.as_view(), name="profile"),
+    path("settings/profile/", SettingsProfileView.as_view(), name="settings-profile"),
+    path("settings/email/change/", EmailChangeView.as_view(), name="settings-email-change"),
+    path("settings/email/verify/", EmailVerifyView.as_view(), name="settings-email-verify"),
+    path("settings/email/resend-verification/", EmailResendView.as_view(), name="settings-email-resend"),
+    path("settings/appearance/", AppearanceSettingsView.as_view(), name="settings-appearance"),
+    path("settings/notifications/", NotificationSettingsView.as_view(), name="settings-notifications"),
+    path("settings/security/sessions/", UserSessionsView.as_view(), name="settings-security-sessions"),
+    path("settings/security/sessions/revoke-all/", RevokeAllSessionsView.as_view(), name="settings-security-sessions-revoke-all"),
     path("employees-bulk-upload/", BulkEmployeeUploadAPIView.as_view(), name="employees-bulk-upload"),
 ]

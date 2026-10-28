@@ -2,7 +2,6 @@ from django.db import connection
 from django_tenants.utils import get_public_schema_name
 from rest_framework.permissions import BasePermission
 
-
 def ModuleEnabled(code):
     """DRF permission: the current tenant must have this product module enabled."""
 
@@ -25,3 +24,4 @@ class IsPlatformAdmin(BasePermission):
             and user.is_authenticated
             and (user.is_superuser or hasattr(user, "platform_admin_profile"))
         )
+

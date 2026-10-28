@@ -106,7 +106,6 @@ def consume_otp(user, purpose, code):
     key = _otp_key(user, purpose)
     if not _challenge_usable(cache.get(key)):
         return False
-    print(f"user:{user}, purpose:{purpose}, code:{code}")
     lock_key = f"{key}:verify-lock"
     if not cache.add(lock_key, "1", timeout=5):
         return False

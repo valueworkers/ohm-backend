@@ -1,4 +1,6 @@
 # ohm_backend/apps/accounts/models.py
+import uuid
+
 from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.contrib.contenttypes.fields import GenericForeignKey
@@ -6,6 +8,7 @@ from django.contrib.contenttypes.models import ContentType
 from django.core.exceptions import ValidationError
 from django.core.validators import RegexValidator
 from django.db import models, transaction
+from django.db.models.functions import Lower
 from django.utils import timezone
 
 # ------------------------ USER MANAGER ------------------------
@@ -72,6 +75,7 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     # identity / login
     email = models.EmailField(unique=True)
+    email_verified_at = models.DateTimeField(null=True, blank=True)
     profile_pic = models.ImageField(upload_to="profile_photos/", null=True, blank=True)
 
     first_name = models.CharField(max_length=30, blank=True)
@@ -110,9 +114,15 @@ class User(AbstractBaseUser, PermissionsMixin):
     class Meta:
         ordering = ["id"]
         indexes = [models.Index(fields=["is_deleted", "is_active"], name="accounts_us_is_del_9f42a1_idx")]
+        constraints = [models.UniqueConstraint(Lower("email"), name="accounts_user_email_ci_uniq")]
 
     def __str__(self):
         return self.email
+
+    def save(self, *args, **kwargs):
+        if self.email:
+            self.email = self.email.strip().lower()
+        super().save(*args, **kwargs)
 
     # ---------------- helpers ----------------
     def get_full_name(self):
@@ -144,6 +154,53 @@ class User(AbstractBaseUser, PermissionsMixin):
         self.is_active = False
         self.is_deleted = True
         self.save(update_fields=["is_active", "is_deleted"])
+
+
+class UserSettings(models.Model):
+    """Per-user settings stored in the same tenant schema as the account."""
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="settings")
+    theme = models.CharField(max_length=10, default="system")
+    font_size = models.CharField(max_length=10, default="medium")
+    font_family = models.CharField(max_length=30, default="system")
+    notification_channels = models.JSONField(default=dict, blank=True)
+    notification_categories = models.JSONField(default=dict, blank=True)
+    marketing_consent_at = models.DateTimeField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class EmailVerification(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="email_verifications")
+    email = models.EmailField()
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class UserSession(models.Model):
+    """Revocable, schema-local JWT session."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="sessions")
+    refresh_jti = models.CharField(max_length=255, blank=True)
+    user_agent = models.CharField(max_length=512, blank=True)
+    ip_address = models.GenericIPAddressField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField(default=timezone.now)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(
+            fields=["refresh_jti"], condition=~models.Q(refresh_jti=""),
+            name="accounts_user_session_jti_uniq",
+        )]
+
+
+class PasswordResetToken(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="password_reset_tokens")
+    token_hash = models.CharField(max_length=64, unique=True)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
 
 # ------------------------ SHIFT SCHEDULE (tenant) ------------------------

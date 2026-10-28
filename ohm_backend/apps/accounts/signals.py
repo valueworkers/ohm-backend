@@ -13,10 +13,11 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
+from django.utils import timezone
 from django_tenants.signals import post_schema_sync
 from django_tenants.utils import get_public_schema_name, schema_context
 
-from apps.accounts.models import User
+from apps.accounts.models import Role, RoleAssignment, User, UserSession
 from apps.accounts.services import AccountsService
 from apps.platform.models import PlatformAdmin, Tenant
 from apps.platform.services import tenant_provisioned
@@ -79,23 +80,58 @@ def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
 
 
 @receiver(m2m_changed, sender=Tenant.owners.through)
+@transaction.atomic
 def on_tenant_owners_changed(sender, instance, action, pk_set, **kwargs):
-    """Automatically mirror newly-added owners into the tenant schema as TENANT_ADMIN."""
-    if action == "post_add" and pk_set:
+    """Mirror owner grants and revoke tenant-admin access when ownership is removed."""
+    if action == "pre_clear":
+        with schema_context(get_public_schema_name()):
+            instance._owners_cleared_ids = list(instance.owners.values_list("pk", flat=True))
+        return
+    if action == "post_clear":
+        pk_set = set(getattr(instance, "_owners_cleared_ids", []))
+        instance._owners_cleared_ids = []
+        action = "post_remove"
+    if action in {"post_remove", "post_add"} and pk_set:
         tenant = instance
         public_schema = get_public_schema_name()
         if tenant.schema_name == public_schema:
             return
+        if action == "post_add":
+            with schema_context(public_schema):
+                users = list(User.objects.filter(pk__in=pk_set))
+                for public_user in users:
+                    AccountsService.assign_public_tenant_owner_role(tenant, public_user)
+            with schema_context(tenant.schema_name):
+                for public_user in users:
+                    AccountsService.ensure_tenant_admin(public_user)
+            return
 
-        # Materialize public users before switching schemas; evaluating this
-        # queryset in the tenant schema would look up unrelated tenant users.
+        from django.contrib.contenttypes.models import ContentType
+
         with schema_context(public_schema):
             users = list(User.objects.filter(pk__in=pk_set))
-            for public_user in users:
-                AccountsService.assign_public_tenant_owner_role(tenant, public_user)
+            tenant_type = ContentType.objects.get_for_model(tenant, for_concrete_model=False)
+            RoleAssignment.objects.filter(
+                user__in=users, role__code=Role.Code.TENANT_ADMIN,
+                scope_type=tenant_type, scope_id=tenant.pk,
+            ).delete()
         with schema_context(tenant.schema_name):
             for public_user in users:
-                AccountsService.ensure_tenant_admin(public_user)
+                mirror = User.objects.filter(email__iexact=public_user.email).first()
+                if not mirror:
+                    continue
+                mirror.role_assignments.filter(
+                    role__code=Role.Code.TENANT_ADMIN, scope_type__isnull=True, scope_id__isnull=True,
+                ).delete()
+                tenant_admin_group = mirror.groups.filter(name="Tenant Admin").first()
+                if tenant_admin_group:
+                    mirror.groups.remove(tenant_admin_group)
+                if not mirror.role_assignments.exists() and not mirror.is_superuser:
+                    mirror.is_active = False
+                    mirror.save(update_fields=["is_active"])
+                    UserSession.objects.filter(user=mirror, revoked_at__isnull=True).update(
+                        revoked_at=timezone.now()
+                    )
 
 
 @receiver(post_save, sender=User)

@@ -56,9 +56,9 @@ class TenantHeaderMiddleware(TenantMainMiddleware):
         if tenant.schema_name == get_public_schema_name():
             return JsonResponse({"error": "Tenant not found."}, status=404)
 
-        if tenant.status == "suspended":
+        if tenant.status != "active":
             return JsonResponse(
-                {"error": "This workspace is suspended."},
+                {"error": "This workspace is not active."},
                 status=403,
             )
 

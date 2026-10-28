@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "OHM Backend API - Root and Tenant",
-    "description": "Requests are grouped by identity and schema. Public / Shared needs no account. Root / Super Admin uses a public-schema token and omits X-Tenant. Tenant Workspace uses a tenant token and X-Tenant: {{tenantSlug}}. Tenant Owner Portal uses a platform-schema tenant-owner token and omits X-Tenant. Account APIs include the merged Vaishnavi Medicare employee, customer, shift, document, and staff-for-hire endpoints.",
+    "description": "Requests are grouped by schema. Public / Shared needs no account. Root / Super Admin uses a public-schema token and omits X-Tenant. Tenant Workspace uses a tenant token and X-Tenant: {{tenantSlug}}. Tenant Owner Portal uses a platform-schema tenant-owner token and omits X-Tenant. List endpoints use page=1 and page_size=20 by default; page_size accepts values up to 100. Authentication uses 15-minute access tokens, rotating refresh tokens, and revocable server-side sessions. The Settings folders cover profile, email verification, appearance, notifications, and sessions.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -879,7 +879,7 @@
             },
             {
               "name": "Refresh access token (public schema)",
-              "description": "SimpleJWT token refresh. Rotation is enabled; save returned refresh value when present.",
+              "description": "Refresh tokens are bound to the schema and session. This request rotates the refresh token; use the returned refresh token for later refresh or logout calls.",
               "event": [
                 {
                   "listen": "test",
@@ -934,7 +934,8 @@
                   ],
                   "query": [],
                   "variable": []
-                }
+                },
+                "description": "Rotates the refresh token for this schema-bound session. Save the returned access and refresh tokens."
               },
               "response": [
                 {
@@ -993,8 +994,8 @@
               }
             },
             {
-              "name": "Logout / blacklist refresh token (public schema)",
-              "description": "Requires access token. Blacklists the supplied refresh token; current access JWT remains valid until expiry.",
+              "name": "Logout / revoke current session (public schema)",
+              "description": "Revokes this schema-local server-side session. Requires its active access token. The refresh token is optional, but if provided it must be the current rotated token for this session.",
               "event": [],
               "auth": {},
               "request": {
@@ -1044,7 +1045,8 @@
                   ],
                   "query": [],
                   "variable": []
-                }
+                },
+                "description": "Requires the active access token. Optionally sends the current refresh token; revocation is enforced against the server-side session."
               },
               "response": [
                 {
@@ -1135,7 +1137,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/platform/onboarding/requests/",
+                  "raw": "{{baseUrl}}/api/platform/onboarding/requests/?status=submitted",
                   "path": [
                     "api",
                     "platform",
@@ -1838,7 +1840,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/platform/tenants/",
+                  "raw": "{{baseUrl}}/api/platform/tenants/?status=active&search=clinic",
                   "path": [
                     "api",
                     "platform",
@@ -3490,7 +3492,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/platform/subscriptions/",
+                  "raw": "{{baseUrl}}/api/platform/subscriptions/?tenant={{tenantId}}&plan={{planId}}&status=active",
                   "path": [
                     "api",
                     "platform",
@@ -3576,6 +3578,457 @@
                 "strictSSL": false,
                 "followRedirects": true
               }
+            }
+          ]
+        },
+        {
+          "name": "04 - Account settings and sessions",
+          "item": [
+            {
+              "name": "Get settings profile",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/profile/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "profile"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "Returns account name, verified email status, and pending email change."
+              },
+              "response": []
+            },
+            {
+              "name": "Update settings profile",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/profile/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "profile"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"Alex\",\n  \"last_name\": \"Customer\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Request email change",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/email/change/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "email",
+                    "change"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"new-address@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Sends a one-time verification link/token to the new address."
+              },
+              "response": []
+            },
+            {
+              "name": "Resend email verification",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/email/resend-verification/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "email",
+                    "resend-verification"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Resends the current pending email verification."
+              },
+              "response": []
+            },
+            {
+              "name": "Verify email change",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/email/verify/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "email",
+                    "verify"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"{{emailVerificationToken}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Consumes the one-time verification token and updates the verified email."
+              },
+              "response": []
+            },
+            {
+              "name": "Get appearance settings",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/appearance/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "appearance"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update appearance settings",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/appearance/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "appearance"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"theme\": \"system\",\n  \"font_size\": \"medium\",\n  \"font_family\": \"system\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get notification settings",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/notifications/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "notifications"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update notification settings",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/notifications/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "notifications"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"channels\": {\n    \"email\": true,\n    \"in_app\": true,\n    \"browser_push\": false,\n    \"mobile_push\": false,\n    \"sms\": false\n  },\n  \"categories\": {\n    \"product_updates\": false,\n    \"marketing_emails\": false\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List active sessions",
+              "request": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/security/sessions/?page={{page}}&page_size={{pageSize}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "security",
+                    "sessions"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "Paginated session list. Current session is marked current=true."
+              },
+              "response": []
+            },
+            {
+              "name": "Revoke other sessions",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/security/sessions/revoke-all/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "security",
+                    "sessions",
+                    "revoke-all"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"current_password\": \"{{currentPassword}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Revokes all sessions except the current session. Send current_password or a fresh login otp."
+              },
+              "response": []
             }
           ]
         }
@@ -4158,7 +4611,7 @@
             },
             {
               "name": "Refresh access token (tenant schema)",
-              "description": "SimpleJWT token refresh. Rotation is enabled; save returned refresh value when present.",
+              "description": "Refresh tokens are bound to the schema and session. This request rotates the refresh token; use the returned refresh token for later refresh or logout calls.",
               "event": [
                 {
                   "listen": "test",
@@ -4218,7 +4671,8 @@
                   ],
                   "query": [],
                   "variable": []
-                }
+                },
+                "description": "Rotates the refresh token for this schema-bound session. Save the returned access and refresh tokens."
               },
               "response": [
                 {
@@ -4277,8 +4731,8 @@
               }
             },
             {
-              "name": "Logout / blacklist refresh token (tenant schema)",
-              "description": "Requires access token. Blacklists the supplied refresh token; current access JWT remains valid until expiry.",
+              "name": "Logout / revoke current session (tenant schema)",
+              "description": "Revokes this schema-local server-side session. Requires its active access token. The refresh token is optional, but if provided it must be the current rotated token for this session.",
               "event": [],
               "auth": {},
               "request": {
@@ -4333,7 +4787,8 @@
                   ],
                   "query": [],
                   "variable": []
-                }
+                },
+                "description": "Requires the active access token. Optionally sends the current refresh token; revocation is enforced against the server-side session."
               },
               "response": [
                 {
@@ -4544,7 +4999,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/users/",
+                  "raw": "{{baseUrl}}/api/users/?role=CUSTOMER&q=alex&page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
                     "users"
@@ -4564,10 +5019,21 @@
                       "value": "alex",
                       "description": "Case-insensitive email or full name search.",
                       "type": "string"
+                    },
+                    {
+                      "key": "page",
+                      "value": "{{page}}",
+                      "description": "Page number."
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}",
+                      "description": "Results per page (maximum 100)."
                     }
                   ],
                   "variable": []
-                }
+                },
+                "description": "Paginated list. Use page and page_size; page_size is capped at 100."
               },
               "response": [
                 {
@@ -4985,7 +5451,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/owner/",
+                  "raw": "{{baseUrl}}/api/owner/?page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
                     "owner"
@@ -4993,9 +5459,21 @@
                   "host": [
                     "{{baseUrl}}"
                   ],
-                  "query": [],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}",
+                      "description": "Page number."
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}",
+                      "description": "Results per page (maximum 100)."
+                    }
+                  ],
                   "variable": []
-                }
+                },
+                "description": "Paginated list. Use page and page_size; page_size is capped at 100."
               },
               "response": [
                 {
@@ -5915,10 +6393,22 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/shifts/",
+                      "raw": "{{baseUrl}}/api/shifts/?page={{page}}&page_size={{pageSize}}",
                       "path": [
                         "api",
                         "shifts"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "{{page}}",
+                          "description": "Page number."
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}",
+                          "description": "Results per page (maximum 100)."
+                        }
                       ]
                     },
                     "auth": {
@@ -5930,7 +6420,8 @@
                           "type": "string"
                         }
                       ]
-                    }
+                    },
+                    "description": "Paginated list. Use page and page_size; page_size is capped at 100."
                   },
                   "response": []
                 },
@@ -6131,7 +6622,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/employees/?q={{searchTerm}}&is_active=true",
+                      "raw": "{{baseUrl}}/api/employees/?q={{searchTerm}}&is_active=true&page={{page}}&page_size={{pageSize}}",
                       "path": [
                         "api",
                         "employees"
@@ -6144,6 +6635,16 @@
                         {
                           "key": "is_active",
                           "value": "true"
+                        },
+                        {
+                          "key": "page",
+                          "value": "{{page}}",
+                          "description": "Page number."
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}",
+                          "description": "Results per page (maximum 100)."
                         }
                       ]
                     },
@@ -6156,7 +6657,8 @@
                           "type": "string"
                         }
                       ]
-                    }
+                    },
+                    "description": "Paginated list. Use page and page_size; page_size is capped at 100."
                   },
                   "response": []
                 },
@@ -6471,10 +6973,22 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/customers/",
+                      "raw": "{{baseUrl}}/api/customers/?page={{page}}&page_size={{pageSize}}",
                       "path": [
                         "api",
                         "customers"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "{{page}}",
+                          "description": "Page number."
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}",
+                          "description": "Results per page (maximum 100)."
+                        }
                       ]
                     },
                     "auth": {
@@ -6486,7 +7000,8 @@
                           "type": "string"
                         }
                       ]
-                    }
+                    },
+                    "description": "Paginated list. Use page and page_size; page_size is capped at 100."
                   },
                   "response": []
                 },
@@ -6687,10 +7202,22 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/user-documents/",
+                      "raw": "{{baseUrl}}/api/user-documents/?page={{page}}&page_size={{pageSize}}",
                       "path": [
                         "api",
                         "user-documents"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "{{page}}",
+                          "description": "Page number."
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}",
+                          "description": "Results per page (maximum 100)."
+                        }
                       ]
                     },
                     "auth": {
@@ -6702,7 +7229,8 @@
                           "type": "string"
                         }
                       ]
-                    }
+                    },
+                    "description": "Paginated list. Use page and page_size; page_size is capped at 100."
                   },
                   "response": []
                 },
@@ -6863,10 +7391,22 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/staff-for-hire/",
+                      "raw": "{{baseUrl}}/api/staff-for-hire/?page={{page}}&page_size={{pageSize}}",
                       "path": [
                         "api",
                         "staff-for-hire"
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "{{page}}",
+                          "description": "Page number."
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}",
+                          "description": "Results per page (maximum 100)."
+                        }
                       ]
                     },
                     "auth": {
@@ -6878,7 +7418,8 @@
                           "type": "string"
                         }
                       ]
-                    }
+                    },
+                    "description": "Paginated list. Use page and page_size; page_size is capped at 100."
                   },
                   "response": []
                 },
@@ -7092,12 +7633,25 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/roles/",
+                  "raw": "{{baseUrl}}/api/roles/?page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
                     "roles"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}",
+                      "description": "Page number."
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}",
+                      "description": "Results per page (maximum 100)."
+                    }
                   ]
-                }
+                },
+                "description": "Paginated list. Use page and page_size; page_size is capped at 100."
               },
               "response": []
             },
@@ -7317,13 +7871,26 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/roles/permissions/",
+                  "raw": "{{baseUrl}}/api/roles/permissions/?page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
                     "roles",
                     "permissions"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}",
+                      "description": "Page number."
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}",
+                      "description": "Results per page (maximum 100)."
+                    }
                   ]
-                }
+                },
+                "description": "Paginated list. Use page and page_size; page_size is capped at 100."
               },
               "response": []
             },
@@ -7354,7 +7921,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/role-assignments/?user_id={{userId}}",
+                  "raw": "{{baseUrl}}/api/role-assignments/?user_id={{userId}}&page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
                     "role-assignments"
@@ -7363,9 +7930,20 @@
                     {
                       "key": "user_id",
                       "value": "{{userId}}"
+                    },
+                    {
+                      "key": "page",
+                      "value": "{{page}}",
+                      "description": "Page number."
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}",
+                      "description": "Results per page (maximum 100)."
                     }
                   ]
-                }
+                },
+                "description": "Paginated list. Use page and page_size; page_size is capped at 100."
               },
               "response": []
             },
@@ -7532,6 +8110,516 @@
               },
               "response": [],
               "description": "Removes the selected role grant. The last active Tenant Admin grant cannot be removed."
+            }
+          ]
+        },
+        {
+          "name": "06 - Account settings and sessions",
+          "item": [
+            {
+              "name": "Get settings profile",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/profile/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "profile"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "Returns account name, verified email status, and pending email change."
+              },
+              "response": []
+            },
+            {
+              "name": "Update settings profile",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/profile/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "profile"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"Alex\",\n  \"last_name\": \"Customer\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Request email change",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/email/change/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "email",
+                    "change"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"email\": \"new-address@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Sends a one-time verification link/token to the new address."
+              },
+              "response": []
+            },
+            {
+              "name": "Resend email verification",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/email/resend-verification/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "email",
+                    "resend-verification"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Resends the current pending email verification."
+              },
+              "response": []
+            },
+            {
+              "name": "Verify email change",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/email/verify/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "email",
+                    "verify"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"token\": \"{{emailVerificationToken}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Consumes the one-time verification token and updates the verified email."
+              },
+              "response": []
+            },
+            {
+              "name": "Get appearance settings",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/appearance/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "appearance"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update appearance settings",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/appearance/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "appearance"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"theme\": \"system\",\n  \"font_size\": \"medium\",\n  \"font_family\": \"system\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Get notification settings",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/notifications/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "notifications"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Update notification settings",
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/notifications/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "notifications"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"channels\": {\n    \"email\": true,\n    \"in_app\": true,\n    \"browser_push\": false,\n    \"mobile_push\": false,\n    \"sms\": false\n  },\n  \"categories\": {\n    \"product_updates\": false,\n    \"marketing_emails\": false\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List active sessions",
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/security/sessions/?page={{page}}&page_size={{pageSize}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "security",
+                    "sessions"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}"
+                    }
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "description": "Paginated session list. Current session is marked current=true."
+              },
+              "response": []
+            },
+            {
+              "name": "Revoke other sessions",
+              "request": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/settings/security/sessions/revoke-all/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "settings",
+                    "security",
+                    "sessions",
+                    "revoke-all"
+                  ]
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"current_password\": \"{{currentPassword}}\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Revokes all sessions except the current session. Send current_password or a fresh login otp."
+              },
+              "response": []
             }
           ]
         }

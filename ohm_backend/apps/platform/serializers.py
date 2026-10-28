@@ -325,6 +325,10 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
             "contact_phone", "timezone", "tags", "default_currency",
         )
 
+    @transaction.atomic
+    def update(self, instance, validated_data):
+        return super().update(instance, validated_data)
+
 class OwnerBriefSerializer(serializers.Serializer):
     """Lightweight representation of a tenant owner for read views."""
     id = serializers.IntegerField(read_only=True)

@@ -42,6 +42,24 @@
       "value": "",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "emailVerificationToken",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "page",
+      "value": "1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pageSize",
+      "value": "20",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment"

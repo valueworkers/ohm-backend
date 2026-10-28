@@ -212,16 +212,16 @@ If unavailable or reserved:
   "access": "<new_jwt_access_token>"
 }
 ```
+- Refresh tokens rotate per session. Replaying an older refresh token or using it in a different schema is rejected. Access tokens expire after 15 minutes; existing tokens without a session identifier require a fresh login after deployment.
 
 ### 2.5 Unified Logout
 - **Endpoint**: `POST /api/auth/logout/`
 - **Authentication**: `Bearer <token>`
 - **Request Body**:
 ```json
-{
-  "refresh_token": "<jwt_refresh_token>"
-}
+{ "refresh_token": "<current_session_refresh_token>" }
 ```
+- The `refresh_token` is optional when the request uses a valid session-bound access token. If supplied, it must match that same active session. Logout revokes the server-side session, invalidating its access and refresh tokens.
 - **Response `200 OK`**:
 ```json
 {
@@ -644,3 +644,15 @@ If unavailable or reserved:
 ### 10.7 Revoke Role Assignment
 - **Endpoint**: `DELETE /api/role-assignments/{id}/`
 - **Response `204 No Content`**: Revokes the assignment. Safeguard prevents deleting the last active workspace Tenant Admin assignment.
+
+## 11. User Settings
+
+The settings panel has three scopes. Platform Super Users use the personal settings routes below in the public schema and manage any workspace with `/api/platform/tenants/{id}/` (platform admin only). A tenant owner manages their organization profile and branding through `/api/platform/my/tenants/{id}/` (owner only; public schema). Each tenant user manages their own profile and personal preferences through the same `/api/settings/*` routes while authenticated in that tenant schema. Personal preference records are isolated per schema and per user; organization profile changes do not modify individual user preferences.
+
+All personal settings routes require `Authorization: Bearer <token>` and operate on the authenticated user in the active schema. `GET/PATCH /api/settings/profile/` reads or updates trimmed `first_name` and `last_name` (30 characters maximum); email is read-only here. `POST /api/settings/email/change/` accepts `{ "email": "new@example.com" }` and emails a one-time token. `POST /api/settings/email/verify/` accepts `{ "token": "..." }`; only successful verification changes the address and marks it verified. Tokens expire after 30 minutes and cannot be reused. `POST /api/settings/email/resend-verification/` resends for the current pending address. These mail endpoints are limited to five requests per hour per authenticated user.
+
+`GET/PATCH /api/settings/appearance/` stores `theme` (`light`, `dark`, `system`), `font_size` (`small`, `medium`, `large`), and `font_family` (`system`, `inter`, `roboto`, `open_sans`, `lato`). `GET/PATCH /api/settings/notifications/` accepts partial `channels` and `categories` maps of booleans. Supported channels are `email`, `in_app`, `browser_push`, `mobile_push`, and `sms`; supported categories are `product_updates`, `marketing_emails`, `security_alerts`, and `billing_alerts`. Security and billing alerts are always enabled. Marketing preference updates record or clear `marketing_consent_at`.
+
+Password reset tokens from `POST /api/verify-otp/` expire after 10 minutes and are single-use. Password changes and resets revoke all active sessions, so users must sign in again. `PUT /api/profile/` does not accept password changes.
+
+The existing `POST /api/change-password/` endpoint handles password changes with current-password verification and Django's configured password validators. `GET /api/settings/security/sessions/` returns the authenticated user's paginated session inventory. `POST /api/settings/security/sessions/revoke-all/` revokes all other sessions and requires the current password or a fresh login OTP. Billing-provider operations, 2FA, recovery codes, backups, and import/export jobs are not implemented by this backend and are not exposed as nonfunctional settings endpoints. Email verification delivery uses the configured Django email backend.

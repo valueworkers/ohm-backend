@@ -219,8 +219,10 @@ All endpoints are hosted on the unified API host (`api.ohm.com`).
 - `POST /api/auth/login/` — Unified login using email or phone with password or OTP. Omit `X-Tenant` for platform staff; provide `X-Tenant: <slug>` for tenant users. Returns `tokens`, `user`, and `schema_name`.
 - `POST /api/auth/otp/` — Request a 6-digit OTP for login or password reset (`username`, `purpose`).
 - `POST /api/auth/password-reset/` — Reset password using OTP (`username`, `otp`, `new_password`).
-- `POST /api/auth/access-tokens/` — Exchange refresh token for a new access token.
-- `POST /api/auth/logout/` — Blacklist refresh token and invalidate session.
+- `POST /api/auth/access-tokens/` — Exchange the current session refresh token for a new access token (15-minute access-token lifetime).
+- `POST /api/auth/logout/` — Revoke the authenticated session immediately.
+- `GET /api/settings/security/sessions/` — List the authenticated user's sessions.
+- `POST /api/settings/security/sessions/revoke-all/` — Revoke other sessions after password or OTP confirmation.
 
 ### 3. Tenant Customer Registration
 - `POST /api/auth/registrations/` — Self-registration for healthcare consumers (requires `X-Tenant`). Automatically assigns `CUSTOMER` role.

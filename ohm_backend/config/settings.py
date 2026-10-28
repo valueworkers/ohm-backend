@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from corsheaders.defaults import default_headers
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -10,15 +11,37 @@ load_dotenv(BASE_DIR / ".env")
 def env(name, default=None):
     return os.environ.get(name, default)
 
+def env_bool(name, default=False):
+    value = env(name)
+    if value is None:
+        return default
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ImproperlyConfigured(f"{name} must be a boolean value.")
+
+def env_csv(name, default):
+    value = env(name)
+    if value is None:
+        return list(default)
+    return [item.strip() for item in str(value).split(",") if item.strip()]
+
 REDIS_URL = env("REDIS_URL", "redis://localhost:6379/0")
 
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-change-me")
-DEBUG = env("DJANGO_DEBUG", True)
+DEBUG = env_bool("DJANGO_DEBUG", False)
+if not DEBUG and SECRET_KEY == "dev-insecure-change-me":
+    raise ImproperlyConfigured("Set a unique DJANGO_SECRET_KEY when DEBUG is disabled.")
 
 # Host validity is enforced by VerifiedDomainTenantMiddleware:
 # only hosts with a *verified* Domain row resolve to a tenant, everything else 404s.
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = env_csv(
+    "DJANGO_ALLOWED_HOSTS",
+    ["*"] if DEBUG else [env("OHM_API_HOST", "api.o-hm.com"), env("OHM_BASE_DOMAIN", "o-hm.com"), "." + env("OHM_BASE_DOMAIN", "o-hm.com")],
+)
 
 # --- ohm platform settings -------------------------------------------------
 BASE_DOMAIN   = env("OHM_BASE_DOMAIN", "localhost")
@@ -130,33 +153,47 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "apps.accounts.permissions.DynamicModelPermissions",
     ],
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.StandardResultsSetPagination",
+    "PAGE_SIZE": 20,
     "DEFAULT_THROTTLE_RATES": {
         "root_login": "20/minute",
+        "login_identity": "10/hour",
+        "refresh_token": "30/hour",
         "otp_request": "5/hour",
+        "otp_identity": "5/hour",
+        "otp_verify": "10/hour",
+        "sensitive_auth": "5/hour",
         "tenant_registration_create": "20/hour",
         "tenant_request": "10/hour",
+        "settings_email": "5/hour",
     },
     "NUM_PROXIES": 1,
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=24),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,  # calls our custom blacklist() below
+    'BLACKLIST_AFTER_ROTATION': False,  # revocation is enforced by schema-local UserSession rows
     'UPDATE_LAST_LOGIN': True,
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = env_bool("CORS_ALLOW_ALL_ORIGINS", DEBUG)
+CORS_ALLOWED_ORIGINS = env_csv("CORS_ALLOWED_ORIGINS", [])
 CORS_ALLOW_HEADERS = [*default_headers, "x-tenant"]
-if not DEBUG:
-    AUTH_PASSWORD_VALIDATORS = [
-        {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-        {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-        {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-    ]
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+if not DEBUG:
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(env("SECURE_HSTS_SECONDS", 31536000))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", True)
 
 
 
@@ -175,7 +212,7 @@ EMAIL_HOST = env("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(env("EMAIL_PORT", 587))
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = bool(env("EMAIL_USE_TLS", True))
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "noreply@ohm.local")
 
 OHM_SMS_OTP_BACKEND = env("OHM_SMS_OTP_BACKEND", "")

@@ -1,9 +1,10 @@
 import logging
 from django.db import connection
+from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from .access import TenantAccessManager
-from .models import Role, RoleAssignment, User
+from .models import Role, RoleAssignment, User, UserSession
 
 logger = logging.getLogger(__name__)
 
@@ -215,9 +216,58 @@ class AccountsService:
         values = {field: getattr(user, field) for field in fields}
         with schema_context(public_schema):
             User.objects.filter(pk=public_user.pk).update(**values)
+            if "password" in values:
+                UserSession.objects.filter(user_id=public_user.pk, revoked_at__isnull=True).update(
+                    revoked_at=timezone.now()
+                )
         for tenant in tenants:
             with schema_context(tenant.schema_name):
-                User.objects.filter(email__iexact=source_email).update(**values)
+                mirror = User.objects.filter(email__iexact=source_email).first()
+                if mirror:
+                    User.objects.filter(pk=mirror.pk).update(**values)
+                    if "password" in values:
+                        UserSession.objects.filter(user=mirror, revoked_at__isnull=True).update(
+                            revoked_at=timezone.now()
+                        )
+
+    @classmethod
+    def sync_owner_email(cls, user, old_email, new_email, verified_at):
+        """Apply a verified owner email change to the public identity and its tenant mirrors."""
+        from apps.platform.models import Tenant
+
+        public_schema = get_public_schema_name()
+        current_schema = connection.schema_name
+        with schema_context(public_schema):
+            if current_schema == public_schema:
+                public_user = User.objects.filter(pk=user.pk).first()
+            else:
+                public_user = User.objects.filter(email__iexact=old_email).first()
+            if not public_user:
+                return
+            tenants = list(Tenant.objects.filter(owners__pk=public_user.pk).exclude(schema_name=public_schema))
+            if current_schema != public_schema and not any(t.schema_name == current_schema for t in tenants):
+                return
+            if User.objects.filter(email__iexact=new_email).exclude(pk=public_user.pk).exists():
+                raise ValueError("The verified email is already assigned to a public account.")
+            User.objects.filter(pk=public_user.pk).update(email=new_email, email_verified_at=verified_at)
+            UserSession.objects.filter(user=public_user, revoked_at__isnull=True).update(
+                revoked_at=timezone.now()
+            )
+
+        for tenant in tenants:
+            with schema_context(tenant.schema_name):
+                if tenant.schema_name == current_schema:
+                    mirror = User.objects.filter(pk=user.pk).first()
+                else:
+                    mirror = User.objects.filter(email__iexact=old_email).first()
+                if not mirror:
+                    continue
+                if User.objects.filter(email__iexact=new_email).exclude(pk=mirror.pk).exists():
+                    raise ValueError(f"The verified email is already assigned in workspace {tenant.schema_name}.")
+                User.objects.filter(pk=mirror.pk).update(email=new_email, email_verified_at=verified_at)
+                UserSession.objects.filter(user=mirror, revoked_at__isnull=True).update(
+                    revoked_at=timezone.now()
+                )
 
     @classmethod
     def sync_tenant_roles_and_permissions(cls, tenant):
