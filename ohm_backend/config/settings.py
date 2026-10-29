@@ -233,6 +233,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.platform.tasks.verify_pending_domains",
         "schedule": 300,
     },
+    "expire-sent-quotes-daily": {
+        "task": "apps.platform.tasks.expire_sent_quotes",
+        "schedule": 86400,
+    },
 }
 
 LANGUAGE_CODE = "en-us"

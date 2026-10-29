@@ -260,3 +260,9 @@ When building new operational features (e.g., `booking`, `payroll`, `analysis`):
        ...
    ```
 3. **Module Feature Flags**: Tenants have an `enabled_modules` list (`Tenant.modules`). Platform admins grant access via `PATCH /api/platform/tenants/{id}/permissions/`. Custom views can guard access using DRF permissions.
+
+## 9. Plans, Billing, and Subscription Entitlements
+
+Plans and billing records live in the public platform schema. Plans hold the current recurring or one-time price; subscriptions retain a pricing snapshot selected at signup. Quotations and invoices store monetary snapshots so later catalogue changes do not rewrite historical totals.
+
+Manage quotation workflow states and issue invoices through the platform Django Admin. `apps.platform.services` owns line calculations, transaction-locked `DocumentSequence` numbering, quotation-to-invoice copying, payment recording, and subscription activation/extension. Payment integration code must verify provider webhook signatures before calling `record_gateway_payment`; that function enforces gateway payment ID idempotency and updates invoice state. No provider-specific webhook route or quote email delivery is configured yet.

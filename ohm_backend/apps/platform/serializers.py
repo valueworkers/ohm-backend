@@ -4,9 +4,10 @@ from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
-from django.db import IntegrityError, transaction
+from django.db import IntegrityError, transaction, connection
+from django.db.models import Q
 from django.utils import timezone
-from django_tenants.utils import schema_context
+from django_tenants.utils import get_public_schema_name, schema_context
 
 from rest_framework import serializers
 
@@ -17,6 +18,7 @@ from .models import (
     Subscription,
     Tenant,
     TenantProvisioning,
+    Quote, QuoteEvent, QuoteLine, QuoteTaxSettings,
 )
 from apps.accounts.services import AccountsService
 from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
@@ -49,7 +51,7 @@ class PlanSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Plan
-        fields = ("id", "code", "name", "description", "features", "max_employees", "max_branches")
+        fields = ("id", "code", "name", "description", "features", "billing_period", "currency", "amount", "setup_fee", "tax_rate", "max_employees", "max_branches")
 
 class PlanAdminSerializer(serializers.ModelSerializer):
     """Used by ohm admin for reads and writes."""
@@ -67,10 +69,12 @@ class PlanAdminSerializer(serializers.ModelSerializer):
         fields = (
             "id", "code", "name", "description",
             "features", "feature_ids",
+            "billing_period", "currency", "amount", "setup_fee", "tax_rate",
             "max_employees", "max_branches",
             "is_active", "created_at",
         )
         read_only_fields = ("id", "created_at")
+
 
 # --------------------------------------------------------------------------
 # Onboarding
@@ -92,7 +96,7 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
     requested_plan = serializers.PrimaryKeyRelatedField(
         queryset=Plan.objects.filter(is_active=True), required=False, default=default_trial_plan
     )
- 
+
     class Meta:
         model = TenantProvisioning
         fields = (
@@ -101,13 +105,13 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
             "wants_custom_website", "requested_plan", "status", "created_at",
         )
         read_only_fields = ("id", "status", "created_at")
-  
+
     def validate_branches(self, value):
         serializer = BranchSerializer(data=value or [], many=True)
         serializer.is_valid(raise_exception=True)
         return [dict(item) for item in serializer.validated_data]
- 
- 
+
+
     def validate_slug(self, value):
         value = value.strip().lower()
         # exclude self so editing a request doesn't clash with its own slug
@@ -115,7 +119,7 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
         if problem:
             raise serializers.ValidationError(problem)
         return value
- 
+
     def validate_custom_domain(self, value):
         value = value.strip().lower()
         if not value:
@@ -135,7 +139,7 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
         if open_requests.exists():
             raise serializers.ValidationError("This domain is already requested.")
         return value
-  
+
     def _get_or_create_applicant(self, email):
         User = get_user_model()
         user = User.objects.filter(email__iexact=email).first()
@@ -149,12 +153,12 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
         except IntegrityError:
             user = User.objects.get(email__iexact=email)  # someone created it a moment ago
         return user
- 
+
     @transaction.atomic
     def create(self, validated_data):
         validated_data["applicant"] = self._get_or_create_applicant(validated_data["email"])
         return super().create(validated_data)
-  
+
 class TenantProvisioningUpdateSerializer(TenantProvisioningCreateSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
@@ -163,15 +167,15 @@ class TenantProvisioningUpdateSerializer(TenantProvisioningCreateSerializer):
         if email and email != instance.applicant.email.lower():
             validated_data["applicant"] = self._get_or_create_applicant(email)
         return super().update(instance, validated_data)
- 
+
 
 class TenantProvisioningSerializer(serializers.ModelSerializer):
     """Read view. provision_error is only shown to platform admins."""
-    
+
     applicant_email = serializers.EmailField(source="applicant.email", read_only=True)
     requested_plan_name = serializers.CharField(source="requested_plan.name", read_only=True, default=None)
     tenant_schema = serializers.CharField(source="tenant.schema_name", read_only=True, default=None)
-    
+
     class Meta:
         model = TenantProvisioning
         fields = (
@@ -182,7 +186,7 @@ class TenantProvisioningSerializer(serializers.ModelSerializer):
             "provision_error", "created_at", "updated_at",
         )
         read_only_fields = fields
-    
+
     def to_representation(self, instance):
         data = super().to_representation(instance)
         request = self.context.get("request")
@@ -221,11 +225,12 @@ class DomainSerializer(serializers.ModelSerializer):
 
 class SubscriptionSerializer(serializers.ModelSerializer):
     plan_name = serializers.CharField(source="plan.name", read_only=True, default=None)
+    price_details = serializers.SerializerMethodField()
 
     class Meta:
         model = Subscription
         fields = (
-            "id", "tenant", "plan", "plan_name", "status", "starts_at", "ends_at",
+            "id", "tenant", "plan", "plan_name", "price_details", "status", "starts_at", "ends_at",
             "trial_ends_at", "billing_email", "features", "created_at",
         )
         read_only_fields = ("id", "created_at")
@@ -236,6 +241,41 @@ class SubscriptionSerializer(serializers.ModelSerializer):
         if starts and ends and ends <= starts:
             raise serializers.ValidationError({"ends_at": "Must be after the start date."})
         return attrs
+
+    def create(self, validated_data):
+        plan = validated_data.get("plan")
+        if plan:
+            validated_data.update(
+                price_billing_period=plan.billing_period,
+                price_currency=plan.currency,
+                price_amount=plan.amount,
+                price_setup_fee=plan.setup_fee,
+                price_tax_rate=plan.tax_rate,
+            )
+        return super().create(validated_data)
+
+    def update(self, instance, validated_data):
+        plan = validated_data.get("plan")
+        if plan and plan.pk != instance.plan_id:
+            validated_data.update(
+                price_billing_period=plan.billing_period,
+                price_currency=plan.currency,
+                price_amount=plan.amount,
+                price_setup_fee=plan.setup_fee,
+                price_tax_rate=plan.tax_rate,
+            )
+        return super().update(instance, validated_data)
+
+    def get_price_details(self, obj):
+        if obj.price_amount is None:
+            return None
+        return {
+            "billing_period": obj.price_billing_period,
+            "currency": obj.price_currency,
+            "amount": obj.price_amount,
+            "setup_fee": obj.price_setup_fee,
+            "tax_rate": obj.price_tax_rate,
+        }
 
 
 
@@ -295,6 +335,11 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         Subscription.objects.create(
             tenant=tenant,
             plan=plan,
+            price_billing_period=plan.billing_period,
+            price_currency=plan.currency,
+            price_amount=plan.amount,
+            price_setup_fee=plan.setup_fee,
+            price_tax_rate=plan.tax_rate,
             status=(Subscription.Status.TRIAL if plan.pk == DEFAULT_TRIAL_PLAN_ID else Subscription.Status.ACTIVE),
             starts_at=now,
             trial_ends_at=(now + timedelta(days=DEFAULT_TRIAL_DAYS) if plan.pk == DEFAULT_TRIAL_PLAN_ID else None),
@@ -368,3 +413,87 @@ class TenantProfileSerializer(serializers.ModelSerializer):
         if not re.fullmatch(r"[A-Z]{3}", value):
             raise serializers.ValidationError("Enter a 3-letter currency code, e.g. INR.")
         return value
+
+
+# Prospect quote serializers
+class QuoteLineSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = QuoteLine
+        fields = ("id", "position", "kind", "plan", "item", "specification", "hsn_sac", "qty", "unit_price", "lead_time", "gst_rate")
+        read_only_fields = ("id", "position")
+
+    def validate(self, attrs):
+        kind = attrs.get("kind", getattr(self.instance, "kind", None))
+        plan = attrs.get("plan", getattr(self.instance, "plan", None))
+        if kind == QuoteLine.Kind.CATALOG and plan is None:
+            raise serializers.ValidationError({"plan": "Catalog lines must reference a Plan."})
+        if kind != QuoteLine.Kind.CATALOG and plan is not None:
+            raise serializers.ValidationError({"plan": "Only catalog lines can reference a Plan."})
+        if kind == QuoteLine.Kind.ON_REQUEST:
+            attrs["unit_price"] = None
+        elif attrs.get("unit_price", getattr(self.instance, "unit_price", None)) is None:
+            raise serializers.ValidationError({"unit_price": "A price is required for priced lines."})
+        return attrs
+
+
+class QuoteEventSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = QuoteEvent
+        fields = ("kind", "detail", "actor", "at")
+
+
+class QuoteSerializer(serializers.ModelSerializer):
+    lines = QuoteLineSerializer(many=True)
+    events = QuoteEventSerializer(many=True, read_only=True)
+    valid_until = serializers.DateField(read_only=True)
+    class Meta:
+        model = Quote
+        fields = ("id", "number", "revision", "status", "company", "attention", "address", "gstin", "state", "buyer_email", "ship_to", "your_ref", "quote_date", "valid_days", "valid_until", "notes", "subtotal", "cgst", "sgst", "igst", "freight", "total", "sent_at", "accepted_at", "created_at", "lines", "events")
+        read_only_fields = ("id", "number", "revision", "status", "quote_date", "subtotal", "cgst", "sgst", "igst", "total", "sent_at", "accepted_at", "created_at")
+
+    def validate_lines(self, lines):
+        if not lines:
+            raise serializers.ValidationError("At least one line is required.")
+        return lines
+
+    def create(self, validated_data):
+        from .services import create_quote
+
+        request = self.context["request"]
+        lines = validated_data.pop("lines")
+        tenant = None if connection.schema_name == get_public_schema_name() else request.tenant
+        return create_quote(request.user, validated_data, lines, tenant=tenant)
+
+    def update(self, instance, validated_data):
+        lines = validated_data.pop("lines", None)
+        for key, value in validated_data.items():
+            setattr(instance, key, value)
+        instance.save()
+        if lines is not None:
+            instance.lines.all().delete()
+            for index, line in enumerate(lines, 1):
+                QuoteLine.objects.create(quote=instance, position=index, **line)
+        from .services import recalculate
+
+        recalculate(instance)
+        QuoteEvent.objects.create(quote=instance, kind="updated", actor=self.context["request"].user if instance.tenant_id is None else None, detail="" if instance.tenant_id is None else self.context["request"].user.email)
+        return instance
+
+
+class SendTestSerializer(serializers.Serializer):
+    recipients = serializers.ListField(child=serializers.EmailField(), allow_empty=False)
+
+class QuoteTaxSettingsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = QuoteTaxSettings
+        fields = ("state_code", "state_name", "updated_at")
+        read_only_fields = ("updated_at",)
+
+    def validate(self, attrs):
+        state_code = attrs.get("state_code", getattr(self.instance, "state_code", ""))
+        state_name = attrs.get("state_name", getattr(self.instance, "state_name", ""))
+        if state_code and (len(state_code) != 2 or not state_code.isdigit()):
+            raise serializers.ValidationError({"state_code": "Enter a two-digit GST state code."})
+        if not state_code and not state_name:
+            raise serializers.ValidationError("Set a state code or state name.")
+        return attrs

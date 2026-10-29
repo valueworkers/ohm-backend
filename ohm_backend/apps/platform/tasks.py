@@ -89,3 +89,15 @@ def verify_pending_domains():
                 d.verified_at = timezone.now()
                 d.save(update_fields=["verified", "verified_at"])
                 logger.info("Verified domain %s", d.domain)
+
+@shared_task
+def expire_sent_quotes():
+    """Expire sent prospect quotes after their validity date."""
+    from .models import Quote, QuoteEvent
+    with schema_context(get_public_schema_name()):
+        # valid_days varies per quote, so compare sent quotes in Python.
+        ids = [q.pk for q in Quote.objects.filter(status=Quote.Status.SENT) if q.valid_until < timezone.localdate()]
+        if ids:
+            Quote.objects.filter(pk__in=ids).update(status=Quote.Status.EXPIRED)
+            QuoteEvent.objects.bulk_create([QuoteEvent(quote_id=pk, kind="expired", detail="Validity period elapsed") for pk in ids])
+        return len(ids)

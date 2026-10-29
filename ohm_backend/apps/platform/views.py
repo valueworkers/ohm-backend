@@ -1,10 +1,15 @@
-from django.db import IntegrityError, transaction
+from datetime import timedelta
+from io import BytesIO
+
+from django.db import IntegrityError, transaction, connection
+from django.db.models import Count, Q, Sum
+from django.http import HttpResponse
 from django.db.models import ProtectedError
 from django.contrib.contenttypes.models import ContentType
 from django.apps import apps
 from django.conf import settings
 from django.utils import timezone
-from django_tenants.utils import schema_context
+from django_tenants.utils import get_public_schema_name, schema_context
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -14,7 +19,10 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.throttling import AnonRateThrottle
 
-from .models import Feature, Plan, Subscription, Tenant, TenantProvisioning
+from .models import (
+    Feature, Plan, Subscription, Tenant, TenantProvisioning,
+    Quote, QuoteTaxSettings,
+)
 from .serializers import (
     ApproveSerializer,
     PlanAdminSerializer,
@@ -30,8 +38,10 @@ from .serializers import (
     TenantUpdateSerializer,
     default_trial_plan,
     slug_problem,
+    QuoteLineSerializer, QuoteSerializer, SendTestSerializer, QuoteTaxSettingsSerializer,
 )
 from .tasks import provision_tenant_task
+from .services import send_quote, revise_quote, respond_to_quote, recalculate
 from .permissions import IsPlatformAdmin
 
 # --------------------------------------------------------------------------
@@ -197,15 +207,15 @@ class TenantProvisioningViewSet(viewsets.ModelViewSet):
                 raise ValidationError(
                     {"status": f"Request is {obj.status}; expected {expected_status}."}
                 )
+            target_plan = body.validated_data.get("requested_plan", obj.requested_plan)
+            if new_status == TenantProvisioning.Status.APPROVED and not target_plan:
+                target_plan = default_trial_plan()
+            obj.requested_plan = target_plan
             obj.status = new_status
             obj.reviewed_by = request.user
             obj.reviewed_at = timezone.now()
             if "review_notes" in body.validated_data:
                 obj.review_notes = body.validated_data["review_notes"]
-            if "requested_plan" in body.validated_data:
-                obj.requested_plan = body.validated_data["requested_plan"]
-            if new_status == TenantProvisioning.Status.APPROVED and not obj.requested_plan_id:
-                obj.requested_plan = default_trial_plan()
             obj.provision_error = ""
             obj.save()
         return obj
@@ -476,3 +486,182 @@ class MyTenantViewSet(
             tenant.status = Tenant.Status.ACTIVE
             tenant.save(update_fields=["status"])
         return Response(self.get_serializer(tenant).data)
+
+
+# Prospect quote API
+class QuoteViewSet(viewsets.ModelViewSet):
+    serializer_class = QuoteSerializer
+    queryset = Quote.objects.prefetch_related("lines", "events").select_related("created_by", "provisioning", "tenant")
+
+    def get_permissions(self):
+        if connection.schema_name == get_public_schema_name():
+            return [IsPlatformAdmin()]
+        return [IsAuthenticated()]
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        if connection.schema_name == get_public_schema_name():
+            qs = qs.filter(tenant__isnull=True)
+        else:
+            qs = qs.filter(tenant=self.request.tenant)
+        if self.action == "list":
+            status_filter = self.request.query_params.get("status")
+            if status_filter:
+                qs = qs.filter(status=status_filter)
+            range_days = self.request.query_params.get("range")
+            if range_days and range_days.isdigit():
+                qs = qs.filter(quote_date__gte=timezone.localdate() - timedelta(days=int(range_days)))
+        return qs
+
+    def perform_update(self, serializer):
+        if serializer.instance.status != Quote.Status.DRAFT:
+            raise ValidationError({"status": "Only draft quotes can be edited."})
+        serializer.save()
+
+    @action(detail=True, methods=["post"])
+    def send(self, request, pk=None):
+        try:
+            quote = send_quote(self.get_object(), request.user)
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)})
+        return Response(self.get_serializer(quote).data)
+
+    @action(detail=True, methods=["post"], url_path="send-test")
+    def send_test(self, request, pk=None):
+        serializer = SendTestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            quote = send_quote(self.get_object(), request.user, test_recipients=serializer.validated_data["recipients"])
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)})
+        return Response(self.get_serializer(quote).data)
+
+    @action(detail=True, methods=["post"])
+    def revise(self, request, pk=None):
+        try:
+            quote = revise_quote(self.get_object(), request.user)
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)})
+        return Response(self.get_serializer(quote).data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=["get"])
+    def pdf(self, request, pk=None):
+        quote = self.get_object()
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas
+        except ImportError:
+            return Response({"detail": "PDF rendering is unavailable; install reportlab."}, status=503)
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        y = 800
+        for text in [f"Quote {quote.number} R{quote.revision}", quote.company, quote.buyer_email, f"Date: {quote.quote_date}  Valid until: {quote.valid_until}", "", *[f"{line.position}. {line.item} x {line.qty} @ {line.unit_price if line.unit_price is not None else 'On request'}" for line in quote.lines.all()], "", f"Subtotal: {quote.subtotal}", f"CGST: {quote.cgst}  SGST: {quote.sgst}  IGST: {quote.igst}", f"Total: {quote.total if quote.total is not None else 'GST not set'}", quote.notes]:
+            if y < 50:
+                pdf.showPage(); y = 800
+            pdf.drawString(48, y, str(text)[:110]); y -= 20
+        pdf.save()
+        response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+        response["Content-Disposition"] = f'attachment; filename="{quote.number}-R{quote.revision}.pdf"'
+        return response
+
+
+class QuoteStatsView(APIView):
+    def get_permissions(self):
+        if connection.schema_name == get_public_schema_name():
+            return [IsPlatformAdmin()]
+        return [IsAuthenticated()]
+
+    def get(self, request):
+        qs = Quote.objects.all()
+        if connection.schema_name == get_public_schema_name():
+            qs = qs.filter(tenant__isnull=True)
+        else:
+            qs = qs.filter(tenant=request.tenant)
+        start = request.query_params.get("from")
+        end = request.query_params.get("to")
+        if start:
+            qs = qs.filter(quote_date__gte=start)
+        if end:
+            qs = qs.filter(quote_date__lte=end)
+        stats = qs.aggregate(open=Count("id", filter=Q(status="sent")), accepted=Count("id", filter=Q(status="accepted")), rejected=Count("id", filter=Q(status="rejected")), expired=Count("id", filter=Q(status="expired")), pipeline=Sum("total", filter=Q(status="sent")))
+        denominator = stats["accepted"] + stats["rejected"] + stats["expired"]
+        stats["win_rate"] = round(stats["accepted"] * 100 / denominator, 2) if denominator else 0
+        return Response(stats)
+
+
+class QuoteTaxSettingsView(APIView):
+    """Get or update the seller GST state for the current schema's quote owner."""
+
+    def get_permissions(self):
+        if connection.schema_name == get_public_schema_name():
+            return [IsPlatformAdmin()]
+        return [IsAuthenticated()]
+
+    def _get_settings(self, request):
+        if connection.schema_name == get_public_schema_name():
+            tenant = None
+            defaults = {"state_code": "29", "state_name": "Karnataka"}
+        else:
+            tenant = request.tenant
+            gstin = tenant.gst_number or ""
+            seller_code = gstin[:2] if gstin[:2].isdigit() else ""
+            defaults = {"state_code": seller_code, "state_name": ""}
+        settings_obj, _ = QuoteTaxSettings.objects.get_or_create(tenant=tenant, defaults=defaults)
+        return settings_obj, tenant
+
+    def get(self, request):
+        settings_obj, _ = self._get_settings(request)
+        return Response(QuoteTaxSettingsSerializer(settings_obj).data)
+
+    def patch(self, request):
+        settings_obj, tenant = self._get_settings(request)
+        serializer = QuoteTaxSettingsSerializer(settings_obj, data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+
+        quotes = Quote.objects.filter(status=Quote.Status.DRAFT)
+        quotes = quotes.filter(tenant=tenant) if tenant else quotes.filter(tenant__isnull=True)
+        for quote in quotes:
+            recalculate(quote)
+        return Response(serializer.data)
+
+
+class PublicQuoteResponseView(APIView):
+    permission_classes = [AllowAny]
+    authentication_classes = []
+
+    def get(self, request, token):
+        try:
+            quote = Quote.objects.prefetch_related("lines").get(accept_token=token)
+        except Quote.DoesNotExist:
+            return Response({"detail": "Quote not found."}, status=404)
+        if quote.status != Quote.Status.SENT or quote.valid_until < timezone.localdate():
+            return Response({"detail": "This quote is no longer available."}, status=410)
+        return Response({
+            "number": quote.number,
+            "revision": quote.revision,
+            "company": quote.company,
+            "quote_date": quote.quote_date,
+            "valid_until": quote.valid_until,
+            "lines": QuoteLineSerializer(quote.lines.all(), many=True).data,
+            "subtotal": quote.subtotal,
+            "cgst": quote.cgst,
+            "sgst": quote.sgst,
+            "igst": quote.igst,
+            "freight": quote.freight,
+            "total": quote.total,
+            "notes": quote.notes,
+        })
+
+    def post(self, request, token):
+        accepted = request.data.get("accepted")
+        if not isinstance(accepted, bool):
+            raise ValidationError({"accepted": "Must be a boolean."})
+        try:
+            quote = respond_to_quote(token, accepted)
+        except Quote.DoesNotExist:
+            return Response({"detail": "Quote not found."}, status=404)
+        except ValueError as exc:
+            raise ValidationError({"detail": str(exc)})
+        return Response({"number": quote.number, "status": quote.status})

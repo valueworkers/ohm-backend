@@ -1,14 +1,30 @@
 from django.contrib import admin, messages
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 
 from .models import (
     Domain,
     Feature,
+    DocumentSequence,
+    Invoice,
+    InvoiceItem,
+    Payment,
     Plan,
     PlatformAdmin,
+    Quotation,
+    QuotationItem,
     Subscription,
     Tenant,
     TenantProvisioning,
+)
+from .services import (
+    BillingError,
+    accept_quotation,
+    create_invoice_from_accepted_quotation,
+    issue_invoice,
+    recalculate_billing_totals,
+    send_quotation,
+    _next_document_number,
 )
 
 
@@ -22,7 +38,7 @@ class DomainInline(admin.TabularInline):
 class SubscriptionInline(admin.TabularInline):
     model = Subscription
     extra = 0
-    fields = ("plan", "status", "starts_at", "ends_at", "trial_ends_at")
+    fields = ("plan", "price_billing_period", "price_currency", "price_amount", "status", "starts_at", "ends_at", "trial_ends_at")
     show_change_link = True
 
 
@@ -36,11 +52,166 @@ class FeatureAdmin(admin.ModelAdmin):
 
 @admin.register(Plan)
 class PlanAdmin(admin.ModelAdmin):
-    list_display = ("name", "code", "max_employees", "max_branches", "is_active")
+    list_display = ("name", "code", "billing_period", "currency", "amount", "is_active")
     list_filter = ("is_active",)
     search_fields = ("code", "name")
     filter_horizontal = ("features",)
     prepopulated_fields = {"code": ("name",)}
+
+
+class QuotationItemInline(admin.TabularInline):
+    model = QuotationItem
+    extra = 0
+
+    def has_add_permission(self, request, obj=None):
+        return obj is None or obj.status == Quotation.Status.DRAFT
+
+    def has_change_permission(self, request, obj=None):
+        return obj is None or obj.status == Quotation.Status.DRAFT
+
+    def has_delete_permission(self, request, obj=None):
+        return obj is None or obj.status == Quotation.Status.DRAFT
+
+
+@admin.register(Quotation)
+class QuotationAdmin(admin.ModelAdmin):
+    list_display = ("number", "billing_name", "plan", "status", "total", "currency", "valid_until", "created_at")
+    list_filter = ("status", "currency", "plan")
+    search_fields = ("number", "billing_name", "billing_email")
+    readonly_fields = (
+        "number", "status", "subtotal", "tax_amount", "total", "sent_at",
+        "responded_at", "created_at", "updated_at",
+    )
+    inlines = (QuotationItemInline,)
+    actions = ("send_selected", "accept_selected", "create_invoices")
+
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.number = _next_document_number("QT")
+        super().save_model(request, obj, form, change)
+
+    def get_readonly_fields(self, request, obj=None):
+        if obj and obj.status != Quotation.Status.DRAFT:
+            return tuple(field.name for field in self.model._meta.fields if field.name != "id")
+        return self.readonly_fields
+
+    def save_related(self, request, form, formsets, change):
+        super().save_related(request, form, formsets, change)
+        try:
+            recalculate_billing_totals(form.instance)
+        except BillingError as exc:
+            raise DjangoValidationError(str(exc)) from exc
+
+    @admin.action(description="Send selected draft quotations")
+    def send_selected(self, request, queryset):
+        self._run_quotation_action(request, queryset, send_quotation, "quotation(s) sent")
+
+    @admin.action(description="Mark selected sent quotations as accepted")
+    def accept_selected(self, request, queryset):
+        self._run_quotation_action(request, queryset, accept_quotation, "quotation(s) accepted")
+
+    @admin.action(description="Create invoices for selected accepted quotations")
+    def create_invoices(self, request, queryset):
+        created = 0
+        errors = []
+        for quote in queryset:
+            try:
+                create_invoice_from_accepted_quotation(quote.pk)
+                created += 1
+            except BillingError as exc:
+                errors.append(f"{quote.number}: {exc}")
+        self.message_user(request, f"Invoices ready: {created}.", messages.SUCCESS if not errors else messages.WARNING)
+        for error in errors:
+            self.message_user(request, error, messages.ERROR)
+
+    def _run_quotation_action(self, request, queryset, action, success_text):
+        changed = 0
+        errors = []
+        for quote in queryset:
+            try:
+                action(quote.pk)
+                changed += 1
+            except BillingError as exc:
+                errors.append(f"{quote.number}: {exc}")
+        self.message_user(request, f"{changed} {success_text}.", messages.SUCCESS if not errors else messages.WARNING)
+        for error in errors:
+            self.message_user(request, error, messages.ERROR)
+
+
+class InvoiceItemInline(admin.TabularInline):
+    model = InvoiceItem
+    extra = 0
+    readonly_fields = ("description", "quantity", "unit_price", "amount")
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+class PaymentInline(admin.TabularInline):
+    model = Payment
+    extra = 0
+    readonly_fields = (
+        "id", "invoice", "amount", "currency", "method", "status", "gateway",
+        "gateway_order_id", "gateway_payment_id", "reference", "gateway_response",
+        "failure_reason", "paid_at", "recorded_by", "created_at",
+    )
+    can_delete = False
+
+    def has_add_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    list_display = ("number", "tenant", "status", "total", "currency", "issue_date", "due_date")
+    list_filter = ("status", "currency", "issue_date")
+    search_fields = ("number", "tenant__name", "billing_name", "billing_email")
+    readonly_fields = (
+        "number", "tenant", "subscription", "quotation", "status", "billing_name",
+        "billing_email", "gst_number", "billing_address", "currency", "subtotal",
+        "discount", "tax_rate", "tax_amount", "total", "period_start", "period_end",
+        "issue_date", "due_date", "notes", "pdf", "created_at", "updated_at",
+    )
+    inlines = (InvoiceItemInline, PaymentInline)
+    actions = ("issue_selected",)
+
+    def has_add_permission(self, request):
+        return False
+
+    @admin.action(description="Issue selected draft invoices")
+    def issue_selected(self, request, queryset):
+        changed = 0
+        errors = []
+        for invoice in queryset:
+            try:
+                issue_invoice(invoice.pk)
+                changed += 1
+            except BillingError as exc:
+                errors.append(f"{invoice.number}: {exc}")
+        self.message_user(request, f"{changed} invoice(s) issued.", messages.SUCCESS if not errors else messages.WARNING)
+        for error in errors:
+            self.message_user(request, error, messages.ERROR)
+
+
+@admin.register(Payment)
+class PaymentAdmin(admin.ModelAdmin):
+    list_display = ("invoice", "gateway", "gateway_payment_id", "amount", "currency", "method", "status", "paid_at")
+    list_filter = ("gateway", "method", "status", "currency")
+    search_fields = ("invoice__number", "gateway_payment_id", "reference")
+    readonly_fields = ("id", "created_at", "paid_at")
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
+@admin.register(DocumentSequence)
+class DocumentSequenceAdmin(admin.ModelAdmin):
+    list_display = ("prefix", "year", "last_value")
+    readonly_fields = ("prefix", "year", "last_value")
 
 
 @admin.register(Tenant)
@@ -80,7 +251,7 @@ class DomainAdmin(admin.ModelAdmin):
 
 @admin.register(Subscription)
 class SubscriptionAdmin(admin.ModelAdmin):
-    list_display = ("tenant", "plan", "status", "starts_at", "ends_at", "trial_ends_at")
+    list_display = ("tenant", "plan", "price_billing_period", "price_currency", "price_amount", "status", "starts_at", "ends_at", "trial_ends_at")
     list_filter = ("status", "plan")
     search_fields = ("tenant__name", "tenant__schema_name", "billing_email")
     autocomplete_fields = ("tenant",)

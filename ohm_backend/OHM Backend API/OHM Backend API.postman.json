@@ -272,7 +272,8 @@
               ],
               "query": [],
               "variable": []
-            }
+            },
+            "description": "Pricing is configured on the selected plan."
           },
           "response": [
             {
@@ -324,6 +325,146 @@
             "strictSSL": false,
             "followRedirects": true
           }
+        },
+        {
+          "name": "Public: review sent quote",
+          "description": "Uses the buyer’s quote accept token. No login required.",
+          "event": [],
+          "auth": {},
+          "request": {
+            "auth": {
+              "type": "noauth",
+              "noauth": []
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "string"
+              }
+            ],
+            "body": {},
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/public/quotes/{{quoteAcceptToken}}/respond/",
+              "path": [
+                "api",
+                "platform",
+                "public",
+                "quotes",
+                "{{quoteAcceptToken}}",
+                "respond"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public: accept quote",
+          "description": "No login required. Replace quoteAcceptToken with the token from the buyer link.",
+          "event": [],
+          "auth": {},
+          "request": {
+            "auth": {
+              "type": "noauth",
+              "noauth": []
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "string"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "string"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/public/quotes/{{quoteAcceptToken}}/respond/",
+              "path": [
+                "api",
+                "platform",
+                "public",
+                "quotes",
+                "{{quoteAcceptToken}}",
+                "respond"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accepted\": true\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Public: reject quote",
+          "description": "No login required.",
+          "event": [],
+          "auth": {},
+          "request": {
+            "auth": {
+              "type": "noauth",
+              "noauth": []
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "string"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "string"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/platform/public/quotes/{{quoteAcceptToken}}/respond/",
+              "path": [
+                "api",
+                "platform",
+                "public",
+                "quotes",
+                "{{quoteAcceptToken}}",
+                "respond"
+              ],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "query": [],
+              "variable": []
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accepted\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": []
         }
       ]
     },
@@ -1978,7 +2119,8 @@
                   ],
                   "query": [],
                   "variable": []
-                }
+                },
+                "description": "Pricing is configured on the selected plan."
               },
               "response": [
                 {
@@ -3151,7 +3293,8 @@
                   ],
                   "query": [],
                   "variable": []
-                }
+                },
+                "description": "Pricing is configured on the selected plan."
               },
               "response": [
                 {
@@ -4027,6 +4170,596 @@
                   }
                 },
                 "description": "Revokes all sessions except the current session. Send current_password or a fresh login otp."
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "05 - Quotes and tax settings (Public)",
+          "description": "Public-schema quotes are managed by platform admins. Quote state is kept separate from tenant quotes.",
+          "item": [
+            {
+              "name": "Get quote tax settings",
+              "description": "Gets the public seller GST state. The initial public record is Karnataka (29).",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/tax-settings/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "tax-settings"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Update quote tax settings",
+              "description": "Updates public seller GST state. Tenant equivalent is in the Tenant Quotes folder.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/tax-settings/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "tax-settings"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"state_code\": \"29\",\n  \"state_name\": \"Karnataka\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create quote draft",
+              "description": "Creates a public-scope draft. Saves returned id to quoteId.",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if(pm.response.code===201)pm.environment.set('quoteId',pm.response.json().id);"
+                    ]
+                  }
+                }
+              ],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"company\": \"Example Clinic\",\n  \"attention\": \"Accounts Payable\",\n  \"address\": \"MG Road, Bengaluru\",\n  \"state\": \"Karnataka\",\n  \"buyer_email\": \"accounts@example.com\",\n  \"ship_to\": \"MG Road, Bengaluru\",\n  \"your_ref\": \"REQ-1001\",\n  \"valid_days\": 30,\n  \"notes\": \"Quote for requested services\",\n  \"freight\": 0,\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package \\u00b7 monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List quotes",
+              "description": "Optional filters: status and range (days).",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/?status=draft&range=30",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "draft",
+                      "type": "text"
+                    },
+                    {
+                      "key": "range",
+                      "value": "30",
+                      "type": "text"
+                    }
+                  ],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Get quote",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Update draft quote",
+              "description": "Drafts only can be edited.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"notes\": \"Updated terms before sending\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Send test quote",
+              "description": "Sends a test email without changing quote status.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/send-test/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}",
+                    "send-test"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"recipients\": [\n    \"qa@example.com\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Send quote",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/send/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}",
+                    "send"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create revision",
+              "description": "",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if(pm.response.code===201)pm.environment.set('quoteId',pm.response.json().id);"
+                    ]
+                  }
+                }
+              ],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/revise/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}",
+                    "revise"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Download quote PDF",
+              "description": "Downloads the quote PDF.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/pdf/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}",
+                    "pdf"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Quote analytics",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/stats/?from=2026-01-01&to=2026-12-31",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "stats"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "2026-01-01",
+                      "type": "text"
+                    },
+                    {
+                      "key": "to",
+                      "value": "2026-12-31",
+                      "type": "text"
+                    }
+                  ],
+                  "variable": []
+                },
+                "body": {}
               },
               "response": []
             }
@@ -8622,6 +9355,640 @@
               "response": []
             }
           ]
+        },
+        {
+          "name": "07 - Quotes and tax settings (Tenant)",
+          "description": "Authenticated tenant quote management. All quote requests require X-Tenant and are restricted to that workspace.",
+          "item": [
+            {
+              "name": "Get tenant quote tax settings",
+              "description": "Gets this tenant’s seller GST state. A new record is initialized from the tenant GSTIN when available.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/tax-settings/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "tax-settings"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Update tenant quote tax settings",
+              "description": "Updates the seller state for this tenant only.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/tax-settings/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "tax-settings"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"state_code\": \"29\",\n  \"state_name\": \"Karnataka\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create tenant quote draft",
+              "description": "Creates a quote owned by the X-Tenant workspace. Saves returned id to quoteId.",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if(pm.response.code===201)pm.environment.set('quoteId',pm.response.json().id);"
+                    ]
+                  }
+                }
+              ],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"company\": \"Example Clinic\",\n  \"attention\": \"Accounts Payable\",\n  \"address\": \"MG Road, Bengaluru\",\n  \"state\": \"Karnataka\",\n  \"buyer_email\": \"accounts@example.com\",\n  \"ship_to\": \"MG Road, Bengaluru\",\n  \"your_ref\": \"REQ-1001\",\n  \"valid_days\": 30,\n  \"notes\": \"Quote for requested services\",\n  \"freight\": 0,\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package \\u00b7 monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "List tenant quotes",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/?status=draft&range=30",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "draft",
+                      "type": "text"
+                    },
+                    {
+                      "key": "range",
+                      "value": "30",
+                      "type": "text"
+                    }
+                  ],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Get tenant quote",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Update tenant draft",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"notes\": \"Updated terms before sending\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Send tenant test quote",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/send-test/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}",
+                    "send-test"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"recipients\": [\n    \"qa@example.com\"\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Send tenant quote",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/send/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}",
+                    "send"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Create tenant quote revision",
+              "description": "",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if(pm.response.code===201)pm.environment.set('quoteId',pm.response.json().id);"
+                    ]
+                  }
+                }
+              ],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/revise/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}",
+                    "revise"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Download tenant quote PDF",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{quoteId}}/pdf/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{quoteId}}",
+                    "pdf"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Tenant quote analytics",
+              "description": "",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/stats/",
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "stats"
+                  ],
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            }
+          ]
         }
       ]
     },
@@ -9056,7 +10423,7 @@
                 "platform",
                 "my",
                 "tenants",
-                "{{tenant_id}}"
+                "{{tenantId}}"
               ],
               "host": [
                 "{{baseUrl}}"

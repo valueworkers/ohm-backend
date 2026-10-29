@@ -334,7 +334,7 @@ If unavailable or reserved:
   "password": "InitialAdminPassword123!"
 }
 ```
-- `requested_plan` may be omitted; plan ID `1` (the default Trial plan) is used. If supplied, it must reference an active plan. Provisioning subscribes the tenant to the chosen plan and copies its active features to the tenant's enabled modules. The default Trial plan creates a trial subscription with a 14-day trial period.
+- `requested_plan` may be omitted; plan ID `1` (the default Trial plan) is used. Provisioning subscribes the tenant to the chosen plan and copies its active features to the tenant's enabled modules. The default Trial plan creates a trial subscription with a 14-day trial period.
 - **Response `201 Created`**:
 ```json
 {
@@ -412,7 +412,7 @@ If unavailable or reserved:
 }
 ```
 - **Response `201 Created`**: Automatically seeds default permissions and groups.
-- `plan` may be omitted; plan ID `1` (the default Trial plan) is used. If supplied, it must reference an active plan. The tenant is subscribed to it during creation; its active features set enabled modules. Plan ID `1` creates a trial subscription with a 14-day trial period.
+- `plan` may be omitted; plan ID `1` (the default Trial plan) is used. If supplied, it must reference an active plan. The tenant is subscribed to the plan during creation; its active features set enabled modules. Plan ID `1` creates a trial subscription with a 14-day trial period.
 
 ### 6.3 Suspend / Re-activate Tenant
 - **Endpoint**: `POST /api/platform/tenants/{id}/suspend/`
@@ -502,6 +502,7 @@ If unavailable or reserved:
 - `POST /api/platform/plans/` — Create plan (admin).
 - `GET/PUT/PATCH /api/platform/plans/{id}/` — Inspect or update plan.
 - `DELETE /api/platform/plans/{id}/` — Delete plan (in-use plans cannot be deleted; soft-deactivate instead).
+- Plan responses include the current billing period, currency, amount, setup fee, and tax rate. Platform admins edit these fields on the plan in Django Admin.
 
 ### 8.2 Subscription Management
 - `GET /api/platform/subscriptions/` — List subscriptions (supports `?tenant=<id>&status=active`).
@@ -511,10 +512,16 @@ If unavailable or reserved:
   "tenant": 2,
   "plan": 1,
   "status": "active",
-  "start_date": "2026-10-21T00:00:00Z"
+  "starts_at": "2026-10-21T00:00:00Z"
 }
 ```
 - `GET/PUT/PATCH/DELETE /api/platform/subscriptions/{id}/` — Manage subscriptions.
+- Subscription responses include `price_details`, a snapshot of the plan pricing selected when the subscription was created or invoiced.
+
+### 8.3 Billing records and workflow
+- `Quotation`, `Invoice`, and `Payment` are managed in the platform Django Admin. Quotation admin actions mark quotes sent or accepted and create invoices; invoice actions issue draft invoices. Sending a quote changes its workflow status; email delivery is not wired into this action.
+- Billing calculations, concurrent-safe `QT-YYYY-NNNN` / `INV-YYYY-NNNN` numbering, invoice payment-status updates, and subscription activation/extension are implemented in `apps.platform.services`.
+- A provider-specific payment webhook endpoint is not configured. A gateway integration must verify the provider signature before calling `record_gateway_payment`; the service uses the gateway/payment ID as an idempotency key.
 
 ---
 
@@ -656,3 +663,15 @@ All personal settings routes require `Authorization: Bearer <token>` and operate
 Password reset tokens from `POST /api/verify-otp/` expire after 10 minutes and are single-use. Password changes and resets revoke all active sessions, so users must sign in again. `PUT /api/profile/` does not accept password changes.
 
 The existing `POST /api/change-password/` endpoint handles password changes with current-password verification and Django's configured password validators. `GET /api/settings/security/sessions/` returns the authenticated user's paginated session inventory. `POST /api/settings/security/sessions/revoke-all/` revokes all other sessions and requires the current password or a fresh login OTP. Billing-provider operations, 2FA, recovery codes, backups, and import/export jobs are not implemented by this backend and are not exposed as nonfunctional settings endpoints. Email verification delivery uses the configured Django email backend.
+
+## Prospect Quotes
+
+Prospect quotes are available to platform admins in the public schema and to authenticated tenant users with `X-Tenant: <slug>`. Tenant quote and analytics queries are scoped to the active tenant.
+
+- `GET/PATCH /api/platform/quotes/tax-settings/` — Read or update the seller GST state for the current scope. Public settings are seeded as Karnataka (`29`); each tenant has its own record, initialized from its GSTIN when available.
+- `GET/POST /api/platform/quotes/` — List quotes or create a draft.
+- `GET/PATCH /api/platform/quotes/{id}/` — Retrieve or update a draft.
+- `POST /api/platform/quotes/{id}/send/`, `/send-test/`, `/revise/` — Send, test-send, or create a revision.
+- `GET /api/platform/quotes/{id}/pdf/` — Download a PDF.
+- `GET/POST /api/platform/public/quotes/{accept_token}/respond/` — Publicly view and accept or reject a sent quote.
+- `GET /api/platform/quotes/stats/` — Quote analytics for the current scope.

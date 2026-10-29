@@ -347,3 +347,6 @@ To introduce a new operational feature (e.g. `booking`, `invoices`, `records`):
    python manage.py migrate_schemas --tenant
    python manage.py create_default_groups
    ```
+
+### Prospect Quotes
+Platform admins manage public-schema quotes at `/api/platform/quotes/`. Authenticated tenant users use the same endpoints with `X-Tenant: <slug>`; quotes, revisions, and analytics are scoped to that tenant. Both support draft editing, catalog lines backed by subscription Plans, custom/service/on-request lines, monthly quote numbering, tax snapshots, test and regular email sends, revisions, PDF downloads, and public accept/reject responses. `GET/POST /api/platform/public/quotes/<accept_token>/respond/` lets a recipient review and respond without authentication. Analytics are available at `/api/platform/quotes/stats/`; filter quote lists with `?status=sent&range=30` and stats with `?from=YYYY-MM-DD&to=YYYY-MM-DD`. Seller GST state is stored in the database and managed at `/api/platform/quotes/tax-settings/` for the current scope. The public scope is seeded with Karnataka (GST state code `29`); each tenant can set its own state code or name. Daily expiry is handled by the configured Celery beat task. PDF rendering requires the `reportlab` package from `requirements.txt`.
