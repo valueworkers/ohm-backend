@@ -2,13 +2,14 @@ from datetime import timedelta
 from io import BytesIO
 
 from django.db import IntegrityError, transaction, connection
-from django.db.models import Count, Q, Sum
+from django.db.models import Count, OuterRef, Q, Subquery, Sum
 from django.http import HttpResponse
 from django.db.models import ProtectedError
 from django.contrib.contenttypes.models import ContentType
 from django.apps import apps
 from django.conf import settings
 from django.utils import timezone
+from django.utils.dateparse import parse_date
 from django_tenants.utils import get_public_schema_name, schema_context
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -573,7 +574,8 @@ class QuoteStatsView(APIView):
         return [IsAuthenticated()]
 
     def get(self, request):
-        qs = Quote.objects.all()
+        latest_revision = Quote.objects.filter(number=OuterRef("number")).order_by("-revision").values("revision")[:1]
+        qs = Quote.objects.annotate(_latest_revision=Subquery(latest_revision)).filter(revision=Subquery(latest_revision))
         if connection.schema_name == get_public_schema_name():
             qs = qs.filter(tenant__isnull=True)
         else:
@@ -581,10 +583,25 @@ class QuoteStatsView(APIView):
         start = request.query_params.get("from")
         end = request.query_params.get("to")
         if start:
-            qs = qs.filter(quote_date__gte=start)
+            parsed_start = parse_date(start)
+            if parsed_start is None:
+                raise ValidationError({"from": "Use a valid date in YYYY-MM-DD format."})
+            qs = qs.filter(quote_date__gte=parsed_start)
         if end:
-            qs = qs.filter(quote_date__lte=end)
-        stats = qs.aggregate(open=Count("id", filter=Q(status="sent")), accepted=Count("id", filter=Q(status="accepted")), rejected=Count("id", filter=Q(status="rejected")), expired=Count("id", filter=Q(status="expired")), pipeline=Sum("total", filter=Q(status="sent")))
+            parsed_end = parse_date(end)
+            if parsed_end is None:
+                raise ValidationError({"to": "Use a valid date in YYYY-MM-DD format."})
+            qs = qs.filter(quote_date__lte=parsed_end)
+        stats = qs.aggregate(
+            open=Count(
+                "id",
+                filter=Q(status="sent")),
+                accepted=Count("id", filter=Q(status="accepted")),
+                rejected=Count("id", filter=Q(status="rejected")),
+                expired=Count("id", filter=Q(status="expired")),
+                pipeline=Sum("total", filter=Q(status="sent")
+            )
+        )
         denominator = stats["accepted"] + stats["rejected"] + stats["expired"]
         stats["win_rate"] = round(stats["accepted"] * 100 / denominator, 2) if denominator else 0
         return Response(stats)
