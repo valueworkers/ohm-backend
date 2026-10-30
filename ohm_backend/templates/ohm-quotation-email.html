@@ -241,21 +241,33 @@
 
   <!-- Divider -->
   <tr><td style="padding:0 32px;"><div style="height:1px; background:#ececea; line-height:1px; font-size:0;">&nbsp;</div></td></tr>
-
-  <!-- Accept quote -->
+  
+  <!-- Accept / Reject quote -->
   <tr>
     <td style="padding:22px 32px 10px;">
       <div style="font-size:13px; font-weight:700; color:#1c1c1f; margin-bottom:14px;">Review this quote online</div>
       <table role="presentation" cellpadding="0" cellspacing="0" border="0">
         <tr>
-          <td style="background:#54575d; border-radius:8px;">
-            <a href="{{ accept_url }}" target="_blank" style="display:inline-block; padding:11px 20px; font-size:13px; font-weight:600; color:#ffffff; text-decoration:none;">View quote details &nbsp;&rarr;</a>
+          <td valign="top" style="padding-right:10px;">
+            <form method="post" action-xhr="{{ accept_url }}">
+              <input type="hidden" name="accepted" value="true">
+              <button type="submit" style="display:inline-block; padding:11px 20px; font-size:13px; font-weight:600; color:#ffffff; background:#1f8a4c; border:0; border-radius:8px; cursor:pointer;">Accept quote</button>
+              <div submit-success><template type="amp-mustache">Quote accepted. Thank you!</template></div>
+              <div submit-error><template type="amp-mustache">We couldn't record your response. Please contact the sender.</template></div>
+            </form>
+          </td>
+          <td valign="top">
+            <form method="post" action-xhr="{{ accept_url }}">
+              <input type="hidden" name="accepted" value="false">
+              <button type="submit" style="display:inline-block; padding:11px 20px; font-size:13px; font-weight:600; color:#ffffff; background:#54575d; border:0; border-radius:8px; cursor:pointer;">Reject quote</button>
+              <div submit-success><template type="amp-mustache">Your response has been recorded.</template></div>
+              <div submit-error><template type="amp-mustache">We couldn't record your response. Please contact the sender.</template></div>
+            </form>
           </td>
         </tr>
       </table>
     </td>
   </tr>
-
   <!-- Signature -->
   <tr>
     <td style="padding:26px 32px 28px;" align="right">
