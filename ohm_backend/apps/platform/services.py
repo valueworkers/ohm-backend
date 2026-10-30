@@ -8,8 +8,10 @@ from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, send_mail
 from django.db import IntegrityError, transaction
 from django.dispatch import Signal
+from django.template.loader import render_to_string
 from django.utils import timezone
 from django.urls import reverse
+from django.utils.html import format_html_join
 from django_tenants.utils import get_public_schema_name, schema_context
 from apps.platform.tasks import send_tenant_welcome_email_task
 from apps.accounts.models import User
@@ -572,15 +574,43 @@ def send_quote(quote, user, *, test_recipients=None, response_url=None):
         response_url = response_url or reverse(
             "public-quote-response", kwargs={"token": quote.accept_token}
         )
-        email.attach_alternative(
-            f"<p>Please find quote {quote.number} revision {quote.revision}. "
-            f"Total: {quote.total}. Valid until {quote.valid_until}.</p>"
-            "<p>Accept or reject directly in an AMP-enabled email client. If the buttons are "
-            "unavailable, contact the sender to record your response.</p>",
-            "text/html",
-        )
-        amp_body = f'''<!doctype html><html amp4email><head><meta charset="utf-8"><script async src="https://cdn.ampproject.org/v0.js"></script><script async custom-element="amp-mustache" src="https://cdn.ampproject.org/v0/amp-mustache-0.2.js"></script><style amp4email-boilerplate>body{{visibility:hidden}}</style><style amp-custom>body{{font-family:Arial,sans-serif;color:#222;padding:24px}}.button{{border:0;border-radius:5px;padding:12px 20px;color:#fff;font-size:16px;margin-right:8px}}.yes{{background:#16803c}}.no{{background:#b42318}}</style></head><body><h2>Quote {quote.number} · Revision {quote.revision}</h2><p>Total: {quote.total} · Valid until {quote.valid_until}</p><form method="post" action-xhr="{response_url}"><input type="hidden" name="accepted" value="true"><button class="button yes" type="submit">Accept quote</button><div submit-success><template type="amp-mustache">Quote accepted. Thank you.</template></div><div submit-error><template type="amp-mustache">We couldn't record your response. Please contact the sender.</template></div></form><form method="post" action-xhr="{response_url}"><input type="hidden" name="accepted" value="false"><button class="button no" type="submit">Reject quote</button><div submit-success><template type="amp-mustache">Your response has been recorded.</template></div><div submit-error><template type="amp-mustache">We couldn't record your response. Please contact the sender.</template></div></form></body></html>'''
-        email.attach_alternative(amp_body, "text/x-amp-html")
+        priced_lines = [
+            {
+                "serial": line.position,
+                "name": line.item,
+                "description": line.specification or "",
+                "meta": line.hsn_sac or line.kind.replace("_", " ").title(),
+                "qty": line.qty,
+                "amount": "On request" if line.unit_price is None else f"₹{line.qty * line.unit_price:,.2f}",
+            }
+            for line in quote.lines.all()
+        ]
+        address_lines = [line for line in quote.address.splitlines() if line.strip()]
+        email_context = {
+            "quote_number": quote.number,
+            "revision": f"R{quote.revision}",
+            "quote_date": quote.quote_date.strftime("%d %b %Y"),
+            "valid_until": quote.valid_until.strftime("%d %b %Y"),
+            "customer_name": quote.company,
+            "customer_lines": format_html_join("<br />", "{}", ((line,) for line in address_lines)),
+            "gstin": quote.gstin or "—",
+            "customer_region": quote.state,
+            "ship_to": quote.ship_to or "Same as above",
+            "your_contact_name": user.get_full_name() or "O-HM Senior Care",
+            "your_contact_email": user.email or settings.DEFAULT_FROM_EMAIL,
+            "your_ref": quote.your_ref or "—",
+            "items": priced_lines,
+            "subtotal": f"₹{quote.subtotal:,.2f}",
+            "packing_value": "—",
+            "freight_value": "—" if quote.freight is None else f"₹{quote.freight:,.2f}",
+            "gst": f"₹{quote.cgst + quote.sgst + quote.igst:,.2f}",
+            "total": f"₹{quote.total:,.2f}",
+            "amount_in_words": "",
+            "terms": quote.notes.splitlines() if quote.notes else [],
+            "accept_url": response_url,
+        }
+        email.attach_alternative(render_to_string("ohm-quotation-email.html", email_context), "text/html")
+        email.attach_alternative(render_to_string("ohm-quotation-email.amp.html", email_context), "text/x-amp-html")
     email.send(fail_silently=False)
     if test_recipients:
         QuoteEvent.objects.create(quote=quote, kind="test_sent", detail=", ".join(recipients)[:300], actor=user if quote.tenant_id is None else None)
