@@ -5,10 +5,11 @@ from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
 
 from django.conf import settings
-from django.core.mail import send_mail
+from django.core.mail import EmailMultiAlternatives, send_mail
 from django.db import IntegrityError, transaction
 from django.dispatch import Signal
 from django.utils import timezone
+from django.urls import reverse
 from django_tenants.utils import get_public_schema_name, schema_context
 from apps.platform.tasks import send_tenant_welcome_email_task
 from apps.accounts.models import User
@@ -553,7 +554,7 @@ def create_quote(user, data, lines, *, tenant=None):
 
 
 @transaction.atomic
-def send_quote(quote, user, *, test_recipients=None):
+def send_quote(quote, user, *, test_recipients=None, response_url=None):
     quote = Quote.objects.select_for_update().get(pk=quote.pk)
     if quote.status != Quote.Status.DRAFT:
         raise ValueError("Only draft quotes can be sent.")
@@ -562,8 +563,25 @@ def send_quote(quote, user, *, test_recipients=None):
         raise ValueError("Set a valid GSTIN or state before sending this quote.")
     recipients = test_recipients or [quote.buyer_email]
     subject = f"{'[TEST] ' if test_recipients else ''}Quote {quote.number} R{quote.revision}"
-    message = f"Please find quote {quote.number} revision {quote.revision}. Total: {quote.total}. Valid until {quote.valid_until}."
-    send_mail(subject, message, None, recipients, fail_silently=False)
+    message = (
+        f"Please find quote {quote.number} revision {quote.revision}. Total: {quote.total}. "
+        f"Valid until {quote.valid_until}. Use the Accept or Reject buttons in an AMP-enabled email client."
+    )
+    email = EmailMultiAlternatives(subject, message, settings.DEFAULT_FROM_EMAIL, recipients)
+    if not test_recipients:
+        response_url = response_url or reverse(
+            "public-quote-response", kwargs={"token": quote.accept_token}
+        )
+        email.attach_alternative(
+            f"<p>Please find quote {quote.number} revision {quote.revision}. "
+            f"Total: {quote.total}. Valid until {quote.valid_until}.</p>"
+            "<p>Accept or reject directly in an AMP-enabled email client. If the buttons are "
+            "unavailable, contact the sender to record your response.</p>",
+            "text/html",
+        )
+        amp_body = f'''<!doctype html><html amp4email><head><meta charset="utf-8"><script async src="https://cdn.ampproject.org/v0.js"></script><script async custom-element="amp-mustache" src="https://cdn.ampproject.org/v0/amp-mustache-0.2.js"></script><style amp4email-boilerplate>body{{visibility:hidden}}</style><style amp-custom>body{{font-family:Arial,sans-serif;color:#222;padding:24px}}.button{{border:0;border-radius:5px;padding:12px 20px;color:#fff;font-size:16px;margin-right:8px}}.yes{{background:#16803c}}.no{{background:#b42318}}</style></head><body><h2>Quote {quote.number} · Revision {quote.revision}</h2><p>Total: {quote.total} · Valid until {quote.valid_until}</p><form method="post" action-xhr="{response_url}"><input type="hidden" name="accepted" value="true"><button class="button yes" type="submit">Accept quote</button><div submit-success><template type="amp-mustache">Quote accepted. Thank you.</template></div><div submit-error><template type="amp-mustache">We couldn't record your response. Please contact the sender.</template></div></form><form method="post" action-xhr="{response_url}"><input type="hidden" name="accepted" value="false"><button class="button no" type="submit">Reject quote</button><div submit-success><template type="amp-mustache">Your response has been recorded.</template></div><div submit-error><template type="amp-mustache">We couldn't record your response. Please contact the sender.</template></div></form></body></html>'''
+        email.attach_alternative(amp_body, "text/x-amp-html")
+    email.send(fail_silently=False)
     if test_recipients:
         QuoteEvent.objects.create(quote=quote, kind="test_sent", detail=", ".join(recipients)[:300], actor=user if quote.tenant_id is None else None)
         return quote

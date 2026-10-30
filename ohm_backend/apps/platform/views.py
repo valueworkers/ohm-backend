@@ -10,6 +10,7 @@ from django.apps import apps
 from django.conf import settings
 from django.utils import timezone
 from django.utils.dateparse import parse_date
+from django.urls import reverse
 from django_tenants.utils import get_public_schema_name, schema_context
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -523,7 +524,9 @@ class QuoteViewSet(viewsets.ModelViewSet):
     @action(detail=True, methods=["post"])
     def send(self, request, pk=None):
         try:
-            quote = send_quote(self.get_object(), request.user)
+            quote_obj = self.get_object()
+            response_url = request.build_absolute_uri(reverse("public-quote-response", kwargs={"token": quote_obj.accept_token}))
+            quote = send_quote(quote_obj, request.user, response_url=response_url)
         except ValueError as exc:
             raise ValidationError({"detail": str(exc)})
         return Response(self.get_serializer(quote).data)
@@ -648,6 +651,24 @@ class PublicQuoteResponseView(APIView):
     permission_classes = [AllowAny]
     authentication_classes = []
 
+    def _allowed_amp_sender(self, sender):
+        allowed = {email.strip().lower() for email in settings.QUOTE_AMP_ALLOWED_SENDERS if email.strip()}
+        return sender and sender.strip().lower() in allowed
+
+    def finalize_response(self, request, response, *args, **kwargs):
+        response = super().finalize_response(request, response, *args, **kwargs)
+        sender = request.headers.get("AMP-Email-Sender")
+        source_origin = request.query_params.get("__amp_source_origin")
+        if sender and self._allowed_amp_sender(sender):
+            response["AMP-Email-Allow-Sender"] = sender
+        elif source_origin and self._allowed_amp_sender(source_origin):
+            origin = request.headers.get("Origin")
+            if origin:
+                response["Access-Control-Allow-Origin"] = origin
+                response["AMP-Access-Control-Allow-Source-Origin"] = source_origin
+                response["Access-Control-Expose-Headers"] = "AMP-Access-Control-Allow-Source-Origin"
+        return response
+
     def get(self, request, token):
         try:
             quote = Quote.objects.prefetch_related("lines").get(accept_token=token)
@@ -672,7 +693,12 @@ class PublicQuoteResponseView(APIView):
         })
 
     def post(self, request, token):
+        amp_sender = request.headers.get("AMP-Email-Sender") or request.query_params.get("__amp_source_origin")
+        if amp_sender and not self._allowed_amp_sender(amp_sender):
+            raise PermissionDenied("This email sender is not allowed to submit AMP quote responses.")
         accepted = request.data.get("accepted")
+        if isinstance(accepted, str) and accepted.lower() in {"true", "false"}:
+            accepted = accepted.lower() == "true"
         if not isinstance(accepted, bool):
             raise ValidationError({"accepted": "Must be a boolean."})
         try:
