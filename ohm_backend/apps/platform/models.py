@@ -449,10 +449,10 @@ class QuoteCounter(models.Model):
     period = models.CharField(max_length=4, unique=True)
     last_seq = models.PositiveIntegerField(default=0)
 
-
 class QuoteTaxSettings(models.Model):
-    """Seller GST state configured once for the public control plane or per tenant."""
+    """Seller GST identity, configured once for the control plane or once per tenant."""
     tenant = models.ForeignKey(Tenant, null=True, blank=True, on_delete=models.CASCADE, related_name="quote_tax_settings")
+    gstin = models.CharField(max_length=15, blank=True)
     state_code = models.CharField(max_length=2, blank=True)
     state_name = models.CharField(max_length=60, blank=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -477,26 +477,56 @@ class Quote(models.Model):
         EXPIRED = "expired", "Expired"
         SUPERSEDED = "superseded", "Superseded"
 
-    number = models.CharField(max_length=24, db_index=True)
+    class SupplyType(models.TextChoices):
+        UNKNOWN = "unknown", "Unknown"
+        INTRA_STATE = "intra_state", "Intra-state (CGST + SGST)"
+        INTRA_UT = "intra_ut", "Intra-UT (CGST + UTGST)"
+        INTER_STATE = "inter_state", "Inter-state (IGST)"
+
+    number = models.CharField(max_length=30, db_index=True)
     revision = models.PositiveSmallIntegerField(default=0)
     status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
+
+    # --- Buyer ---
     company = models.CharField(max_length=200)
     attention = models.CharField(max_length=200, blank=True)
     address = models.TextField(blank=True)
     gstin = models.CharField(max_length=15, blank=True)
     state = models.CharField(max_length=60)
+    state_code = models.CharField(max_length=2, blank=True)
     buyer_email = models.EmailField()
+    cc_emails = models.JSONField(default=list, blank=True)
+    bcc_emails = models.JSONField(default=list, blank=True)
     ship_to = models.TextField(blank=True)
     your_ref = models.CharField(max_length=100, blank=True)
+
+    # --- Dates / text ---
     quote_date = models.DateField(default=timezone.localdate)
     valid_days = models.PositiveSmallIntegerField(default=30, validators=[MinValueValidator(1), MaxValueValidator(365)])
     notes = models.TextField(blank=True)
-    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    cgst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    sgst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    igst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    terms = models.TextField(blank=True)                            # NEW: one term per line
+
+    # --- GST snapshot (written by services.recalculate) ---
+    supply_type = models.CharField(max_length=12, choices=SupplyType.choices, default=SupplyType.UNKNOWN)  # NEW
+    place_of_supply_code = models.CharField(max_length=2, blank=True)   # NEW
+    seller_gstin = models.CharField(max_length=15, blank=True)          # NEW
+    seller_state_code = models.CharField(max_length=2, blank=True)      # NEW
+    seller_state_name = models.CharField(max_length=60, blank=True)     # NEW
+
+    # --- Amounts ---
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)        # gross: sum(qty x price)
+    discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # NEW: sum of line discounts
     freight = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    packing = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # NEW
+    charges_gst_rate = models.DecimalField(max_digits=4, decimal_places=2, default=18,
+                                           validators=[MinValueValidator(0), MaxValueValidator(100)])  # NEW: GST on freight+packing
+    taxable_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # NEW: lines + charges, after discount
+    cgst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sgst = models.DecimalField(max_digits=12, decimal_places=2, default=0)            # holds UTGST when supply_type == intra_ut
+    igst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    round_off = models.DecimalField(max_digits=5, decimal_places=2, default=0)        # NEW
     total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+
     accept_token = models.CharField(max_length=64, unique=True, default=secrets.token_urlsafe)
     sent_at = models.DateTimeField(null=True, blank=True)
     accepted_at = models.DateTimeField(null=True, blank=True)
@@ -509,19 +539,46 @@ class Quote(models.Model):
     class Meta:
         ordering = ["-quote_date", "-number", "-revision"]
         constraints = [models.UniqueConstraint(fields=["number", "revision"], name="uniq_quote_number_revision")]
+        indexes = [                                                  # NEW: back the list filters
+            models.Index(fields=["tenant", "status", "-quote_date"]),
+            models.Index(fields=["gstin"]),
+            models.Index(fields=["company"]),
+        ]
 
     @property
     def valid_until(self):
         from datetime import timedelta
         return self.quote_date + timedelta(days=self.valid_days)
 
+    @property
+    def state_tax_label(self):
+        return "UTGST" if self.supply_type == self.SupplyType.INTRA_UT else "SGST"
+
+
 
 class QuoteLine(models.Model):
     class Kind(models.TextChoices):
         CATALOG = "catalog", "Catalog"
-        CUSTOM = "custom", "Custom"
+        CUSTOM = "custom", "Custom service"
         SERVICE_VISIT = "service_visit", "Service visit"
+        MANPOWER = "manpower", "Man power"
         ON_REQUEST = "on_request", "On request"
+
+    class Uom(models.TextChoices):
+        PCS = "PCS", "Pcs"
+        NOS = "NOS", "Nos"
+        SET = "SET", "Set"
+        UNT = "UNT", "Unit"
+        HRS = "HRS", "Hours"
+        DAY = "DAY", "Days"
+        MTH = "MTH", "Months"
+        VST = "VST", "Visits"
+        KGS = "KGS", "Kg"
+        LTR = "LTR", "Litre"
+        MTR = "MTR", "Metre"
+        BOX = "BOX", "Box"
+        PAC = "PAC", "Pack"
+        OTH = "OTH", "Other"
 
     quote = models.ForeignKey(Quote, related_name="lines", on_delete=models.CASCADE)
     position = models.PositiveSmallIntegerField()
@@ -530,10 +587,19 @@ class QuoteLine(models.Model):
     item = models.CharField(max_length=200)
     specification = models.CharField(max_length=300, blank=True)
     hsn_sac = models.CharField(max_length=8, blank=True)
+    uom = models.CharField(max_length=3, choices=Uom.choices, default=Uom.PCS)                       # NEW
     qty = models.DecimalField(max_digits=8, decimal_places=2, default=1, validators=[MinValueValidator(Decimal("0.01"))])
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                           validators=[MinValueValidator(0), MaxValueValidator(100)])  # NEW
     lead_time = models.CharField(max_length=50, blank=True)
     gst_rate = models.DecimalField(max_digits=4, decimal_places=2, default=18, validators=[MinValueValidator(0), MaxValueValidator(100)])
+
+    taxable_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
 
     class Meta:
         ordering = ["position"]

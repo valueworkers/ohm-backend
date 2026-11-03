@@ -1,7 +1,7 @@
 import re
 from datetime import timedelta
 from zoneinfo import ZoneInfo
-
+from decimal import Decimal
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction, connection
@@ -22,6 +22,7 @@ from .models import (
 )
 from apps.accounts.services import AccountsService
 from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
+from . import gst
 
 DEFAULT_TRIAL_PLAN_ID = 1
 DEFAULT_TRIAL_DAYS = 14
@@ -414,13 +415,43 @@ class TenantProfileSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Enter a 3-letter currency code, e.g. INR.")
         return value
 
+class EmailListField(serializers.ListField):
+    """Accepts ["a@x.com"] or "a@x.com, b@y.com" (what the CC/BCC inputs send)."""
 
-# Prospect quote serializers
+    def __init__(self, **kwargs):
+        super().__init__(child=serializers.EmailField(), **kwargs)
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            data = [e.strip() for e in data.replace(";", ",").split(",") if e.strip()]
+        emails = super().to_internal_value(data)
+        return list(dict.fromkeys(e.lower() for e in emails))     # de-duplicate, keep order
+
 class QuoteLineSerializer(serializers.ModelSerializer):
+    uom = serializers.ChoiceField(choices=QuoteLine.Uom.choices, default=QuoteLine.Uom.PCS)
+    discount_percent = serializers.DecimalField(max_digits=5, decimal_places=2, min_value=0, max_value=100, default=0)
+
     class Meta:
         model = QuoteLine
-        fields = ("id", "position", "kind", "plan", "item", "specification", "hsn_sac", "qty", "unit_price", "lead_time", "gst_rate")
-        read_only_fields = ("id", "position")
+        fields = (
+            "id", "position", "kind", "plan", "item", "specification", "hsn_sac", "uom", "qty", "unit_price",
+            "discount_percent", "lead_time", "gst_rate",
+            # computed, read-only (shown as Taxable / IGST amt / Line total in the UI)
+            "taxable_value", "cgst_amount", "sgst_amount", "igst_amount", "line_total",
+        )
+        read_only_fields = ("id", "position", "taxable_value", "cgst_amount", "sgst_amount", "igst_amount", "line_total")
+
+    def validate_hsn_sac(self, value):
+        value = (value or "").strip()
+        if not value.isdigit() or len(value) not in (4, 6, 8):
+            raise serializers.ValidationError("HSN/SAC must be 4, 6 or 8 digits.")
+        return value
+
+    def validate_gst_rate(self, value):
+        if Decimal(value) not in gst.GST_RATES:
+            allowed = ", ".join(str(r) for r in gst.GST_RATES)
+            raise serializers.ValidationError(f"GST rate must be one of: {allowed}.")
+        return value
 
     def validate(self, attrs):
         kind = attrs.get("kind", getattr(self.instance, "kind", None))
@@ -435,26 +466,79 @@ class QuoteLineSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"unit_price": "A price is required for priced lines."})
         return attrs
 
-
 class QuoteEventSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuoteEvent
         fields = ("kind", "detail", "actor", "at")
 
-
 class QuoteSerializer(serializers.ModelSerializer):
     lines = QuoteLineSerializer(many=True)
     events = QuoteEventSerializer(many=True, read_only=True)
+    number = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    cc_emails = EmailListField(required=False)
+    bcc_emails = EmailListField(required=False)
     valid_until = serializers.DateField(read_only=True)
+    amount_in_words = serializers.CharField(read_only=True)
+    state_tax_label = serializers.CharField(read_only=True)
+    supply_type_display = serializers.CharField(source="get_supply_type_display", read_only=True)
+    freight = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, required=False, allow_null=True)
+    packing = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, required=False, allow_null=True)
+
     class Meta:
         model = Quote
-        fields = ("id", "number", "revision", "status", "company", "attention", "address", "gstin", "state", "buyer_email", "ship_to", "your_ref", "quote_date", "valid_days", "valid_until", "notes", "subtotal", "cgst", "sgst", "igst", "freight", "total", "sent_at", "accepted_at", "created_at", "lines", "events")
-        read_only_fields = ("id", "number", "revision", "status", "quote_date", "subtotal", "cgst", "sgst", "igst", "total", "sent_at", "accepted_at", "created_at")
+        fields = (
+            "id", "number", "revision", "status",
+            "company", "attention", "address", "gstin", "state", "state_code", "buyer_email", "cc_emails", "bcc_emails",
+            "ship_to", "your_ref", "quote_date", "valid_days", "valid_until", "notes", "terms",
+            "supply_type", "supply_type_display", "state_tax_label", "place_of_supply_code",
+            "seller_gstin", "seller_state_code", "seller_state_name",
+            "subtotal", "discount_total", "freight", "packing", "charges_gst_rate", "taxable_amount",
+            "cgst", "sgst", "igst", "round_off", "total", "amount_in_words",
+            "sent_at", "accepted_at", "created_at", "lines", "events",
+        )
+        read_only_fields = (
+            "id", "revision", "status", "quote_date", "state_code", "supply_type", "place_of_supply_code",
+            "seller_gstin", "seller_state_code", "seller_state_name", "subtotal", "discount_total", "taxable_amount",
+            "cgst", "sgst", "igst", "round_off", "total", "sent_at", "accepted_at", "created_at",
+        )
+
+    # ---- field level ----
+    def validate_number(self, value):
+        value = (value or "").strip()
+        if self.instance is None and value and Quote.objects.filter(number=value).exists():
+            raise serializers.ValidationError("This quote number is already in use.")
+        return value
+
+    def validate_charges_gst_rate(self, value):
+        if Decimal(value) not in gst.GST_RATES:
+            raise serializers.ValidationError("Use a valid GST slab.")
+        return value
 
     def validate_lines(self, lines):
         if not lines:
             raise serializers.ValidationError("At least one line is required.")
+        if len(lines) > 30:
+            raise serializers.ValidationError("A quote can have at most 30 lines.")
         return lines
+
+    # ---- object level: GSTIN <-> state ----
+    def validate(self, attrs):
+        inst = self.instance
+        gstin = (attrs.get("gstin", getattr(inst, "gstin", "")) or "").strip().upper()
+        state = (attrs.get("state", getattr(inst, "state", "")) or "").strip()
+        if gstin:
+            if not gst.is_valid_gstin(gstin):
+                raise serializers.ValidationError({"gstin": "Enter a valid 15-character GSTIN (format and check digit)."})
+            code = gst.state_code_from_gstin(gstin)
+            attrs["state"] = gst.STATE_CODES[code]           # the GSTIN's first two digits decide the state
+        else:
+            code = gst.state_code_from_name(state)
+            if not code:
+                raise serializers.ValidationError({"state": "Select a valid state / UT (or enter a GSTIN)."})
+            attrs["state"] = gst.STATE_CODES[code]
+        attrs["gstin"] = gstin
+        attrs["state_code"] = code
+        return attrs
 
     def create(self, validated_data):
         from .services import create_quote
@@ -462,10 +546,16 @@ class QuoteSerializer(serializers.ModelSerializer):
         request = self.context["request"]
         lines = validated_data.pop("lines")
         tenant = None if connection.schema_name == get_public_schema_name() else request.tenant
-        return create_quote(request.user, validated_data, lines, tenant=tenant)
+        try:
+            return create_quote(request.user, validated_data, lines, tenant=tenant)
+        except ValueError as exc:
+            raise serializers.ValidationError({"number": str(exc)})
 
     def update(self, instance, validated_data):
+        from .services import recalculate
+
         lines = validated_data.pop("lines", None)
+        validated_data.pop("number", None)                    # number is fixed after creation (revisions keep it)
         for key, value in validated_data.items():
             setattr(instance, key, value)
         instance.save()
@@ -473,12 +563,13 @@ class QuoteSerializer(serializers.ModelSerializer):
             instance.lines.all().delete()
             for index, line in enumerate(lines, 1):
                 QuoteLine.objects.create(quote=instance, position=index, **line)
-        from .services import recalculate
-
         recalculate(instance)
-        QuoteEvent.objects.create(quote=instance, kind="updated", actor=self.context["request"].user if instance.tenant_id is None else None, detail="" if instance.tenant_id is None else self.context["request"].user.email)
+        QuoteEvent.objects.create(
+            quote=instance, kind="updated",
+            actor=self.context["request"].user if instance.tenant_id is None else None,
+            detail="" if instance.tenant_id is None else self.context["request"].user.email,
+        )
         return instance
-
 
 class SendTestSerializer(serializers.Serializer):
     recipients = serializers.ListField(child=serializers.EmailField(), allow_empty=False)
@@ -486,14 +577,23 @@ class SendTestSerializer(serializers.Serializer):
 class QuoteTaxSettingsSerializer(serializers.ModelSerializer):
     class Meta:
         model = QuoteTaxSettings
-        fields = ("state_code", "state_name", "updated_at")
+        fields = ("gstin", "state_code", "state_name", "updated_at")
         read_only_fields = ("updated_at",)
 
     def validate(self, attrs):
-        state_code = attrs.get("state_code", getattr(self.instance, "state_code", ""))
-        state_name = attrs.get("state_name", getattr(self.instance, "state_name", ""))
-        if state_code and (len(state_code) != 2 or not state_code.isdigit()):
-            raise serializers.ValidationError({"state_code": "Enter a two-digit GST state code."})
-        if not state_code and not state_name:
-            raise serializers.ValidationError("Set a state code or state name.")
+        inst = self.instance
+        gstin = (attrs.get("gstin", getattr(inst, "gstin", "")) or "").strip().upper()
+        code = attrs.get("state_code", getattr(inst, "state_code", "")) or ""
+        name = attrs.get("state_name", getattr(inst, "state_name", "")) or ""
+        if gstin:
+            if not gst.is_valid_gstin(gstin):
+                raise serializers.ValidationError({"gstin": "Enter a valid 15-character GSTIN."})
+            code = gst.state_code_from_gstin(gstin)
+        elif not code and name:
+            code = gst.state_code_from_name(name)
+        if not code:
+            raise serializers.ValidationError("Set a GSTIN, state code or state name.")
+        if code not in gst.STATE_CODES:
+            raise serializers.ValidationError({"state_code": "Unknown GST state code."})
+        attrs.update(gstin=gstin, state_code=code, state_name=gst.STATE_CODES[code])
         return attrs

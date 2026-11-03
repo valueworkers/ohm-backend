@@ -23,6 +23,7 @@ from .models import (
 )
 from .serializers import DEFAULT_TRIAL_DAYS, DEFAULT_TRIAL_PLAN_ID, base_domain
 from .utils import base_domain, schema_for_slug
+from . import gst
 
 
 
@@ -36,15 +37,12 @@ logger = logging.getLogger(__name__)
 tenant_provisioned = Signal()
 
 
-CENT = Decimal("0.01")
-
-
 class BillingError(Exception):
     """Raised when a billing transition or calculation is invalid."""
 
 
 def _money(value):
-    return Decimal(str(value)).quantize(CENT, rounding=ROUND_HALF_UP)
+    return Decimal(str(value)).quantize(gst.CENT, rounding=ROUND_HALF_UP)
 
 
 def _next_document_number(prefix, issued_on=None):
@@ -494,54 +492,102 @@ def provision_tenant(provisioning):
     transaction.on_commit(lambda: send_tenant_welcome_email_task.delay(str(p.pk)))
     return tenant
 
-CENT = Decimal("0.01")
+
+def get_seller_tax_settings(tenant_id):
+    """Return (state_code, state_name, gstin) for the public control plane or one tenant."""
+    cfg = QuoteTaxSettings.objects.filter(tenant_id=tenant_id).first()
+    if not cfg:
+        return "", "", ""
+    code = gst.state_code_from_gstin(cfg.gstin) or cfg.state_code or gst.state_code_from_name(cfg.state_name)
+    name = gst.STATE_CODES.get(code, cfg.state_name)
+    return code, name, cfg.gstin
+
+
+def quote_terms(quote):
+    """Validity is always the first term (the UI promises this); then one term per line."""
+    lines = [f"Validity: {quote.valid_days} days from {quote.quote_date:%d %b %Y} (expires {quote.valid_until:%d %b %Y})."]
+    lines += [t.strip() for t in (quote.terms or "").splitlines() if t.strip()]
+    return lines
 
 
 def recalculate(quote):
-    lines = list(quote.lines.all())
-    priced = [line for line in lines if line.unit_price is not None]
-    quote.subtotal = sum((line.qty * line.unit_price for line in priced), Decimal("0")).quantize(CENT, rounding=ROUND_HALF_UP)
-    buyer_state_code = quote.gstin[:2] if quote.gstin[:2].isdigit() else None
-    buyer_state_name = quote.state.strip().casefold()
-    tax_settings = QuoteTaxSettings.objects.filter(tenant_id=quote.tenant_id).first()
-    seller_state_code = tax_settings.state_code if tax_settings else ""
-    seller_state_name = tax_settings.state_name.strip().casefold() if tax_settings else ""
+    """Indian GST maths, line by line.
 
-    if buyer_state_code and seller_state_code:
-        state_is_known = True
-        is_intrastate = buyer_state_code == seller_state_code
-    elif buyer_state_name and seller_state_name:
-        state_is_known = True
-        is_intrastate = buyer_state_name == seller_state_name
-    else:
-        state_is_known = False
-        is_intrastate = False
-    tax = sum((line.qty * line.unit_price * line.gst_rate / Decimal("100") for line in priced), Decimal("0")).quantize(CENT, rounding=ROUND_HALF_UP)
-    if not state_is_known:
-        quote.cgst = quote.sgst = quote.igst = Decimal("0.00")
+    taxable = qty x price - line discount
+    same state    -> CGST = SGST = taxable x rate / 200   (UTGST instead of SGST for UTs w/o legislature)
+    other state   -> IGST = taxable x rate / 100
+    freight/packing are added to the taxable value and taxed at charges_gst_rate.
+    The grand total is rounded to the nearest rupee and the difference stored in round_off.
+    """
+    # Query fresh: quote.lines.all() can return a stale prefetch cache right after the serializer replaced the lines.
+    lines = list(QuoteLine.objects.filter(quote=quote).order_by("position"))
+
+    seller_code, seller_name, seller_gstin = get_seller_tax_settings(quote.tenant_id)
+    buyer_code = gst.resolve_state_code(quote.gstin, quote.state)
+    stype = gst.supply_type(seller_code, buyer_code)
+
+    gross = discount_total = taxable_total = cgst = sgst = igst = gst.ZERO
+    for line in lines:
+        if line.unit_price is None:                      # "on request" line: priced later
+            values = dict(taxable_value=gst.ZERO, cgst_amount=gst.ZERO, sgst_amount=gst.ZERO, igst_amount=gst.ZERO, line_total=gst.ZERO)
+        else:
+            line_gross = gst.money(line.qty * line.unit_price)
+            line_disc = gst.money(line_gross * line.discount_percent / 100)
+            taxable = line_gross - line_disc
+            c, s, i = gst.split_tax(taxable, line.gst_rate, stype)
+            gross += line_gross
+            discount_total += line_disc
+            taxable_total += taxable
+            cgst, sgst, igst = cgst + c, sgst + s, igst + i
+            values = dict(taxable_value=taxable, cgst_amount=c, sgst_amount=s, igst_amount=i, line_total=taxable + c + s + i)
+        if any(getattr(line, k) != v for k, v in values.items()):
+            for k, v in values.items():
+                setattr(line, k, v)
+            line.save(update_fields=list(values))
+
+    charges = gst.money((quote.freight or 0) + (quote.packing or 0))
+    if charges:
+        c, s, i = gst.split_tax(charges, quote.charges_gst_rate, stype)
+        taxable_total += charges
+        cgst, sgst, igst = cgst + c, sgst + s, igst + i
+
+    quote.subtotal = gross
+    quote.discount_total = discount_total
+    quote.taxable_amount = taxable_total
+    quote.supply_type = stype
+    quote.place_of_supply_code = buyer_code
+    quote.state_code = buyer_code
+    quote.seller_gstin, quote.seller_state_code, quote.seller_state_name = seller_gstin, seller_code, seller_name
+    if stype == gst.UNKNOWN:                             # can't split tax without both states
+        quote.cgst = quote.sgst = quote.igst = quote.round_off = gst.ZERO
         quote.total = None
-    elif is_intrastate:
-        quote.cgst = (tax / 2).quantize(CENT, rounding=ROUND_HALF_UP)
-        quote.sgst = tax - quote.cgst
-        quote.igst = Decimal("0.00")
-        quote.total = quote.subtotal + tax + (quote.freight or Decimal("0"))
     else:
-        quote.cgst = quote.sgst = Decimal("0.00")
-        quote.igst = tax
-        quote.total = quote.subtotal + tax + (quote.freight or Decimal("0"))
-    quote.save(update_fields=["subtotal", "cgst", "sgst", "igst", "total"])
+        raw_total = taxable_total + cgst + sgst + igst
+        quote.cgst, quote.sgst, quote.igst = cgst, sgst, igst
+        quote.total = raw_total.quantize(Decimal("1"), rounding=ROUND_HALF_UP).quantize(gst.CENT)
+        quote.round_off = quote.total - raw_total
+    quote.save(update_fields=[
+        "subtotal", "discount_total", "taxable_amount", "cgst", "sgst", "igst", "round_off", "total",
+        "supply_type", "place_of_supply_code", "state_code", "seller_gstin", "seller_state_code", "seller_state_name",
+    ])
     return quote
 
 
 @transaction.atomic
 def create_quote(user, data, lines, *, tenant=None):
     today = timezone.localdate()
-    period = today.strftime("%y%m")
-    counter, _ = QuoteCounter.objects.select_for_update().get_or_create(period=period)
-    counter.last_seq += 1
-    counter.save(update_fields=["last_seq"])
+    number = (data.pop("number", "") or "").strip()
+    if number:                                           # user typed their own quote no.
+        if Quote.objects.filter(number=number).exists():
+            raise ValueError(f"Quote number {number} is already in use.")
+    else:
+        period = today.strftime("%y%m")
+        counter, _ = QuoteCounter.objects.select_for_update().get_or_create(period=period)
+        counter.last_seq += 1
+        counter.save(update_fields=["last_seq"])
+        number = f"Q-{period}-{counter.last_seq:03d}"
     quote = Quote.objects.create(
-        number=f"Q-{period}-{counter.last_seq:03d}",
+        number=number,
         quote_date=today,
         tenant=tenant,
         created_by=user if tenant is None else None,
@@ -569,22 +615,36 @@ def send_quote(quote, user, *, test_recipients=None, response_url=None):
         f"Please find quote {quote.number} revision {quote.revision}. Total: {quote.total}. "
         f"Valid until {quote.valid_until}. Use the Accept or Reject buttons in an AMP-enabled email client."
     )
-    email = EmailMultiAlternatives(subject, message, settings.DEFAULT_FROM_EMAIL, recipients)
+    email = EmailMultiAlternatives(
+        subject, message, settings.DEFAULT_FROM_EMAIL, recipients,
+        cc=None if test_recipients else (quote.cc_emails or None),
+        bcc=None if test_recipients else (quote.bcc_emails or None),
+    )
     if not test_recipients:
-        response_url = response_url or reverse(
-            "public-quote-response", kwargs={"token": quote.accept_token}
-        )
-        priced_lines = [
+        response_url = response_url or reverse("public-quote-response", kwargs={"token": quote.accept_token})
+        money_fmt = lambda v: f"₹{v:,.2f}"
+        item_rows = [
             {
                 "serial": line.position,
                 "name": line.item,
                 "description": line.specification or "",
-                "meta": line.hsn_sac or line.kind.replace("_", " ").title(),
+                "meta": line.hsn_sac or line.get_kind_display(),
+                "hsn_sac": line.hsn_sac,
+                "uom": line.get_uom_display(),
                 "qty": line.qty,
-                "amount": "On request" if line.unit_price is None else f"₹{line.qty * line.unit_price:,.2f}",
+                "unit_price": "On request" if line.unit_price is None else money_fmt(line.unit_price),
+                "discount_percent": line.discount_percent,
+                "gst_rate": line.gst_rate,
+                "taxable": "—" if line.unit_price is None else money_fmt(line.taxable_value),
+                "amount": "On request" if line.unit_price is None else money_fmt(line.line_total),
             }
             for line in quote.lines.all()
         ]
+        # Same-state: CGST + SGST/UTGST rows. Other state: one IGST row.
+        if quote.supply_type == Quote.SupplyType.INTER_STATE:
+            tax_rows = [("IGST", money_fmt(quote.igst))]
+        else:
+            tax_rows = [("CGST", money_fmt(quote.cgst)), (quote.state_tax_label, money_fmt(quote.sgst))]
         address_lines = [line for line in quote.address.splitlines() if line.strip()]
         email_context = {
             "quote_number": quote.number,
@@ -592,21 +652,30 @@ def send_quote(quote, user, *, test_recipients=None, response_url=None):
             "quote_date": quote.quote_date.strftime("%d %b %Y"),
             "valid_until": quote.valid_until.strftime("%d %b %Y"),
             "customer_name": quote.company,
+            "customer_attention": quote.attention,
             "customer_lines": format_html_join("<br />", "{}", ((line,) for line in address_lines)),
             "gstin": quote.gstin or "—",
-            "customer_region": quote.state,
+            "seller_gstin": quote.seller_gstin or "—",
+            "customer_region": f"{quote.state} ({quote.state_code})" if quote.state_code else quote.state,
+            "place_of_supply": f"{quote.state} ({quote.place_of_supply_code})",
+            "supply_type": quote.get_supply_type_display(),
             "ship_to": quote.ship_to or "Same as above",
             "your_contact_name": user.get_full_name() or "O-HM Senior Care",
             "your_contact_email": user.email or settings.DEFAULT_FROM_EMAIL,
             "your_ref": quote.your_ref or "—",
-            "items": priced_lines,
-            "subtotal": f"₹{quote.subtotal:,.2f}",
-            "packing_value": "—",
-            "freight_value": "—" if quote.freight is None else f"₹{quote.freight:,.2f}",
-            "gst": f"₹{quote.cgst + quote.sgst + quote.igst:,.2f}",
-            "total": f"₹{quote.total:,.2f}",
-            "amount_in_words": "",
-            "terms": quote.notes.splitlines() if quote.notes else [],
+            "items": item_rows,
+            "subtotal": money_fmt(quote.subtotal),
+            "discount_total": money_fmt(quote.discount_total),
+            "taxable_amount": money_fmt(quote.taxable_amount),
+            "packing_value": "—" if quote.packing is None else money_fmt(quote.packing),
+            "freight_value": "—" if quote.freight is None else money_fmt(quote.freight),
+            "tax_rows": tax_rows,
+            "gst": money_fmt(quote.cgst + quote.sgst + quote.igst),
+            "round_off": f"{quote.round_off:+,.2f}",
+            "total": money_fmt(quote.total),
+            "amount_in_words": quote.amount_in_words,
+            "notes": quote.notes,
+            "terms": quote_terms(quote),
             "accept_url": response_url,
         }
         email.attach_alternative(render_to_string("ohm-quotation-email.html", email_context), "text/html")
@@ -619,43 +688,4 @@ def send_quote(quote, user, *, test_recipients=None, response_url=None):
     quote.save(update_fields=["status", "sent_at"])
     Quote.objects.filter(number=quote.number, revision__lt=quote.revision, status=Quote.Status.SENT).update(status=Quote.Status.SUPERSEDED)
     QuoteEvent.objects.create(quote=quote, kind="sent", detail=quote.buyer_email, actor=user if quote.tenant_id is None else None)
-    return quote
-
-
-@transaction.atomic
-def revise_quote(quote, user):
-    if quote.status != Quote.Status.SENT:
-        raise ValueError("Only sent quotes can be revised.")
-    lines = list(quote.lines.all())
-    quote.pk = None
-    quote.revision += 1
-    quote.status = Quote.Status.DRAFT
-    quote.sent_at = quote.accepted_at = None
-    quote.accept_token = token_urlsafe(32)
-    quote.quote_date = timezone.localdate()
-    quote.created_by = user if quote.tenant_id is None else None
-    quote.created_by_email = user.email
-    quote.save()
-    for line in lines:
-        line.pk = None
-        line.quote = quote
-        line.save()
-    QuoteEvent.objects.create(quote=quote, kind="revised", detail=(f"from R{quote.revision - 1}" if quote.tenant_id is None else f"{user.email}: from R{quote.revision - 1}"), actor=user if quote.tenant_id is None else None)
-    return quote
-
-
-@transaction.atomic
-def respond_to_quote(token, accepted):
-    quote = Quote.objects.select_for_update().get(accept_token=token)
-    if quote.status != Quote.Status.SENT:
-        raise ValueError("This quote is no longer available for a response.")
-    if quote.valid_until < timezone.localdate():
-        quote.status = Quote.Status.EXPIRED
-        quote.save(update_fields=["status"])
-        QuoteEvent.objects.create(quote=quote, kind="expired", detail="Response attempted after expiry")
-        return quote
-    quote.status = Quote.Status.ACCEPTED if accepted else Quote.Status.REJECTED
-    quote.accepted_at = timezone.now() if accepted else None
-    quote.save(update_fields=["status", "accepted_at"])
-    QuoteEvent.objects.create(quote=quote, kind=quote.status)
     return quote

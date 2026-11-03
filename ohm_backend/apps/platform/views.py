@@ -1,16 +1,20 @@
-from datetime import timedelta
 from io import BytesIO
+from rest_framework.filters import OrderingFilter, SearchFilter
+from . import gst
+from .filters import QuoteFilter, latest_revisions
+from .services import get_seller_tax_settings, quote_terms
 
+from django.db.models import Count, DecimalField, F, Q, Sum, Value, ProtectedError
+from django.db.models.functions import Coalesce
 from django.db import IntegrityError, transaction, connection
-from django.db.models import Count, OuterRef, Q, Subquery, Sum
 from django.http import HttpResponse
-from django.db.models import ProtectedError
 from django.contrib.contenttypes.models import ContentType
 from django.apps import apps
 from django.conf import settings
 from django.utils import timezone
 from django.utils.dateparse import parse_date
 from django.urls import reverse
+from django_filters.rest_framework import DjangoFilterBackend
 from django_tenants.utils import get_public_schema_name, schema_context
 from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
@@ -20,10 +24,10 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.throttling import AnonRateThrottle
-
+from decimal import Decimal
 from .models import (
     Feature, Plan, Subscription, Tenant, TenantProvisioning,
-    Quote, QuoteTaxSettings,
+    Quote, QuoteTaxSettings,QuoteLine
 )
 from .serializers import (
     ApproveSerializer,
@@ -46,6 +50,11 @@ from .tasks import provision_tenant_task
 from .services import send_quote, revise_quote, respond_to_quote, recalculate
 from .permissions import IsPlatformAdmin
 
+
+SUPPLY_LABELS = {
+    gst.INTRA_STATE: "CGST + SGST", gst.INTRA_UT: "CGST + UTGST",
+    gst.INTER_STATE: "IGST", gst.UNKNOWN: "Unknown",
+}
 # --------------------------------------------------------------------------
 # Public
 # --------------------------------------------------------------------------
@@ -490,37 +499,70 @@ class MyTenantViewSet(
         return Response(self.get_serializer(tenant).data)
 
 
-# Prospect quote API
 class QuoteViewSet(viewsets.ModelViewSet):
     serializer_class = QuoteSerializer
     queryset = Quote.objects.prefetch_related("lines", "events").select_related("created_by", "provisioning", "tenant")
+    http_method_names = ["get", "post", "patch", "head", "options"]
+
+    # Built-in filtering, search and ordering
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = QuoteFilter
+    search_fields = [
+        "number", "company", "attention", "gstin", "buyer_email", "your_ref", "state",
+        "lines__item", "lines__hsn_sac",
+    ]
+    ordering_fields = [
+        "quote_date", "number", "revision", "company", "status", "state", "subtotal", "taxable_amount",
+        "total", "sent_at", "accepted_at", "created_at",
+    ]
+    ordering = ["-quote_date", "-number", "-revision"]
 
     def get_permissions(self):
         if connection.schema_name == get_public_schema_name():
             return [IsPlatformAdmin()]
         return [IsAuthenticated()]
-    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
         qs = super().get_queryset()
         if connection.schema_name == get_public_schema_name():
-            qs = qs.filter(tenant__isnull=True)
-        else:
-            qs = qs.filter(tenant=self.request.tenant)
-        if self.action == "list":
-            status_filter = self.request.query_params.get("status")
-            if status_filter:
-                qs = qs.filter(status=status_filter)
-            range_days = self.request.query_params.get("range")
-            if range_days and range_days.isdigit():
-                qs = qs.filter(quote_date__gte=timezone.localdate() - timedelta(days=int(range_days)))
-        return qs
+            return qs.filter(tenant__isnull=True)
+        return qs.filter(tenant=self.request.tenant)
 
     def perform_update(self, serializer):
         if serializer.instance.status != Quote.Status.DRAFT:
             raise ValidationError({"status": "Only draft quotes can be edited."})
         serializer.save()
 
+    # ---- helpers for the form ----
+    @action(detail=False, methods=["get"])
+    def meta(self, request):
+        """Dropdown data: states, UOMs, GST slabs, line kinds."""
+        return Response({
+            "states": [{"code": c, "name": n} for c, n in sorted(gst.STATE_CODES.items(), key=lambda kv: kv[1])],
+            "uoms": [{"value": v, "label": l} for v, l in QuoteLine.Uom.choices],
+            "gst_rates": [str(r) for r in gst.GST_RATES],
+            "line_kinds": [{"value": v, "label": l} for v, l in QuoteLine.Kind.choices],
+            "default_terms": [],
+        })
+
+    @action(detail=False, methods=["get"], url_path="gstin-info")
+    def gstin_info(self, request):
+        """Validate a GSTIN offline and say which GST applies against the seller's state."""
+        gstin = request.query_params.get("gstin", "").strip().upper()
+        if not gst.is_valid_gstin(gstin):
+            raise ValidationError({"gstin": "Not a valid GSTIN (format or check digit)."})
+        tenant_id = None if connection.schema_name == get_public_schema_name() else request.tenant.pk
+        seller_code, seller_name, _ = get_seller_tax_settings(tenant_id)
+        code = gst.state_code_from_gstin(gstin)
+        stype = gst.supply_type(seller_code, code)
+        return Response({
+            "gstin": gstin, "pan": gst.pan_from_gstin(gstin),
+            "state_code": code, "state": gst.STATE_CODES[code],
+            "supply_type": stype, "tax": SUPPLY_LABELS[stype],
+            "seller_state": seller_name,
+        })
+
+    # ---- actions ----
     @action(detail=True, methods=["post"])
     def send(self, request, pk=None):
         try:
@@ -560,10 +602,22 @@ class QuoteViewSet(viewsets.ModelViewSet):
         buffer = BytesIO()
         pdf = canvas.Canvas(buffer, pagesize=A4)
         y = 800
-        for text in [f"Quote {quote.number} R{quote.revision}", quote.company, quote.buyer_email, f"Date: {quote.quote_date}  Valid until: {quote.valid_until}", "", *[f"{line.position}. {line.item} x {line.qty} @ {line.unit_price if line.unit_price is not None else 'On request'}" for line in quote.lines.all()], "", f"Subtotal: {quote.subtotal}", f"CGST: {quote.cgst}  SGST: {quote.sgst}  IGST: {quote.igst}", f"Total: {quote.total if quote.total is not None else 'GST not set'}", quote.notes]:
+        rows = [f"Quote {quote.number} R{quote.revision}", quote.company, f"GSTIN: {quote.gstin or '-'}  Place of supply: {quote.state} ({quote.place_of_supply_code})",
+                quote.buyer_email, f"Date: {quote.quote_date}  Valid until: {quote.valid_until}", ""]
+        for line in quote.lines.all():
+            price = "On request" if line.unit_price is None else line.unit_price
+            rows.append(f"{line.position}. {line.item} [HSN/SAC {line.hsn_sac}] {line.qty} {line.uom} @ {price}  disc {line.discount_percent}%  GST {line.gst_rate}%  = {line.line_total}")
+        rows += ["", f"Subtotal: {quote.subtotal}  Discount: {quote.discount_total}  Taxable: {quote.taxable_amount}"]
+        if quote.supply_type == Quote.SupplyType.INTER_STATE:
+            rows.append(f"IGST: {quote.igst}")
+        else:
+            rows.append(f"CGST: {quote.cgst}  {quote.state_tax_label}: {quote.sgst}")
+        rows += [f"Round off: {quote.round_off}", f"Total: {quote.total if quote.total is not None else 'GST not set'}",
+                 quote.amount_in_words, "", quote.notes, "", *quote_terms(quote)]
+        for text in rows:
             if y < 50:
                 pdf.showPage(); y = 800
-            pdf.drawString(48, y, str(text)[:110]); y -= 20
+            pdf.drawString(48, y, str(text)[:110]); y -= 18
         pdf.save()
         response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
         response["Content-Disposition"] = f'attachment; filename="{quote.number}-R{quote.revision}.pdf"'
@@ -571,47 +625,51 @@ class QuoteViewSet(viewsets.ModelViewSet):
 
 
 class QuoteStatsView(APIView):
+    """Pipeline numbers over the latest revision of each quote. Accepts the same filters as the list."""
+
     def get_permissions(self):
         if connection.schema_name == get_public_schema_name():
             return [IsPlatformAdmin()]
         return [IsAuthenticated()]
 
     def get(self, request):
-        latest_revision = Quote.objects.filter(number=OuterRef("number")).order_by("-revision").values("revision")[:1]
-        qs = Quote.objects.annotate(_latest_revision=Subquery(latest_revision)).filter(revision=Subquery(latest_revision))
+        qs = latest_revisions(Quote.objects.all())
         if connection.schema_name == get_public_schema_name():
             qs = qs.filter(tenant__isnull=True)
         else:
             qs = qs.filter(tenant=request.tenant)
-        start = request.query_params.get("from")
-        end = request.query_params.get("to")
-        if start:
-            parsed_start = parse_date(start)
-            if parsed_start is None:
-                raise ValidationError({"from": "Use a valid date in YYYY-MM-DD format."})
-            qs = qs.filter(quote_date__gte=parsed_start)
-        if end:
-            parsed_end = parse_date(end)
-            if parsed_end is None:
-                raise ValidationError({"to": "Use a valid date in YYYY-MM-DD format."})
-            qs = qs.filter(quote_date__lte=parsed_end)
+        for param, lookup in (("from", "quote_date__gte"), ("to", "quote_date__lte")):   # kept for the existing UI
+            raw = request.query_params.get(param)
+            if raw:
+                parsed = parse_date(raw)
+                if parsed is None:
+                    raise ValidationError({param: "Use a valid date in YYYY-MM-DD format."})
+                qs = qs.filter(**{lookup: parsed})
+        filterset = QuoteFilter(request.query_params, queryset=qs)
+        if not filterset.is_valid():
+            raise ValidationError(filterset.errors)
+        qs = filterset.qs
+
+        money = DecimalField(max_digits=14, decimal_places=2)
+        zero = Value(Decimal("0.00"), output_field=money)
         stats = qs.aggregate(
-            open=Count(
-                "id",
-                filter=Q(status="sent")),
-                accepted=Count("id", filter=Q(status="accepted")),
-                rejected=Count("id", filter=Q(status="rejected")),
-                expired=Count("id", filter=Q(status="expired")),
-                pipeline=Sum("total", filter=Q(status="sent")
-            )
+            draft=Count("id", filter=Q(status="draft")),
+            open=Count("id", filter=Q(status="sent")),
+            accepted=Count("id", filter=Q(status="accepted")),
+            rejected=Count("id", filter=Q(status="rejected")),
+            expired=Count("id", filter=Q(status="expired")),
+            pipeline=Coalesce(Sum("total", filter=Q(status="sent")), zero, output_field=money),
+            won_value=Coalesce(Sum("total", filter=Q(status="accepted")), zero, output_field=money),
+            won_igst=Coalesce(Sum("igst", filter=Q(status="accepted")), zero, output_field=money),
+            won_cgst_sgst=Coalesce(Sum(F("cgst") + F("sgst"), filter=Q(status="accepted")), zero, output_field=money),
         )
-        denominator = stats["accepted"] + stats["rejected"] + stats["expired"]
-        stats["win_rate"] = round(stats["accepted"] * 100 / denominator, 2) if denominator else 0
+        closed = stats["accepted"] + stats["rejected"] + stats["expired"]
+        stats["win_rate"] = round(stats["accepted"] * 100 / closed, 2) if closed else 0
         return Response(stats)
 
 
 class QuoteTaxSettingsView(APIView):
-    """Get or update the seller GST state for the current schema's quote owner."""
+    """Get or update the seller GSTIN / GST state for the current schema's quote owner."""
 
     def get_permissions(self):
         if connection.schema_name == get_public_schema_name():
@@ -621,12 +679,12 @@ class QuoteTaxSettingsView(APIView):
     def _get_settings(self, request):
         if connection.schema_name == get_public_schema_name():
             tenant = None
-            defaults = {"state_code": "29", "state_name": "Karnataka"}
+            defaults = {"gstin": "", "state_code": "29", "state_name": "Karnataka"}
         else:
             tenant = request.tenant
             gstin = tenant.gst_number or ""
-            seller_code = gstin[:2] if gstin[:2].isdigit() else ""
-            defaults = {"state_code": seller_code, "state_name": ""}
+            code = gst.state_code_from_gstin(gstin)
+            defaults = {"gstin": gstin, "state_code": code, "state_name": gst.STATE_CODES.get(code, "")}
         settings_obj, _ = QuoteTaxSettings.objects.get_or_create(tenant=tenant, defaults=defaults)
         return settings_obj, tenant
 
@@ -639,13 +697,11 @@ class QuoteTaxSettingsView(APIView):
         serializer = QuoteTaxSettingsSerializer(settings_obj, data=request.data, partial=True)
         serializer.is_valid(raise_exception=True)
         serializer.save()
-
         quotes = Quote.objects.filter(status=Quote.Status.DRAFT)
         quotes = quotes.filter(tenant=tenant) if tenant else quotes.filter(tenant__isnull=True)
-        for quote in quotes:
+        for quote in quotes:                       # only drafts: sent quotes keep the tax they were sent with
             recalculate(quote)
         return Response(serializer.data)
-
 
 class PublicQuoteResponseView(APIView):
     permission_classes = [AllowAny]
@@ -680,17 +736,28 @@ class PublicQuoteResponseView(APIView):
             "number": quote.number,
             "revision": quote.revision,
             "company": quote.company,
+            "gstin": quote.gstin,
+            "place_of_supply": quote.state,
+            "supply_type": quote.supply_type,
             "quote_date": quote.quote_date,
             "valid_until": quote.valid_until,
             "lines": QuoteLineSerializer(quote.lines.all(), many=True).data,
             "subtotal": quote.subtotal,
+            "discount_total": quote.discount_total,
+            "taxable_amount": quote.taxable_amount,
             "cgst": quote.cgst,
             "sgst": quote.sgst,
+            "state_tax_label": quote.state_tax_label,
             "igst": quote.igst,
             "freight": quote.freight,
+            "packing": quote.packing,
+            "round_off": quote.round_off,
             "total": quote.total,
+            "amount_in_words": quote.amount_in_words,
             "notes": quote.notes,
+            "terms": quote_terms(quote),
         })
+
 
     def post(self, request, token):
         amp_sender = request.headers.get("AMP-Email-Sender") or request.query_params.get("__amp_source_origin")
