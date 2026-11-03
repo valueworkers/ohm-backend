@@ -689,3 +689,51 @@ def send_quote(quote, user, *, test_recipients=None, response_url=None):
     Quote.objects.filter(number=quote.number, revision__lt=quote.revision, status=Quote.Status.SENT).update(status=Quote.Status.SUPERSEDED)
     QuoteEvent.objects.create(quote=quote, kind="sent", detail=quote.buyer_email, actor=user if quote.tenant_id is None else None)
     return quote
+
+@transaction.atomic
+def revise_quote(quote, user):
+    """Copy a SENT quote into a new DRAFT revision (same number, revision + 1)."""
+    if quote.status != Quote.Status.SENT:
+        raise ValueError("Only sent quotes can be revised.")
+    lines = list(quote.lines.all())
+    previous_revision = quote.revision
+    quote.pk = None
+    quote._state.adding = True
+    quote.revision += 1
+    quote.status = Quote.Status.DRAFT
+    quote.sent_at = quote.accepted_at = None
+    quote.accept_token = token_urlsafe(32)
+    quote.quote_date = timezone.localdate()
+    quote.created_by = user if quote.tenant_id is None else None
+    quote.created_by_email = user.email
+    quote.save()
+    for line in lines:
+        line.pk = None
+        line._state.adding = True
+        line.quote = quote
+        line.save()
+    recalculate(quote)          # re-apply today's seller GSTIN/state and rounding to the new draft
+    QuoteEvent.objects.create(
+        quote=quote, kind="revised",
+        detail=(f"from R{previous_revision}" if quote.tenant_id is None else f"{user.email}: from R{previous_revision}"),
+        actor=user if quote.tenant_id is None else None,
+    )
+    return quote
+
+
+@transaction.atomic
+def respond_to_quote(token, accepted):
+    """Buyer accepts or rejects via the public link or AMP email. Expired quotes flip to EXPIRED instead."""
+    quote = Quote.objects.select_for_update().get(accept_token=token)
+    if quote.status != Quote.Status.SENT:
+        raise ValueError("This quote is no longer available for a response.")
+    if quote.valid_until < timezone.localdate():
+        quote.status = Quote.Status.EXPIRED
+        quote.save(update_fields=["status"])
+        QuoteEvent.objects.create(quote=quote, kind="expired", detail="Response attempted after expiry")
+        return quote
+    quote.status = Quote.Status.ACCEPTED if accepted else Quote.Status.REJECTED
+    quote.accepted_at = timezone.now() if accepted else None
+    quote.save(update_fields=["status", "accepted_at"])
+    QuoteEvent.objects.create(quote=quote, kind=quote.status)
+    return quote

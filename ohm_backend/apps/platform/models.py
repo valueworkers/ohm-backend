@@ -9,6 +9,16 @@ from django.db.models import Q, Sum
 from django_tenants.models import DomainMixin, TenantMixin
 from django.utils import timezone
 
+import uuid
+from decimal import Decimal
+
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
+from django.db import models
+from django.db.models import Q, Sum
+from django.utils import timezone
+
+
 GSTIN_RE = r"^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"
 
 def _verification_token():
@@ -25,7 +35,6 @@ class Feature(models.Model):
 
     def __str__(self):
         return self.name
-
 
 class Plan(models.Model):
     """A subscription plan. Limits and bundled features live here, not on Tenant."""
@@ -53,7 +62,6 @@ class Plan(models.Model):
 
     def __str__(self):
         return self.name
-
 
 class Tenant(TenantMixin):
     """A healthcare service provider workspace, managed by OHM in the public schema."""
@@ -91,7 +99,6 @@ class Tenant(TenantMixin):
     def __str__(self):
         return f"{self.name} ({self.schema_name})"
 
-
 class Subscription(models.Model):
     class Status(models.TextChoices):
         TRIAL = "trial", "Trial"
@@ -121,7 +128,6 @@ class Subscription(models.Model):
     def __str__(self):
         return f"{self.tenant} - {self.plan or 'no plan'} ({self.status})"
 
-
 class Domain(DomainMixin):
     """A provider hostname that routes requests to its tenant schema when verified."""
 
@@ -133,7 +139,6 @@ class Domain(DomainMixin):
     def save(self, *args, **kwargs):
         self.domain = self.domain.strip().lower()
         super().save(*args, **kwargs)
-
 
 class TenantProvisioning(models.Model):
     """Provider application stored in public until a root admin approves it."""
@@ -219,7 +224,6 @@ class DocumentSequence(models.Model):
     class Meta:
         constraints = [models.UniqueConstraint(fields=["prefix", "year"], name="uniq_document_sequence_prefix_year")]
 
-
 class Quotation(models.Model):
     class Status(models.TextChoices):
         DRAFT = "draft", "Draft"
@@ -281,7 +285,6 @@ class Quotation(models.Model):
     def __str__(self):
         return f"{self.number} ({self.status})"
 
-
 class QuotationItem(models.Model):
     quotation = models.ForeignKey(Quotation, on_delete=models.CASCADE, related_name="items")
     description = models.CharField(max_length=255)
@@ -292,147 +295,6 @@ class QuotationItem(models.Model):
     class Meta:
         constraints = [models.CheckConstraint(condition=Q(quantity__gte=1), name="quotation_item_quantity_positive")]
 
-
-class Invoice(models.Model):
-    class Status(models.TextChoices):
-        DRAFT = "draft", "Draft"
-        ISSUED = "issued", "Issued"
-        PARTIALLY_PAID = "partially_paid", "Partially paid"
-        PAID = "paid", "Paid"
-        OVERDUE = "overdue", "Overdue"
-        VOID = "void", "Void"
-
-    number = models.CharField(max_length=30, unique=True)
-    tenant = models.ForeignKey(Tenant, on_delete=models.PROTECT, related_name="invoices")
-    subscription = models.ForeignKey(
-        Subscription, null=True, blank=True, on_delete=models.SET_NULL, related_name="invoices"
-    )
-    quotation = models.ForeignKey(
-        Quotation, null=True, blank=True, on_delete=models.SET_NULL, related_name="invoices"
-    )
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
-    billing_name = models.CharField(max_length=200)
-    billing_email = models.EmailField()
-    gst_number = models.CharField(max_length=15, null=True, blank=True)
-    billing_address = models.JSONField(default=dict, blank=True)
-    currency = models.CharField(max_length=3, default="INR")
-    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    tax_rate = models.DecimalField(
-        max_digits=5, decimal_places=2, default=Decimal("18.00"),
-        validators=[MinValueValidator(0), MaxValueValidator(100)],
-    )
-    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-    period_start = models.DateField(null=True, blank=True)
-    period_end = models.DateField(null=True, blank=True)
-    issue_date = models.DateField(default=timezone.localdate)
-    due_date = models.DateField(null=True, blank=True)
-    notes = models.TextField(blank=True)
-    pdf = models.FileField(upload_to="invoices/", null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        ordering = ["-issue_date", "-created_at"]
-        indexes = [models.Index(fields=["tenant", "status"])]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["quotation"], condition=Q(quotation__isnull=False),
-                name="uniq_invoice_per_quotation",
-            ),
-            models.CheckConstraint(
-                condition=Q(discount__gte=0) & Q(tax_rate__gte=0) & Q(tax_rate__lte=100),
-                name="invoice_discount_and_tax_nonnegative",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.number} ({self.status})"
-
-    @property
-    def amount_paid(self):
-        return self.payments.filter(status=Payment.Status.SUCCEEDED).aggregate(total=Sum("amount"))["total"] or Decimal("0")
-
-    @property
-    def balance_due(self):
-        return self.total - self.amount_paid
-
-    def refresh_payment_status(self):
-        """Recalculate status from successful payments, including refunds."""
-        if self.status in {self.Status.VOID, self.Status.DRAFT}:
-            return
-        paid = self.amount_paid
-        if self.total > 0 and paid >= self.total:
-            self.status = self.Status.PAID
-        elif paid > 0:
-            self.status = self.Status.PARTIALLY_PAID
-        elif self.due_date and self.due_date < timezone.localdate():
-            self.status = self.Status.OVERDUE
-        else:
-            self.status = self.Status.ISSUED
-        self.save(update_fields=["status", "updated_at"])
-
-
-class InvoiceItem(models.Model):
-    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="items")
-    description = models.CharField(max_length=255)
-    quantity = models.PositiveIntegerField(default=1)
-    unit_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
-    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
-
-    class Meta:
-        constraints = [models.CheckConstraint(condition=Q(quantity__gte=1), name="invoice_item_quantity_positive")]
-
-
-class Payment(models.Model):
-    class Method(models.TextChoices):
-        CARD = "card", "Card"
-        UPI = "upi", "UPI"
-        NETBANKING = "netbanking", "Net banking"
-        BANK_TRANSFER = "bank_transfer", "Bank transfer"
-        CASH = "cash", "Cash"
-        CHEQUE = "cheque", "Cheque"
-
-    class Status(models.TextChoices):
-        PENDING = "pending", "Pending"
-        SUCCEEDED = "succeeded", "Succeeded"
-        FAILED = "failed", "Failed"
-        REFUNDED = "refunded", "Refunded"
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name="payments")
-    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
-    currency = models.CharField(max_length=3, default="INR")
-    method = models.CharField(max_length=20, choices=Method.choices)
-    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
-    gateway = models.CharField(max_length=30, blank=True)
-    gateway_order_id = models.CharField(max_length=100, blank=True)
-    gateway_payment_id = models.CharField(max_length=100, null=True, blank=True)
-    reference = models.CharField(max_length=100, blank=True)
-    gateway_response = models.JSONField(default=dict, blank=True)
-    failure_reason = models.CharField(max_length=255, blank=True)
-    paid_at = models.DateTimeField(null=True, blank=True)
-    recorded_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
-        related_name="recorded_payments",
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        ordering = ["-created_at"]
-        constraints = [
-            models.UniqueConstraint(
-                fields=["gateway", "gateway_payment_id"],
-                condition=Q(gateway_payment_id__isnull=False),
-                name="uniq_gateway_payment_id",
-            ),
-        ]
-
-    def __str__(self):
-        return f"{self.invoice.number} - {self.amount} ({self.status})"
-
-
 class PlatformAdmin(models.Model):
     """Public-schema platform privileges linked to the shared auth user model."""
 
@@ -442,7 +304,6 @@ class PlatformAdmin(models.Model):
 
     def __str__(self):
         return self.user.email
-
 
 class QuoteCounter(models.Model):
     """Monthly sequence for prospect quote numbers."""
@@ -466,7 +327,6 @@ class QuoteTaxSettings(models.Model):
     def __str__(self):
         scope = self.tenant.name if self.tenant_id else "Public"
         return f"{scope}: {self.state_name} ({self.state_code})"
-
 
 class Quote(models.Model):
     class Status(models.TextChoices):
@@ -554,8 +414,6 @@ class Quote(models.Model):
     def state_tax_label(self):
         return "UTGST" if self.supply_type == self.SupplyType.INTRA_UT else "SGST"
 
-
-
 class QuoteLine(models.Model):
     class Kind(models.TextChoices):
         CATALOG = "catalog", "Catalog"
@@ -605,10 +463,210 @@ class QuoteLine(models.Model):
         ordering = ["position"]
         constraints = [models.UniqueConstraint(fields=["quote", "position"], name="uniq_quote_line_position")]
 
-
 class QuoteEvent(models.Model):
     quote = models.ForeignKey(Quote, related_name="events", on_delete=models.CASCADE)
     kind = models.CharField(max_length=20)
     detail = models.CharField(max_length=300, blank=True)
     actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
     at = models.DateTimeField(auto_now_add=True)
+
+
+class InvoiceSequence(models.Model):
+    """Gap-free numbering per year; number is assigned when the invoice is raised."""
+    year = models.PositiveIntegerField(unique=True)
+    last_number = models.PositiveIntegerField(default=0)
+
+class Invoice(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        ISSUED = "issued", "Issued"
+        PARTIALLY_PAID = "partially_paid", "Partially paid"
+        PAID = "paid", "Paid"
+        OVERDUE = "overdue", "Overdue"
+        VOID = "void", "Void"
+
+    # Identity
+    number = models.CharField(max_length=30, unique=True, null=True, blank=True)  # e.g. 459/202626
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+
+    # Links (all optional)
+    tenant = models.ForeignKey(
+        Tenant, null=True, blank=True, on_delete=models.PROTECT, related_name="invoices"
+    )
+    subscription = models.ForeignKey(
+        Subscription, null=True, blank=True, on_delete=models.SET_NULL, related_name="invoices"
+    )
+    quotation = models.ForeignKey(
+        Quotation, null=True, blank=True, on_delete=models.SET_NULL, related_name="invoices"
+    )
+
+    # Billed to
+    customer_name = models.CharField(max_length=200)
+    attention = models.TextField(blank=True)
+    address = models.TextField(blank=True)
+    buyer_email = models.EmailField(blank=True)
+    cc_emails = models.JSONField(default=list, blank=True)
+    bcc_emails = models.JSONField(default=list, blank=True)
+    gstin = models.CharField(max_length=15, blank=True, 
+        validators=[RegexValidator(GSTIN_RE, "Enter a valid 15-character GSTIN, e.g. 22AAAAA0000A1Z5.")],
+    )
+    state = models.CharField(max_length=60, default="Karnataka")
+    state_code = models.CharField(max_length=2, blank=True)
+    is_interstate = models.BooleanField(default=False)  # True -> IGST, False -> CGST+SGST
+    ship_to = models.TextField(blank=True, default="Same as above")
+    your_ref = models.CharField(max_length=100, blank=True)  # booking / PO reference
+
+    # Issuer snapshot (company header + contact at the time of raising)
+    issuer = models.JSONField(default=dict, blank=True)
+
+    # Money
+    currency = models.CharField(max_length=3, default="INR")
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)   # sum of taxable values
+    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)   # sum of line discounts
+    cgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount_received = models.DecimalField(  # "Amount already received (₹)"
+        max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)]
+    )
+
+    # Dates & text
+    period_start = models.DateField(null=True, blank=True)
+    period_end = models.DateField(null=True, blank=True)
+    issue_date = models.DateField(default=timezone.localdate)
+    due_days = models.PositiveSmallIntegerField(default=15)
+    due_date = models.DateField(null=True, blank=True)
+    terms = models.TextField(blank=True)  # one term per line
+    notes = models.TextField(blank=True)
+    pdf = models.FileField(upload_to="invoices/", null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-issue_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status"]),
+            models.Index(fields=["status", "due_date"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["quotation"], condition=Q(quotation__isnull=False),
+                name="uniq_invoice_per_quotation",
+            ),
+            models.CheckConstraint(
+                condition=Q(discount__gte=0) & Q(amount_received__gte=0),
+                name="invoice_discount_and_received_nonnegative",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.number or 'DRAFT'} ({self.status})"
+
+    @property
+    def amount_paid(self):
+        online = self.payments.filter(status=Payment.Status.SUCCEEDED).aggregate(t=Sum("amount"))["t"]
+        return self.amount_received + (online or Decimal("0"))
+
+    @property
+    def balance_due(self):
+        return self.total - self.amount_paid
+
+    def refresh_payment_status(self):
+        if self.status in {self.Status.VOID, self.Status.DRAFT}:
+            return
+        paid = self.amount_paid
+        if self.total > 0 and paid >= self.total:
+            self.status = self.Status.PAID
+        elif paid > 0:
+            self.status = self.Status.PARTIALLY_PAID
+        elif self.due_date and self.due_date < timezone.localdate():
+            self.status = self.Status.OVERDUE
+        else:
+            self.status = self.Status.ISSUED
+        self.save(update_fields=["status", "updated_at"])
+
+class InvoiceItem(models.Model):
+    class LineType(models.TextChoices):
+        CATALOG = "catalog", "Catalog"
+        CUSTOM = "custom_service", "Custom service"
+        VISIT = "service_visit", "Service visit"
+        MANPOWER = "man_power", "Man power"
+
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="items")
+    position = models.PositiveSmallIntegerField(default=1)
+    line_type = models.CharField(max_length=20, choices=LineType.choices, default=LineType.CUSTOM)
+    description = models.CharField(max_length=255)                     # "Item"
+    hsn_sac = models.CharField(max_length=8)                           # required
+    specification = models.CharField(max_length=255, blank=True)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, default=1,
+                                   validators=[MinValueValidator(Decimal("0.01"))])
+    uom = models.CharField(max_length=20, default="Pcs")
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                           validators=[MinValueValidator(0), MaxValueValidator(100)])
+    lead_time = models.CharField(max_length=50, blank=True)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2)     # total GST % (e.g. 18 => 9 + 9)
+
+    # Computed
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    taxable_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # line total
+
+    class Meta:
+        ordering = ["position", "id"]
+        constraints = [
+            models.CheckConstraint(condition=Q(quantity__gt=0), name="invoice_item_quantity_positive"),
+        ]
+
+class Payment(models.Model):
+    class Method(models.TextChoices):
+        CARD = "card", "Card"
+        UPI = "upi", "UPI"
+        NETBANKING = "netbanking", "Net banking"
+        BANK_TRANSFER = "bank_transfer", "Bank transfer"
+        CASH = "cash", "Cash"
+        CHEQUE = "cheque", "Cheque"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        REFUNDED = "refunded", "Refunded"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name="payments")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    currency = models.CharField(max_length=3, default="INR")
+    method = models.CharField(max_length=20, choices=Method.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    gateway = models.CharField(max_length=30, blank=True)
+    gateway_order_id = models.CharField(max_length=100, blank=True)
+    gateway_payment_id = models.CharField(max_length=100, null=True, blank=True)
+    reference = models.CharField(max_length=100, blank=True)
+    gateway_response = models.JSONField(default=dict, blank=True)
+    failure_reason = models.CharField(max_length=255, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="recorded_payments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gateway", "gateway_payment_id"],
+                condition=Q(gateway_payment_id__isnull=False),
+                name="uniq_gateway_payment_id",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.invoice.number} - {self.amount} ({self.status})"
+

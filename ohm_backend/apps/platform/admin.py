@@ -162,18 +162,71 @@ class PaymentInline(admin.TabularInline):
         return False
 
 
+
 @admin.register(Invoice)
 class InvoiceAdmin(admin.ModelAdmin):
-    list_display = ("number", "tenant", "status", "total", "currency", "issue_date", "due_date")
-    list_filter = ("status", "currency", "issue_date")
-    search_fields = ("number", "tenant__name", "billing_name", "billing_email")
-    readonly_fields = (
-        "number", "tenant", "subscription", "quotation", "status", "billing_name",
-        "billing_email", "gst_number", "billing_address", "currency", "subtotal",
-        "discount", "tax_rate", "tax_amount", "total", "period_start", "period_end",
-        "issue_date", "due_date", "notes", "pdf", "created_at", "updated_at",
+    list_display = (
+        "number",
+        "tenant",
+        "customer_name",
+        "status",
+        "total",
+        "currency",
+        "issue_date",
+        "due_date",
     )
+
+    list_filter = ("status", "currency", "issue_date")
+
+    search_fields = (
+        "number",
+        "tenant__name",
+        "customer_name",
+        "buyer_email",
+        "gstin",
+    )
+
+    readonly_fields = (
+        "number",
+        "tenant",
+        "subscription",
+        "quotation",
+        "status",
+        "issuer",
+        "customer_name",
+        "attention",
+        "address",
+        "buyer_email",
+        "cc_emails",
+        "bcc_emails",
+        "gstin",
+        "state",
+        "state_code",
+        "is_interstate",
+        "ship_to",
+        "your_ref",
+        "currency",
+        "subtotal",
+        "discount",
+        "cgst_amount",
+        "sgst_amount",
+        "igst_amount",
+        "tax_amount",
+        "total",
+        "amount_received",
+        "period_start",
+        "period_end",
+        "issue_date",
+        "due_date",
+        "terms",
+        "notes",
+        "pdf",
+        "created_at",
+        "updated_at",
+    )
+
     inlines = (InvoiceItemInline, PaymentInline)
+
     actions = ("issue_selected",)
 
     def has_add_permission(self, request):
@@ -183,16 +236,22 @@ class InvoiceAdmin(admin.ModelAdmin):
     def issue_selected(self, request, queryset):
         changed = 0
         errors = []
+
         for invoice in queryset:
             try:
                 issue_invoice(invoice.pk)
                 changed += 1
             except BillingError as exc:
                 errors.append(f"{invoice.number}: {exc}")
-        self.message_user(request, f"{changed} invoice(s) issued.", messages.SUCCESS if not errors else messages.WARNING)
+
+        self.message_user(
+            request,
+            f"{changed} invoice(s) issued.",
+            messages.SUCCESS if not errors else messages.WARNING,
+        )
+
         for error in errors:
             self.message_user(request, error, messages.ERROR)
-
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
