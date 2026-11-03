@@ -421,23 +421,63 @@ class QuoteLine(models.Model):
         SERVICE_VISIT = "service_visit", "Service visit"
         MANPOWER = "manpower", "Man power"
         ON_REQUEST = "on_request", "On request"
-
+    
     class Uom(models.TextChoices):
+        # Quantity / Count
         PCS = "PCS", "Pcs"
         NOS = "NOS", "Nos"
-        SET = "SET", "Set"
         UNT = "UNT", "Unit"
-        HRS = "HRS", "Hours"
-        DAY = "DAY", "Days"
-        MTH = "MTH", "Months"
-        VST = "VST", "Visits"
-        KGS = "KGS", "Kg"
-        LTR = "LTR", "Litre"
-        MTR = "MTR", "Metre"
+        SET = "SET", "Set"
+        PR = "PR", "Pair"
+        DOZ = "DOZ", "Dozen"
+
+        # Packaging
         BOX = "BOX", "Box"
         PAC = "PAC", "Pack"
-        OTH = "OTH", "Other"
+        PKT = "PKT", "Packet"
+        CTN = "CTN", "Carton"
+        BAG = "BAG", "Bag"
+        BDL = "BDL", "Bundle"
+        ROL = "ROL", "Roll"
+        BTL = "BTL", "Bottle"
+        CAN = "CAN", "Can"
 
+        # Weight
+        MG = "MG", "Mg"
+        GMS = "GMS", "Gms"
+        KGS = "KGS", "Kg"
+        QTL = "QTL", "Quintal"
+        TON = "TON", "Ton"
+
+        # Volume
+        ML = "ML", "Ml"
+        LTR = "LTR", "Litre"
+
+        # Length / Distance
+        MM = "MM", "Mm"
+        CM = "CM", "Cm"
+        MTR = "MTR", "Mtr"
+        KM = "KM", "Km"
+        IN = "IN", "Inch"
+        FT = "FT", "Feet"
+        YD = "YD", "Yard"
+        MI = "MI", "Mile"
+
+        # Area
+        SQFT = "SQFT", "Sq.Ft"
+        SQM = "SQM", "Sq.Mtr"
+        SQYD = "SQYD", "Sq.Yard"
+
+        # Time / Services
+        HRS = "HRS", "Hour"
+        DAY = "DAY", "Day"
+        MTH = "MTH", "Month"
+        YR = "YR", "Year"
+        VST = "VST", "Visits"
+
+        # Other
+        OTH = "OTH", "Other"
+        
     quote = models.ForeignKey(Quote, related_name="lines", on_delete=models.CASCADE)
     position = models.PositiveSmallIntegerField()
     kind = models.CharField(max_length=14, choices=Kind.choices)
@@ -445,7 +485,7 @@ class QuoteLine(models.Model):
     item = models.CharField(max_length=200)
     specification = models.CharField(max_length=300, blank=True)
     hsn_sac = models.CharField(max_length=8, blank=True)
-    uom = models.CharField(max_length=3, choices=Uom.choices, default=Uom.PCS)                       # NEW
+    uom = models.CharField(max_length=5, choices=Uom.choices, default=Uom.PCS)                       # NEW
     qty = models.DecimalField(max_digits=8, decimal_places=2, default=1, validators=[MinValueValidator(Decimal("0.01"))])
     unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
     discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
