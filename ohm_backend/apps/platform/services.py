@@ -673,7 +673,6 @@ def send_quote(quote, user, *, test_recipients=None, response_url=None):
             "gst": money_fmt(quote.cgst + quote.sgst + quote.igst),
             "round_off": f"{quote.round_off:+,.2f}",
             "total": money_fmt(quote.total),
-            "amount_in_words": quote.amount_in_words,
             "notes": quote.notes,
             "terms": quote_terms(quote),
             "accept_url": response_url,

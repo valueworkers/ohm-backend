@@ -613,7 +613,7 @@ class QuoteViewSet(viewsets.ModelViewSet):
         else:
             rows.append(f"CGST: {quote.cgst}  {quote.state_tax_label}: {quote.sgst}")
         rows += [f"Round off: {quote.round_off}", f"Total: {quote.total if quote.total is not None else 'GST not set'}",
-                 quote.amount_in_words, "", quote.notes, "", *quote_terms(quote)]
+                "", quote.notes, "", *quote_terms(quote)]
         for text in rows:
             if y < 50:
                 pdf.showPage(); y = 800
@@ -753,7 +753,6 @@ class PublicQuoteResponseView(APIView):
             "packing": quote.packing,
             "round_off": quote.round_off,
             "total": quote.total,
-            "amount_in_words": quote.amount_in_words,
             "notes": quote.notes,
             "terms": quote_terms(quote),
         })

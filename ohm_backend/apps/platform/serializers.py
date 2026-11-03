@@ -478,7 +478,6 @@ class QuoteSerializer(serializers.ModelSerializer):
     cc_emails = EmailListField(required=False)
     bcc_emails = EmailListField(required=False)
     valid_until = serializers.DateField(read_only=True)
-    amount_in_words = serializers.CharField(read_only=True)
     state_tax_label = serializers.CharField(read_only=True)
     supply_type_display = serializers.CharField(source="get_supply_type_display", read_only=True)
     freight = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=0, required=False, allow_null=True)
@@ -493,7 +492,7 @@ class QuoteSerializer(serializers.ModelSerializer):
             "supply_type", "supply_type_display", "state_tax_label", "place_of_supply_code",
             "seller_gstin", "seller_state_code", "seller_state_name",
             "subtotal", "discount_total", "freight", "packing", "charges_gst_rate", "taxable_amount",
-            "cgst", "sgst", "igst", "round_off", "total", "amount_in_words",
+            "cgst", "sgst", "igst", "round_off", "total",
             "sent_at", "accepted_at", "created_at", "lines", "events",
         )
         read_only_fields = (

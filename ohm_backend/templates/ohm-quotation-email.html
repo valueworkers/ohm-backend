@@ -25,7 +25,6 @@
     {{ subtotal }}, {{ packing_label }}, {{ packing_value }},
     {{ freight_label }}, {{ freight_value }}, {{ gst }},
     {{ total_label }}, {{ total }}
-    {{ amount_in_words }}
     {% for term in terms %}   {{ term }} {% endfor %}
     {{ accept_url }}          "Accept quote online" link
 -->
@@ -210,13 +209,6 @@
           </td>
         </tr>
       </table>
-    </td>
-  </tr>
-
-  <!-- Amount in words -->
-  <tr>
-    <td style="padding:18px 32px 24px;">
-      <div style="font-size:13px; font-style:italic; color:#3f4145;">{{ amount_in_words }}</div>
     </td>
   </tr>
 

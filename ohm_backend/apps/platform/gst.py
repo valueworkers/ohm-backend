@@ -1,8 +1,3 @@
-"""Indian GST helpers: GSTIN validation, state codes, supply type, amount in words.
-
-Pure Python, no Django imports, so it is safe to use from models, services,
-serializers and tests.
-"""
 import re
 from decimal import Decimal, ROUND_HALF_UP
 
@@ -105,40 +100,3 @@ def split_tax(taxable, rate, stype):
         return ZERO, ZERO, money(taxable * rate / 100)
     return ZERO, ZERO, ZERO
 
-
-_ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten",
-         "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen",
-         "Eighteen", "Nineteen"]
-_TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"]
-
-
-def _below_100(n):
-    return _ONES[n] if n < 20 else (_TENS[n // 10] + (" " + _ONES[n % 10] if n % 10 else ""))
-
-
-def _below_1000(n):
-    h, r = divmod(n, 100)
-    return " ".join(p for p in (f"{_ONES[h]} Hundred" if h else "", _below_100(r) if r else "") if p)
-
-
-def _indian_words(n):
-    if n == 0:
-        return "Zero"
-    parts = []
-    for div, label in ((10**7, "Crore"), (10**5, "Lakh"), (1000, "Thousand")):
-        q, n = divmod(n, div)
-        if q:
-            parts.append(f"{_indian_words(q)} {label}")
-    if n:
-        parts.append(_below_1000(n))
-    return " ".join(parts)
-
-
-def amount_in_words(amount):
-    if amount is None:
-        return ""
-    rupees, paise = divmod(int(money(amount) * 100), 100)
-    text = f"Indian Rupees {_indian_words(rupees)}"
-    if paise:
-        text += f" and {_indian_words(paise)} Paise"
-    return text + " Only"
