@@ -780,17 +780,23 @@ class PublicQuoteResponseView(APIView):
 
 
 class InvoiceViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsPlatformAdmin]
     filterset_class = InvoiceFilter
     search_fields = ["number", "customer_name", "buyer_email", "gstin", "your_ref", "tenant__name"]
     ordering_fields = ["issue_date", "due_date", "total", "number", "created_at", "status"]
     ordering = ["-issue_date", "-created_at"]
+
+    def get_permissions(self):
+        if connection.schema_name == get_public_schema_name():
+            return [IsPlatformAdmin()]
+        return [IsAuthenticated()]
 
     def handle_exception(self, exc):
         return super().handle_exception(exc)
 
     def get_queryset(self):
         qs = Invoice.objects.select_related("tenant")
+        if connection.schema_name != get_public_schema_name():
+            qs = qs.filter(tenant=self.request.tenant)
         if self.action == "list":
             return qs
         return qs.prefetch_related("items", "payments")
@@ -805,6 +811,12 @@ class InvoiceViewSet(viewsets.ModelViewSet):
                 "Only draft invoices can be edited or deleted. Void it and create a new one instead."
             )
 
+    def perform_create(self, serializer):
+        if connection.schema_name != get_public_schema_name():
+            serializer.save(tenant=self.request.tenant)
+        else:
+            serializer.save()
+
     def perform_update(self, serializer):
         self._ensure_draft(serializer.instance)
         serializer.save()
@@ -817,11 +829,18 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     def defaults(self, request):
         """Prefill data for the 'Raise invoice' form."""
         today = timezone.localdate()
+        tenant_id = None if connection.schema_name == get_public_schema_name() else request.tenant.pk
+        issuer = services.default_issuer()
+        seller_code, seller_name, seller_gstin = services.get_seller_tax_settings(tenant_id)
+        if seller_gstin:
+            issuer["gstin"] = seller_gstin
+        if seller_name:
+            issuer["state"] = seller_name
         return Response({
             "number": services.next_invoice_number(today, lock=False),
             "issue_date": today,
             "due_days": services.default_due_days(),
-            "issuer": services.default_issuer(),
+            "issuer": issuer,
             "terms": services.default_terms(),
         })
 

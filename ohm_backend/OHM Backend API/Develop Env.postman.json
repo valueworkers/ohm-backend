@@ -78,6 +78,18 @@
       "value": "20",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "quoteId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "invoiceId",
+      "value": "",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment"

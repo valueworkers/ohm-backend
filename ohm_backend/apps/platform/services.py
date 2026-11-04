@@ -825,7 +825,7 @@ def save_invoice(invoice: Invoice, items, *, raise_now: bool = False) -> Invoice
     issuer = invoice.issuer
  
     # Seller = the platform's QuoteTaxSettings (same source as platform quotes); issuer header is the fallback.
-    seller_code, _name, seller_gstin = get_seller_tax_settings(None)
+    seller_code, _name, seller_gstin = get_seller_tax_settings(invoice.tenant_id)
     if not seller_code:
         seller_code = gst.resolve_state_code(issuer.get("gstin", ""), issuer.get("state", ""))
     if seller_gstin and not issuer.get("gstin"):

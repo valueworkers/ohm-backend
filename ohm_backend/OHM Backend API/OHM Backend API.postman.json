@@ -4993,664 +4993,737 @@
           "description": "Full lifecycle for invoices: drafts, raising numbered tax invoices, partial/full payments, voiding, filtering, and PDF generation.",
           "item": [
             {
-              "name": "Get invoice defaults",
-              "description": "Prefill data for invoice creation (next number preview, issuer header, due days, terms).",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/defaults/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "defaults",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
-                }
-              }
-            },
-            {
-              "name": "Get invoice form metadata",
-              "description": "Dropdown choices: states, GST rates, line types, payment methods, invoice statuses.",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/meta/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "meta",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
-                }
-              }
-            },
-            {
-              "name": "Preview next invoice number",
-              "description": "Preview next invoice sequence number without consuming it.",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/next-number/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "next-number",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
-                }
-              }
-            },
-            {
-              "name": "Validate customer GSTIN",
-              "description": "Validates GSTIN and resolves place of supply (CGST+SGST vs IGST).",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/gstin-info/?gstin=29AAAAA0000A1ZY",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "gstin-info",
-                    ""
-                  ],
-                  "query": [
-                    {
-                      "key": "gstin",
-                      "value": "29AAAAA0000A1ZY"
-                    }
-                  ],
-                  "variable": []
-                }
-              }
-            },
-            {
-              "name": "List invoices",
-              "description": "List invoices with search, filters (status, date range, overdue, total), and ordering.",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/?page={{page}}&page_size={{pageSize}}",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    ""
-                  ],
-                  "query": [
-                    {
-                      "key": "status",
-                      "value": "issued",
-                      "disabled": true
-                    },
-                    {
-                      "key": "search",
-                      "value": "Sunrise",
-                      "disabled": true
-                    },
-                    {
-                      "key": "ordering",
-                      "value": "-issue_date",
-                      "disabled": true
-                    },
-                    {
-                      "key": "page",
-                      "value": "{{page}}"
-                    },
-                    {
-                      "key": "page_size",
-                      "value": "{{pageSize}}"
-                    }
-                  ],
-                  "variable": []
-                }
-              }
-            },
-            {
-              "name": "Create draft invoice",
-              "description": "Creates a draft invoice and calculates GST breakdown. Saves id to invoiceId.",
-              "event": [
+              "name": "InvoiceViewSet",
+              "item": [
                 {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "if(pm.response.code===201) pm.environment.set(\"invoiceId\", pm.response.json().id);"
-                    ]
-                  }
-                }
-              ],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
+                  "name": "Get invoice defaults",
+                  "description": "Prefill data for invoice creation (next number preview, issuer header, default due days, terms).",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/defaults/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "defaults",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
                     }
-                  ]
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
                   },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
+                  "response": []
                 },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"customer_name\": \"Sunrise Healthcare\",\n  \"attention\": \"Dr. Ramesh\",\n  \"address\": \"123 Indiranagar, Bangalore\",\n  \"buyer_email\": \"accounts@sunrise.com\",\n  \"gstin\": \"29AAAAA0000A1ZY\",\n  \"state\": \"Karnataka\",\n  \"due_days\": 15,\n  \"items\": [\n    {\n      \"line_type\": \"custom_service\",\n      \"description\": \"Healthcare Platform Subscription\",\n      \"hsn_sac\": \"9983\",\n      \"specification\": \"Standard Tier monthly subscription\",\n      \"quantity\": 1,\n      \"uom\": \"Month\",\n      \"unit_price\": \"25000.00\",\n      \"discount_percent\": \"0\",\n      \"gst_rate\": \"18.00\"\n    }\n  ],\n  \"notes\": \"Thank you for partnering with O-HM.\"\n}"
-                }
-              }
-            },
-            {
-              "name": "Create and raise invoice immediately",
-              "description": "Creates and issues an invoice with a sequence number in a single request.",
-              "event": [
                 {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "if(pm.response.code===201) pm.environment.set(\"invoiceId\", pm.response.json().id);"
-                    ]
-                  }
-                }
-              ],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
+                  "name": "Get invoice form metadata",
+                  "description": "Dropdown choices: states, GST slabs, line types, payment methods, invoice statuses.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/meta/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "meta",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
                     }
-                  ]
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
                   },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
+                  "response": []
                 },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"customer_name\": \"Sunrise Healthcare\",\n  \"attention\": \"Dr. Ramesh\",\n  \"address\": \"123 Indiranagar, Bangalore\",\n  \"buyer_email\": \"accounts@sunrise.com\",\n  \"gstin\": \"29AAAAA0000A1ZY\",\n  \"state\": \"Karnataka\",\n  \"due_days\": 15,\n  \"items\": [\n    {\n      \"line_type\": \"custom_service\",\n      \"description\": \"Healthcare Platform Subscription\",\n      \"hsn_sac\": \"9983\",\n      \"specification\": \"Standard Tier monthly subscription\",\n      \"quantity\": 1,\n      \"uom\": \"Month\",\n      \"unit_price\": \"25000.00\",\n      \"discount_percent\": \"0\",\n      \"gst_rate\": \"18.00\"\n    }\n  ],\n  \"notes\": \"Thank you for partnering with O-HM.\",\n  \"raise_invoice\": true\n}"
-                }
-              }
-            },
-            {
-              "name": "Get invoice detail",
-              "description": "Get full invoice details with line items and payment history.",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
+                {
+                  "name": "Preview next invoice number",
+                  "description": "Preview next invoice sequence number without consuming it.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/next-number/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "next-number",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
                     }
-                  ]
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "{{invoiceId}}",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
-                }
-              }
-            },
-            {
-              "name": "Update draft invoice",
-              "description": "Update fields or lines on a draft invoice.",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "PATCH",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
                   },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "{{invoiceId}}",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
+                  "response": []
                 },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"attention\": \"Chief Medical Officer\"\n}"
-                }
-              }
-            },
-            {
-              "name": "Raise invoice",
-              "description": "Finalize a draft invoice, allocating a permanent invoice number.",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
+                {
+                  "name": "Validate customer GSTIN",
+                  "description": "Validates GSTIN offline (format and checksum) and calculates whether CGST+SGST or IGST applies against seller state.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/gstin-info/?gstin=29AAAAA0000A1ZY",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "gstin-info",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "gstin",
+                          "value": "29AAAAA0000A1ZY"
+                        }
+                      ],
+                      "variable": []
                     }
-                  ]
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/raise/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "{{invoiceId}}",
-                    "raise",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
-                }
-              }
-            },
-            {
-              "name": "Record payment",
-              "description": "Record a manual payment against an issued invoice (updates status to partially_paid or paid).",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
                   },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/record-payment/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "{{invoiceId}}",
-                    "record-payment",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
+                  "response": []
                 },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"amount\": \"10000.00\",\n  \"method\": \"bank_transfer\",\n  \"reference\": \"NEFT12345678\"\n}"
-                }
-              }
-            },
-            {
-              "name": "Void invoice",
-              "description": "Void an unpaid invoice.",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
+                {
+                  "name": "List invoices",
+                  "description": "Paginated invoice list with filtering (status, overdue, dates, amounts), search, and ordering.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/?status=draft&status=issued&overdue=false&total_min=1000&total_max=100000&issue_date_from=2026-01-01&issue_date_to=2026-12-31&search=Sunrise&ordering=-issue_date&page={{page}}&page_size={{pageSize}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "status",
+                          "value": "draft",
+                          "description": "Single, comma-separated (draft,issued), or repeated"
+                        },
+                        {
+                          "key": "status",
+                          "value": "issued"
+                        },
+                        {
+                          "key": "overdue",
+                          "value": "false"
+                        },
+                        {
+                          "key": "total_min",
+                          "value": "1000"
+                        },
+                        {
+                          "key": "total_max",
+                          "value": "100000"
+                        },
+                        {
+                          "key": "issue_date_from",
+                          "value": "2026-01-01"
+                        },
+                        {
+                          "key": "issue_date_to",
+                          "value": "2026-12-31"
+                        },
+                        {
+                          "key": "due_date_from",
+                          "value": "2026-01-01",
+                          "disabled": true
+                        },
+                        {
+                          "key": "due_date_to",
+                          "value": "2026-12-31",
+                          "disabled": true
+                        },
+                        {
+                          "key": "search",
+                          "value": "Sunrise",
+                          "description": "Searches number, customer_name, buyer_email, gstin, your_ref"
+                        },
+                        {
+                          "key": "ordering",
+                          "value": "-issue_date",
+                          "description": "issue_date, due_date, total, number, created_at, status"
+                        },
+                        {
+                          "key": "page",
+                          "value": "{{page}}"
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}"
+                        }
+                      ],
+                      "variable": []
                     }
-                  ]
+                  },
+                  "response": []
                 },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/void/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "{{invoiceId}}",
-                    "void",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
-                }
-              }
-            },
-            {
-              "name": "Download invoice PDF",
-              "description": "Download generated PDF for the invoice.",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
+                {
+                  "name": "Create draft invoice",
+                  "description": "Creates a draft invoice, calculates taxes (intra-state CGST+SGST or inter-state IGST), saves id to invoiceId.",
+                  "event": [
                     {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"invoiceId\", pm.response.json().id);"
+                        ]
+                      }
                     }
-                  ]
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"customer_name\": \"Sunrise Healthcare\",\n  \"attention\": \"Dr. Ramesh\",\n  \"address\": \"123 Indiranagar, Bangalore\",\n  \"buyer_email\": \"accounts@sunrise.com\",\n  \"gstin\": \"29AAAAA0000A1ZY\",\n  \"state\": \"Karnataka\",\n  \"due_days\": 15,\n  \"items\": [\n    {\n      \"line_type\": \"custom_service\",\n      \"description\": \"Healthcare Caregiver Package\",\n      \"hsn_sac\": \"9983\",\n      \"specification\": \"Caregiver monthly bedside support\",\n      \"quantity\": 1,\n      \"uom\": \"Month\",\n      \"unit_price\": \"25000.00\",\n      \"discount_percent\": \"0\",\n      \"gst_rate\": \"18.00\"\n    }\n  ],\n  \"notes\": \"Payment as per agreed terms.\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
                 },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/pdf/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "{{invoiceId}}",
-                    "pdf",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
-                }
-              }
-            },
-            {
-              "name": "Delete draft invoice",
-              "description": "Delete a draft invoice.",
-              "event": [],
-              "auth": {},
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
+                {
+                  "name": "Create and raise invoice immediately",
+                  "description": "Creates and issues an invoice in a single call, consuming the next sequence number.",
+                  "event": [
                     {
-                      "key": "token",
-                      "value": "{{rootAccessToken}}",
-                      "type": "string"
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"invoiceId\", pm.response.json().id);"
+                        ]
+                      }
                     }
-                  ]
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"customer_name\": \"Sunrise Healthcare\",\n  \"attention\": \"Dr. Ramesh\",\n  \"address\": \"123 Indiranagar, Bangalore\",\n  \"buyer_email\": \"accounts@sunrise.com\",\n  \"gstin\": \"29AAAAA0000A1ZY\",\n  \"state\": \"Karnataka\",\n  \"due_days\": 15,\n  \"items\": [\n    {\n      \"line_type\": \"custom_service\",\n      \"description\": \"Healthcare Caregiver Package\",\n      \"hsn_sac\": \"9983\",\n      \"specification\": \"Caregiver monthly bedside support\",\n      \"quantity\": 1,\n      \"uom\": \"Month\",\n      \"unit_price\": \"25000.00\",\n      \"discount_percent\": \"0\",\n      \"gst_rate\": \"18.00\"\n    }\n  ],\n  \"notes\": \"Payment as per agreed terms.\",\n  \"raise_invoice\": true\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
                 },
-                "method": "DELETE",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
-                  "host": [
-                    "{{baseUrl}}"
-                  ],
-                  "path": [
-                    "api",
-                    "platform",
-                    "invoices",
-                    "{{invoiceId}}",
-                    ""
-                  ],
-                  "query": [],
-                  "variable": []
+                {
+                  "name": "Get invoice detail",
+                  "description": "Fetch full invoice details, line items, and payment history.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update draft invoice",
+                  "description": "Edit fields or lines on a draft invoice. Editing non-draft invoices is rejected with HTTP 400.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"attention\": \"Chief Medical Officer\",\n  \"notes\": \"Updated instructions.\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Raise invoice",
+                  "description": "Issues a draft invoice, locking the sequence and assigning the permanent invoice number.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/raise/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        "raise",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Record payment",
+                  "description": "Record a manual payment against an issued invoice (card, upi, netbanking, bank_transfer, cash, cheque). Transitions status to partially_paid or paid.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/record-payment/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        "record-payment",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"amount\": \"10000.00\",\n  \"method\": \"bank_transfer\",\n  \"reference\": \"NEFT-987654\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Void invoice",
+                  "description": "Void an unpaid invoice. Any successful payments must be refunded before voiding.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/void/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        "void",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Download invoice PDF",
+                  "description": "Download generated PDF file for the invoice.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/pdf/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        "pdf",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete draft invoice",
+                  "description": "Delete a draft invoice. Non-draft invoices cannot be deleted.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{rootAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
                 }
-              }
+              ]
             }
           ]
         }
@@ -11112,6 +11185,815 @@
                       "variable": []
                     },
                     "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "08 - Invoices and payments (Tenant)",
+          "description": "Tenant workspace invoices: manage drafts, raise invoices, record patient/client payments, download PDFs, scoped by X-Tenant.",
+          "item": [
+            {
+              "name": "InvoiceViewSet",
+              "item": [
+                {
+                  "name": "Get invoice defaults",
+                  "description": "Prefill data for invoice creation (next number preview, issuer header, default due days, terms).",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/defaults/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "defaults",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get invoice form metadata",
+                  "description": "Dropdown choices: states, GST slabs, line types, payment methods, invoice statuses.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/meta/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "meta",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Preview next invoice number",
+                  "description": "Preview next invoice sequence number without consuming it.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/next-number/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "next-number",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Validate customer GSTIN",
+                  "description": "Validates GSTIN offline (format and checksum) and calculates whether CGST+SGST or IGST applies against seller state.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/gstin-info/?gstin=29AAAAA0000A1ZY",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "gstin-info",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "gstin",
+                          "value": "29AAAAA0000A1ZY"
+                        }
+                      ],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "List invoices",
+                  "description": "Paginated invoice list with filtering (status, overdue, dates, amounts), search, and ordering.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/?status=draft&status=issued&overdue=false&total_min=1000&total_max=100000&issue_date_from=2026-01-01&issue_date_to=2026-12-31&search=Sunrise&ordering=-issue_date&page={{page}}&page_size={{pageSize}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "status",
+                          "value": "draft",
+                          "description": "Single, comma-separated (draft,issued), or repeated"
+                        },
+                        {
+                          "key": "status",
+                          "value": "issued"
+                        },
+                        {
+                          "key": "overdue",
+                          "value": "false"
+                        },
+                        {
+                          "key": "total_min",
+                          "value": "1000"
+                        },
+                        {
+                          "key": "total_max",
+                          "value": "100000"
+                        },
+                        {
+                          "key": "issue_date_from",
+                          "value": "2026-01-01"
+                        },
+                        {
+                          "key": "issue_date_to",
+                          "value": "2026-12-31"
+                        },
+                        {
+                          "key": "due_date_from",
+                          "value": "2026-01-01",
+                          "disabled": true
+                        },
+                        {
+                          "key": "due_date_to",
+                          "value": "2026-12-31",
+                          "disabled": true
+                        },
+                        {
+                          "key": "search",
+                          "value": "Sunrise",
+                          "description": "Searches number, customer_name, buyer_email, gstin, your_ref"
+                        },
+                        {
+                          "key": "ordering",
+                          "value": "-issue_date",
+                          "description": "issue_date, due_date, total, number, created_at, status"
+                        },
+                        {
+                          "key": "page",
+                          "value": "{{page}}"
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}"
+                        }
+                      ],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create draft invoice",
+                  "description": "Creates a draft invoice, calculates taxes (intra-state CGST+SGST or inter-state IGST), saves id to invoiceId.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"invoiceId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"customer_name\": \"Sunrise Healthcare\",\n  \"attention\": \"Dr. Ramesh\",\n  \"address\": \"123 Indiranagar, Bangalore\",\n  \"buyer_email\": \"accounts@sunrise.com\",\n  \"gstin\": \"29AAAAA0000A1ZY\",\n  \"state\": \"Karnataka\",\n  \"due_days\": 15,\n  \"items\": [\n    {\n      \"line_type\": \"custom_service\",\n      \"description\": \"Healthcare Caregiver Package\",\n      \"hsn_sac\": \"9983\",\n      \"specification\": \"Caregiver monthly bedside support\",\n      \"quantity\": 1,\n      \"uom\": \"Month\",\n      \"unit_price\": \"25000.00\",\n      \"discount_percent\": \"0\",\n      \"gst_rate\": \"18.00\"\n    }\n  ],\n  \"notes\": \"Payment as per agreed terms.\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create and raise invoice immediately",
+                  "description": "Creates and issues an invoice in a single call, consuming the next sequence number.",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"invoiceId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"customer_name\": \"Sunrise Healthcare\",\n  \"attention\": \"Dr. Ramesh\",\n  \"address\": \"123 Indiranagar, Bangalore\",\n  \"buyer_email\": \"accounts@sunrise.com\",\n  \"gstin\": \"29AAAAA0000A1ZY\",\n  \"state\": \"Karnataka\",\n  \"due_days\": 15,\n  \"items\": [\n    {\n      \"line_type\": \"custom_service\",\n      \"description\": \"Healthcare Caregiver Package\",\n      \"hsn_sac\": \"9983\",\n      \"specification\": \"Caregiver monthly bedside support\",\n      \"quantity\": 1,\n      \"uom\": \"Month\",\n      \"unit_price\": \"25000.00\",\n      \"discount_percent\": \"0\",\n      \"gst_rate\": \"18.00\"\n    }\n  ],\n  \"notes\": \"Payment as per agreed terms.\",\n  \"raise_invoice\": true\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get invoice detail",
+                  "description": "Fetch full invoice details, line items, and payment history.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update draft invoice",
+                  "description": "Edit fields or lines on a draft invoice. Editing non-draft invoices is rejected with HTTP 400.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"attention\": \"Chief Medical Officer\",\n  \"notes\": \"Updated instructions.\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Raise invoice",
+                  "description": "Issues a draft invoice, locking the sequence and assigning the permanent invoice number.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/raise/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        "raise",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Record payment",
+                  "description": "Record a manual payment against an issued invoice (card, upi, netbanking, bank_transfer, cash, cheque). Transitions status to partially_paid or paid.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/record-payment/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        "record-payment",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"amount\": \"10000.00\",\n  \"method\": \"bank_transfer\",\n  \"reference\": \"NEFT-987654\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Void invoice",
+                  "description": "Void an unpaid invoice. Any successful payments must be refunded before voiding.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/void/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        "void",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Download invoice PDF",
+                  "description": "Download generated PDF file for the invoice.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/pdf/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        "pdf",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete draft invoice",
+                  "description": "Delete a draft invoice. Non-draft invoices cannot be deleted.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "platform",
+                        "invoices",
+                        "{{invoiceId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    }
                   },
                   "response": []
                 }
