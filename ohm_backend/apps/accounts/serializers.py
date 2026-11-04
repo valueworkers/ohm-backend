@@ -397,7 +397,7 @@ class RoleSerializer(serializers.ModelSerializer):
         value = value.strip().upper()
         if not re.fullmatch(r"[A-Z][A-Z0-9_]{0,29}", value):
             raise serializers.ValidationError("Use 1–30 uppercase letters, numbers, or underscores; start with a letter.")
-        if value in {Role.Code.TENANT_ADMIN, Role.Code.CUSTOMER} and not (
+        if value in set(Role.Code.values) and not (
             self.instance and self.instance.code == value
         ):
             raise serializers.ValidationError("This code is reserved for a built-in role.")
@@ -414,7 +414,7 @@ class RoleSerializer(serializers.ModelSerializer):
         return value
 
     def validate(self, attrs):
-        if self.instance and self.instance.code in {Role.Code.TENANT_ADMIN, Role.Code.CUSTOMER}:
+        if self.instance and self.instance.code in set(Role.Code.values):
             if attrs.get("code", self.instance.code) != self.instance.code:
                 raise serializers.ValidationError({"code": "Built-in role codes cannot be changed."})
             if attrs.get("rank", self.instance.rank) != self.instance.rank:
@@ -447,6 +447,12 @@ class RoleAssignmentSerializer(serializers.ModelSerializer):
                 "object_id": assignment.scope_id}
 
     def validate(self, attrs):
+        request = self.context.get("request")
+        role = attrs.get("role")
+        if request and request.user and role and role.code == Role.Code.SUPER_ADMIN:
+            from apps.accounts.permissions import is_superadmin
+            if not is_superadmin(request.user):
+                raise serializers.ValidationError({"role_id": "Only a Superadmin can assign the Super Admin role."})
         object_type = attrs.pop("object_type", "")
         object_id = attrs.pop("object_id", None)
         if bool(object_type) != bool(object_id):

@@ -120,8 +120,8 @@ OHM exposes a unified API host (e.g. `api.ohm.com` in production or `api.ohm.loc
 
 | Persona | Schema | Auth Method | Capabilities |
 | :--- | :--- | :--- | :--- |
-| **Super Admin** | `public` | Email/Phone + Password or OTP (`/api/auth/login/` without `X-Tenant`) | Full platform authority, reviews onboarding requests, manages tenant lifecycles, provisions workspaces, manages subscription plans and features. |
-| **Platform Staff / Root User** | `public` | Email/Phone + Password or OTP | Operational staff managing onboarding applications, reviewing submissions, and viewing platform tenants. Has default permissions across `tenants`, `platform`, and `accounts`. |
+| **Super Admin** | `public` | Email/Phone + Password or OTP (`/api/auth/login/` without `X-Tenant`) | Full platform authority, manages roles and permissions across schemas, reviews onboarding requests, manages tenant lifecycles, provisions workspaces, manages subscription plans and features. |
+| **Platform Staff / Root User** | `public` | Email/Phone + Password or OTP | Operational staff managing roles and permissions, reviewing submissions, managing onboarding applications, and viewing platform tenants. Has default permissions across `tenants`, `platform`, and `accounts`. |
 | **Tenant Admin (Owner/Co-owner)** | Tenant schema (`public` mirror) | Email/Phone + Password or OTP (`/api/auth/login/` with `X-Tenant`) | Workspace administration: manages workspace users, invites co-owners, configures custom roles, manages role assignments, completes organization profile, and activates workspace. |
 | **Operational Staff / Sub-roles** | Tenant schema | Email/Phone + Password or OTP (`/api/auth/login/` with `X-Tenant`) | Healthcare workspace staff assigned to specific operational roles (`OPS_MANAGER`, `VENUE_ADMIN`, `SERVICE_ADMIN`, `RESOURCE_ADMIN`, `STAFF`) with granular or object-scoped access. |
 | **Customer / User** | Tenant schema | Email/Phone + Password or OTP (`/api/auth/login/` with `X-Tenant`) | Healthcare consumer / patient. Self-registers via `POST /api/auth/registrations/`. Has permissions on booking, wallet, and profile. |

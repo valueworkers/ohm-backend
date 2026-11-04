@@ -23,7 +23,7 @@ from apps.accounts.models import (
     EmployeeProfile, Role, RoleAssignment, ShiftSchedule, StaffForHire,
     PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
 )
-from apps.accounts.permissions import IsSchemaAdministrator, IsTenantAdmin, IsTenantSchema
+from apps.accounts.permissions import CanManageRoles, IsSchemaAdministrator, IsTenantAdmin, IsTenantSchema
 from apps.accounts.serializers import (
     CustomerRegisterSerializer,
     BulkEmployeeUploadSerializer,
@@ -103,10 +103,10 @@ class UserViewSet(
         return queryset.distinct()
 
 class RoleViewSet(viewsets.ModelViewSet):
-    """Tenant Admin CRUD for workspace roles; core roles remain protected."""
+    """CRUD for workspace and system roles; managed by Superadmin, Root user, and Tenant Admin."""
 
     serializer_class = RoleSerializer
-    permission_classes = [IsAuthenticated, IsTenantAdmin]
+    permission_classes = [IsAuthenticated, CanManageRoles]
     queryset = Role.objects.prefetch_related("permissions").order_by("rank", "name")
     http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
 
@@ -120,7 +120,7 @@ class RoleViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         role = self.get_object()
-        if role.code in {Role.Code.TENANT_ADMIN, Role.Code.CUSTOMER}:
+        if role.code in set(Role.Code.values):
             raise ValidationError({"code": "Built-in roles cannot be deleted."})
         try:
             return super().destroy(request, *args, **kwargs)
@@ -136,10 +136,10 @@ class RoleAssignmentViewSet(
     mixins.DestroyModelMixin,
     viewsets.GenericViewSet,
 ):
-    """Tenant Admin role grants, optionally scoped to an object in this tenant."""
+    """Role grants, optionally scoped to an object in this workspace; managed by Superadmin, Root user, and Tenant Admin."""
 
     serializer_class = RoleAssignmentSerializer
-    permission_classes = [IsAuthenticated, IsTenantAdmin]
+    permission_classes = [IsAuthenticated, CanManageRoles]
     queryset = RoleAssignment.objects.select_related("user", "role", "scope_type").order_by("id")
     http_method_names = ["get", "post", "delete", "head", "options"]
 
@@ -163,6 +163,15 @@ class RoleAssignmentViewSet(
             ).exclude(pk=instance.user_id).exists()
             if not another_admin:
                 raise ValidationError({"detail": "A workspace must keep at least one active Tenant Admin."})
+        elif (instance.scope_type_id is None and instance.role.code == Role.Code.SUPER_ADMIN
+                and instance.user.is_active):
+            another_super = User.objects.filter(
+                is_active=True,
+                role_assignments__role__code=Role.Code.SUPER_ADMIN,
+                role_assignments__scope_type__isnull=True,
+            ).exclude(pk=instance.user_id).exists()
+            if not another_super:
+                raise ValidationError({"detail": "The platform must keep at least one active Super Admin."})
         instance.delete()
 
 class ShiftScheduleViewSet(viewsets.ModelViewSet):

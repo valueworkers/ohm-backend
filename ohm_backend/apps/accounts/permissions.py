@@ -5,22 +5,71 @@ from apps.platform.permissions import IsPlatformAdmin
 from .models import Role
 
 
+def is_superadmin(user):
+    """Check if the user is a superadmin."""
+    if not (user and user.is_authenticated):
+        return False
+    return bool(
+        user.is_superuser
+        or user.groups.filter(name="Super User").exists()
+        or user.role_assignments.filter(
+            role__code=Role.Code.SUPER_ADMIN,
+            scope_type__isnull=True,
+            scope_id__isnull=True,
+        ).exists()
+    )
+
+
+def is_root_user(user):
+    """Check if the user is a platform root user / staff."""
+    if not (user and user.is_authenticated):
+        return False
+    return bool(
+        user.is_staff
+        or hasattr(user, "platform_admin_profile")
+        or user.role_assignments.filter(
+            role__code__in=[Role.Code.OPS_MANAGER, Role.Code.STAFF],
+            scope_type__isnull=True,
+            scope_id__isnull=True,
+        ).exists()
+    )
+
+
+def is_tenant_admin(user):
+    """Check if the user has Tenant Admin privileges in the current tenant schema."""
+    if not (user and user.is_authenticated):
+        return False
+    if connection.schema_name == get_public_schema_name():
+        return False
+    return bool(
+        user.groups.filter(name="TENANT_ADMIN").exists()
+        or user.role_assignments.filter(
+            role__code=Role.Code.TENANT_ADMIN,
+            scope_type__isnull=True,
+            scope_id__isnull=True,
+        ).exists()
+    )
+
+
 class IsTenantAdmin(BasePermission):
     """Require membership in the built-in Tenant Admin group."""
 
     def has_permission(self, request, view):
-        if not (request.user and request.user.is_authenticated):
+        return is_tenant_admin(request.user)
+
+
+class CanManageRoles(BasePermission):
+    """Allow Superadmin and Root users across all schemas, and Tenant Admin in tenant schemas."""
+
+    def has_permission(self, request, view):
+        user = request.user
+        if not (user and user.is_authenticated):
             return False
-        if connection.schema_name == get_public_schema_name():
-            return False
-        return (
-            request.user.groups.filter(name="TENANT_ADMIN").exists()
-            or request.user.role_assignments.filter(
-                role__code=Role.Code.TENANT_ADMIN,
-                scope_type__isnull=True,
-                scope_id__isnull=True,
-            ).exists()
-        )
+        if is_superadmin(user) or is_root_user(user):
+            return True
+        if is_tenant_admin(user):
+            return True
+        return False
 
 
 class DynamicModelPermissions(DjangoModelPermissions):
@@ -57,6 +106,8 @@ class IsSchemaAdministrator(BasePermission):
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
+        if is_superadmin(request.user) or is_root_user(request.user):
+            return True
         if connection.schema_name == get_public_schema_name():
             return IsPlatformAdmin().has_permission(request, view)
-        return IsTenantAdmin().has_permission(request, view)
+        return is_tenant_admin(request.user)

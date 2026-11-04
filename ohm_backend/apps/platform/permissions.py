@@ -15,13 +15,13 @@ def ModuleEnabled(code):
     return _ModuleEnabled
 
 class IsPlatformAdmin(BasePermission):
-    """O-HM super admins: Django superusers or users with a PlatformAdmin profile."""
+    """O-HM super admins & root staff: Django superusers, PlatformAdmin profiles, or staff."""
 
     def has_permission(self, request, view):
         user = request.user
         return bool(
             user
             and user.is_authenticated
-            and (user.is_superuser or hasattr(user, "platform_admin_profile"))
+            and (user.is_superuser or hasattr(user, "platform_admin_profile") or user.is_staff)
         )
 

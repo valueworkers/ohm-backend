@@ -38,10 +38,8 @@ class TenantJWTAuthentication(JWTAuthentication):
         return user
 
 
-# Import this after TenantJWTAuthentication is defined. Importing DRF's
-# TokenRefreshView initializes APIView, which resolves DEFAULT_AUTHENTICATION_CLASSES
-# and would otherwise re-import this partially initialized module.
-from rest_framework_simplejwt.views import TokenRefreshView
+# Avoid module-level import of TokenRefreshView here to prevent circular import
+# with DRF setting DEFAULT_AUTHENTICATION_CLASSES resolving TenantJWTAuthentication.
 
 
 class ScopedTokenRefreshSerializer(TokenRefreshSerializer):
@@ -82,7 +80,14 @@ class ScopedTokenRefreshSerializer(TokenRefreshSerializer):
             return data
 
 
-class ScopedTokenRefreshView(TokenRefreshView):
-    serializer_class = ScopedTokenRefreshSerializer
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "refresh_token"
+class ScopedTokenRefreshView:
+    @classmethod
+    def as_view(cls, **initkwargs):
+        from rest_framework_simplejwt.views import TokenRefreshView
+
+        class _View(TokenRefreshView):
+            serializer_class = ScopedTokenRefreshSerializer
+            throttle_classes = [ScopedRateThrottle]
+            throttle_scope = "refresh_token"
+
+        return _View.as_view(**initkwargs)

@@ -562,9 +562,9 @@ If unavailable or reserved:
 
 ---
 
-## 10. Tenant Roles & Role Assignments
+## 10. Roles & Role Assignments
 
-*Requires `IsTenantAdmin` and `X-Tenant: <slug>` header.*
+*Requires `CanManageRoles` (`IsAuthenticated` with Superadmin, Root user across all schemas, or Tenant Admin in tenant workspaces).*
 
 ### 10.1 List Roles
 - **Endpoint**: `GET /api/roles/`
