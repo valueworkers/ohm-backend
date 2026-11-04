@@ -2,10 +2,10 @@
 from datetime import timedelta
 
 import django_filters as df
-from django.db.models import Exists, OuterRef
+from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
-from .models import Quote
+from .models import Quote, Invoice
 
 
 def latest_revisions(qs):
@@ -42,3 +42,45 @@ class QuoteFilter(df.FilterSet):
 
     def filter_latest_only(self, qs, name, value):
         return latest_revisions(qs) if value else qs
+
+
+class InvoiceFilter(df.FilterSet):
+    status = df.CharFilter(method="filter_status")
+    issue_date_from = df.DateFilter(field_name="issue_date", lookup_expr="gte")
+    issue_date_to = df.DateFilter(field_name="issue_date", lookup_expr="lte")
+    due_date_from = df.DateFilter(field_name="due_date", lookup_expr="gte")
+    due_date_to = df.DateFilter(field_name="due_date", lookup_expr="lte")
+    total_min = df.NumberFilter(field_name="total", lookup_expr="gte")
+    total_max = df.NumberFilter(field_name="total", lookup_expr="lte")
+    overdue = df.BooleanFilter(method="filter_overdue")
+    tenant = df.NumberFilter(field_name="tenant_id")
+    customer_name = df.CharFilter(lookup_expr="icontains")
+    buyer_email = df.CharFilter(lookup_expr="icontains")
+    gstin = df.CharFilter(lookup_expr="iexact")
+    number = df.CharFilter(lookup_expr="icontains")
+    state_code = df.CharFilter(lookup_expr="exact")
+    is_interstate = df.BooleanFilter()
+    currency = df.CharFilter(lookup_expr="iexact")
+
+    class Meta:
+        model = Invoice
+        fields = ["tenant", "subscription", "quotation", "state_code", "is_interstate", "currency"]
+
+    def filter_status(self, qs, name, value):
+        values = self.request.GET.getlist("status") if self.request else []
+        final_values = set()
+        for v in values:
+            for item in v.split(","):
+                item = item.strip()
+                if item:
+                    final_values.add(item)
+        if not final_values and value:
+            final_values = {v.strip() for v in str(value).split(",") if v.strip()}
+        return qs.filter(status__in=final_values) if final_values else qs
+
+    def filter_overdue(self, qs, name, value):
+        cond = Q(
+            status__in=[Invoice.Status.ISSUED, Invoice.Status.PARTIALLY_PAID, Invoice.Status.OVERDUE],
+            due_date__lt=timezone.localdate(),
+        )
+        return qs.filter(cond) if value else qs.exclude(cond)

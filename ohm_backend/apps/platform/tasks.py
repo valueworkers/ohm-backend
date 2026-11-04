@@ -1,6 +1,5 @@
 import logging
 
-import dns.resolver
 from celery import Task, current_app, shared_task
 from django.conf import settings
 from django.utils import timezone
@@ -101,3 +100,10 @@ def expire_sent_quotes():
             Quote.objects.filter(pk__in=ids).update(status=Quote.Status.EXPIRED)
             QuoteEvent.objects.bulk_create([QuoteEvent(quote_id=pk, kind="expired", detail="Validity period elapsed") for pk in ids])
         return len(ids)
+
+
+@shared_task
+def mark_overdue_invoices_task():
+    from .services import mark_overdue_invoices
+    with schema_context(get_public_schema_name()):
+        return mark_overdue_invoices()

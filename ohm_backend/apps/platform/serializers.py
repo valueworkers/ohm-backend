@@ -8,6 +8,8 @@ from django.db import IntegrityError, transaction, connection
 from django.db.models import Q
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
+from django.core.validators import EmailValidator, RegexValidator
+from django.core.exceptions import ValidationError as DjangoValidationError
 
 from rest_framework import serializers
 
@@ -19,12 +21,14 @@ from .models import (
     Tenant,
     TenantProvisioning,
     Quote, QuoteEvent, QuoteLine, QuoteTaxSettings,
+    Invoice, InvoiceItem, Payment
 )
 from apps.accounts.services import AccountsService
 from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
 from . import gst
 
 DEFAULT_TRIAL_PLAN_ID = 1
+
 DEFAULT_TRIAL_DAYS = 14
 
 
@@ -596,3 +600,181 @@ class QuoteTaxSettingsSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"state_code": "Unknown GST state code."})
         attrs.update(gstin=gstin, state_code=code, state_name=gst.STATE_CODES[code])
         return attrs
+
+def GSTIN_VALIDATOR(value):
+    """Format + state code + check digit (blank is allowed)."""
+    if value and not gst.is_valid_gstin(value):
+        raise DjangoValidationError("Enter a valid 15-character GSTIN, e.g. 22AAAAA0000A1Z5.")
+
+
+class GSTINField(serializers.CharField):
+    """Trims and uppercases BEFORE blank handling and the regex validator run."""
+    def run_validation(self, data=serializers.empty):
+        if isinstance(data, str):
+            data = data.strip().upper()
+        return super().run_validation(data)
+
+
+class EmailListField(serializers.Field):
+    """Accepts 'a@x.com, b@y.com' or ['a@x.com', 'b@y.com']; stores a list."""
+    default_error_messages = {"invalid": "Enter valid email addresses separated by commas."}
+
+    def to_internal_value(self, data):
+        if isinstance(data, str):
+            data = re.split(r"[,;\s]+", data.strip())
+        if not isinstance(data, list):
+            self.fail("invalid")
+        validator, out = EmailValidator(), []
+        for e in (str(x).strip().lower() for x in data):
+            if not e:
+                continue
+            try:
+                validator(e)
+            except Exception:
+                self.fail("invalid")
+            if e not in out:
+                out.append(e)
+        return out
+
+    def to_representation(self, value):
+        return value or []
+
+
+class InvoiceItemSerializer(serializers.ModelSerializer):
+    hsn_sac = serializers.RegexField(
+        r"^\d{4,8}$", error_messages={"invalid": "HSN/SAC must be 4-8 digits."}
+    )
+
+    class Meta:
+        model = InvoiceItem
+        fields = [
+            "id", "position", "line_type", "description", "hsn_sac", "specification",
+            "quantity", "uom", "unit_price", "discount_percent", "lead_time", "gst_rate",
+            "discount_amount", "taxable_value", "cgst_amount", "sgst_amount", "igst_amount", "amount",
+        ]
+        read_only_fields = [
+            "id", "position", "discount_amount", "taxable_value",
+            "cgst_amount", "sgst_amount", "igst_amount", "amount",
+        ]
+
+    def validate_gst_rate(self, value):
+        if value not in gst.GST_RATES:
+            allowed = ", ".join(str(r.normalize()) for r in gst.GST_RATES)
+            raise serializers.ValidationError(f"GST rate must be one of: {allowed}.")
+        return value
+
+
+class PaymentReadSerializer(serializers.ModelSerializer):
+    recorded_by = serializers.CharField(source="recorded_by.email", read_only=True, default=None)
+
+    class Meta:
+        model = Payment
+        fields = ["id", "amount", "currency", "method", "status", "reference", "paid_at", "recorded_by", "created_at"]
+
+
+class RecordPaymentSerializer(serializers.Serializer):
+    amount = serializers.DecimalField(max_digits=12, decimal_places=2, min_value=Decimal("0.01"))
+    method = serializers.ChoiceField(choices=Payment.Method.choices)
+    reference = serializers.CharField(max_length=100, required=False, allow_blank=True, default="")
+    paid_at = serializers.DateTimeField(required=False, allow_null=True)
+
+    def validate_paid_at(self, value):
+        if value and value > timezone.now():
+            raise serializers.ValidationError("Payment date cannot be in the future.")
+        return value
+
+
+class IssuerSerializer(serializers.Serializer):
+    """Company header + 'Your contact' block shown on the invoice."""
+    logo = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    company_name = serializers.CharField(max_length=200)
+    company_address = serializers.CharField(required=False, allow_blank=True)
+    company_phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    gstin = GSTINField(max_length=15, required=False, allow_blank=True, validators=[GSTIN_VALIDATOR])
+    state = serializers.CharField(max_length=60, required=False, allow_blank=True)
+    contact_name = serializers.CharField(max_length=120, required=False, allow_blank=True)
+    contact_phone = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    contact_email = serializers.EmailField(required=False, allow_blank=True)
+
+
+class InvoiceSerializer(serializers.ModelSerializer):
+    items = InvoiceItemSerializer(many=True, required=False)
+    issuer = IssuerSerializer(required=False)
+    gstin = GSTINField(max_length=15, required=False, allow_blank=True, validators=[GSTIN_VALIDATOR])
+    cc_emails = EmailListField(required=False)
+    bcc_emails = EmailListField(required=False)
+    raise_invoice = serializers.BooleanField(write_only=True, required=False, default=False)
+    amount_paid = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    balance_due = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    payments = PaymentReadSerializer(many=True, read_only=True)
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True, default=None)
+
+    class Meta:
+        model = Invoice
+        fields = [
+            "id", "number", "status",
+            "tenant", "tenant_name", "subscription", "quotation",
+            "customer_name", "attention", "address", "buyer_email", "cc_emails", "bcc_emails",
+            "gstin", "state", "state_code", "is_interstate", "ship_to", "your_ref",
+            "currency", "issue_date", "due_days", "due_date", "period_start", "period_end",
+            "amount_received", "terms", "notes",
+            "items",
+            "subtotal", "discount", "cgst_amount", "sgst_amount", "igst_amount", "tax_amount", "total",
+            "amount_paid", "balance_due", "payments", "issuer", "pdf",
+            "raise_invoice", "created_at", "updated_at",
+        ]
+        read_only_fields = [
+            "id", "number", "status", "state_code", "is_interstate", "due_date",
+            "subtotal", "discount", "cgst_amount", "sgst_amount", "igst_amount", "tax_amount", "total",
+            "pdf", "created_at", "updated_at",
+        ]
+        extra_kwargs = {
+            "customer_name": {
+                "error_messages": {"blank": "Add the customer name.", "required": "Add the customer name."}
+            },
+        }
+
+    def validate_issuer(self, value):
+        return dict(value)
+
+    def validate_items(self, items):
+        from . import services  # lazy: services imports this module
+        if len(items) > services.MAX_LINES:
+            raise serializers.ValidationError(f"An invoice can have at most {services.MAX_LINES} lines.")
+        return items
+
+    def validate(self, attrs):
+        if attrs.get("raise_invoice"):
+            has_lines = bool(attrs.get("items")) or (
+                self.instance is not None and "items" not in attrs and self.instance.items.exists()
+            )
+            if not has_lines:
+                raise serializers.ValidationError({"items": "Add at least one line."})
+        return attrs
+
+    def create(self, validated_data):
+        from . import services
+        items = validated_data.pop("items", [])
+        raise_now = validated_data.pop("raise_invoice", False)
+        return services.save_invoice(Invoice(**validated_data), items, raise_now=raise_now)
+
+    def update(self, instance, validated_data):
+        from . import services
+        items = validated_data.pop("items", None)
+        raise_now = validated_data.pop("raise_invoice", False)
+        for k, v in validated_data.items():
+            setattr(instance, k, v)
+        return services.save_invoice(instance, items, raise_now=raise_now)
+
+
+class InvoiceListSerializer(serializers.ModelSerializer):
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True, default=None)
+    amount_paid = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+    balance_due = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
+
+    class Meta:
+        model = Invoice
+        fields = [
+            "id", "number", "status", "tenant", "tenant_name", "customer_name", "buyer_email",
+            "gstin", "issue_date", "due_date", "total", "amount_paid", "balance_due", "currency", "your_ref", "created_at",
+        ]

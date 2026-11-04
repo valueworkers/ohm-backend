@@ -332,7 +332,7 @@
           "item": [
             {
               "name": "Public: review sent quote",
-              "description": "Uses the buyer’s quote accept token. No login required.",
+              "description": "Uses the buyer\u2019s quote accept token. No login required.",
               "event": [],
               "auth": {},
               "request": {
@@ -1259,7 +1259,7 @@
           "item": [
             {
               "name": "List requests (platform admin)",
-              "description": "Platform admin only. Optional status filter.",
+              "description": "Filter by status (submitted, approved, rejected, provisioning, provisioned, failed). Paginated.",
               "event": [],
               "auth": {},
               "request": {
@@ -1284,7 +1284,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/platform/onboarding/requests/?status=submitted",
+                  "raw": "{{baseUrl}}/api/platform/onboarding/requests/?status=submitted&page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
                     "platform",
@@ -1297,9 +1297,15 @@
                   "query": [
                     {
                       "key": "status",
-                      "value": "submitted",
-                      "description": "submitted, approved, rejected, provisioning, provisioned",
-                      "type": "string"
+                      "value": "submitted"
+                    },
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}"
                     }
                   ],
                   "variable": []
@@ -1962,7 +1968,7 @@
           "item": [
             {
               "name": "List tenants",
-              "description": "Public tenant excluded. ?status=active and ?search=clinic are supported.",
+              "description": "Filter by status; search name, schema_name, contact email, or domain. Paginated.",
               "event": [],
               "auth": {},
               "request": {
@@ -1987,7 +1993,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/platform/tenants/?status=active&search=clinic",
+                  "raw": "{{baseUrl}}/api/platform/tenants/?status=active&search=clinic&page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
                     "platform",
@@ -1999,15 +2005,19 @@
                   "query": [
                     {
                       "key": "status",
-                      "value": "active",
-                      "description": "Optional status.",
-                      "type": "string"
+                      "value": "active"
                     },
                     {
                       "key": "search",
-                      "value": "clinic",
-                      "description": "Search name, schema, contact email, domain.",
-                      "type": "string"
+                      "value": "clinic"
+                    },
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}"
                     }
                   ],
                   "variable": []
@@ -3616,7 +3626,7 @@
             },
             {
               "name": "List subscriptions",
-              "description": "Optional filters: tenant, plan, status.",
+              "description": "Filter by tenant, plan, and status. Paginated.",
               "event": [],
               "auth": {},
               "request": {
@@ -3641,7 +3651,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/platform/subscriptions/?tenant={{tenantId}}&plan={{planId}}&status=active",
+                  "raw": "{{baseUrl}}/api/platform/subscriptions/?tenant={{tenantId}}&plan={{planId}}&status=active&page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
                     "platform",
@@ -3653,21 +3663,23 @@
                   "query": [
                     {
                       "key": "tenant",
-                      "value": "{{tenantId}}",
-                      "description": "Tenant ID",
-                      "type": "string"
+                      "value": "{{tenantId}}"
                     },
                     {
                       "key": "plan",
-                      "value": "{{planId}}",
-                      "description": "Plan ID",
-                      "type": "string"
+                      "value": "{{planId}}"
                     },
                     {
                       "key": "status",
-                      "value": "active",
-                      "description": "trial, active, expired, suspended",
-                      "type": "string"
+                      "value": "active"
+                    },
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}"
                     }
                   ],
                   "variable": []
@@ -4430,7 +4442,7 @@
                     },
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"company\": \"Example Clinic\",\n  \"attention\": \"Accounts Payable\",\n  \"address\": \"MG Road, Bengaluru\",\n  \"state\": \"Karnataka\",\n  \"buyer_email\": \"accounts@example.com\",\n  \"cc_emails\": [\n    \"finance@example.com\"\n  ],\n  \"bcc_emails\": [],\n  \"ship_to\": \"MG Road, Bengaluru\",\n  \"your_ref\": \"REQ-1001\",\n  \"valid_days\": 30,\n  \"notes\": \"Quote for requested services\",\n  \"terms\": \"Payment due within 30 days.\\nPrices exclude services not listed.\",\n  \"freight\": \"0.00\",\n  \"packing\": \"0.00\",\n  \"charges_gst_rate\": \"18.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package · monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"0.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                      "raw": "{\n  \"company\": \"Example Clinic\",\n  \"attention\": \"Accounts Payable\",\n  \"address\": \"MG Road, Bengaluru\",\n  \"state\": \"Karnataka\",\n  \"buyer_email\": \"accounts@example.com\",\n  \"cc_emails\": [\n    \"finance@example.com\"\n  ],\n  \"bcc_emails\": [],\n  \"ship_to\": \"MG Road, Bengaluru\",\n  \"your_ref\": \"REQ-1001\",\n  \"valid_days\": 30,\n  \"notes\": \"Quote for requested services\",\n  \"terms\": \"Payment due within 30 days.\\nPrices exclude services not listed.\",\n  \"freight\": \"0.00\",\n  \"packing\": \"0.00\",\n  \"charges_gst_rate\": \"18.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package \u00b7 monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"0.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -4442,7 +4454,7 @@
                 },
                 {
                   "name": "List quotes",
-                  "description": "Supports status, date range, state, GST supply type and amount filters; search=q and ordering parameters are also available.",
+                  "description": "Filters: status, supply_type, number, company, buyer_email, gstin, state, state_code, quote_date_after/before, total_min/max, line_item, hsn_sac, range, latest_only. Search and ordering use the fields exposed by QuoteViewSet.",
                   "event": [],
                   "auth": {},
                   "request": {
@@ -4465,7 +4477,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/platform/quotes/?status=draft&quote_date_after=2026-01-01&search=clinic&ordering=-quote_date",
+                      "raw": "{{baseUrl}}/api/platform/quotes/?status=draft&supply_type=inter_state&quote_date_after=2026-01-01&quote_date_before=2026-12-31&total_min=1000&total_max=25000&line_item=clinic&hsn_sac=9993&latest_only=true&search=clinic&ordering=-quote_date&page={{page}}&page_size={{pageSize}}",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -4473,6 +4485,60 @@
                         "api",
                         "platform",
                         "quotes"
+                      ],
+                      "query": [
+                        {
+                          "key": "status",
+                          "value": "draft"
+                        },
+                        {
+                          "key": "supply_type",
+                          "value": "inter_state"
+                        },
+                        {
+                          "key": "quote_date_after",
+                          "value": "2026-01-01"
+                        },
+                        {
+                          "key": "quote_date_before",
+                          "value": "2026-12-31"
+                        },
+                        {
+                          "key": "total_min",
+                          "value": "1000"
+                        },
+                        {
+                          "key": "total_max",
+                          "value": "25000"
+                        },
+                        {
+                          "key": "line_item",
+                          "value": "clinic"
+                        },
+                        {
+                          "key": "hsn_sac",
+                          "value": "9993"
+                        },
+                        {
+                          "key": "latest_only",
+                          "value": "true"
+                        },
+                        {
+                          "key": "search",
+                          "value": "clinic"
+                        },
+                        {
+                          "key": "ordering",
+                          "value": "-quote_date"
+                        },
+                        {
+                          "key": "page",
+                          "value": "{{page}}"
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}"
+                        }
                       ]
                     },
                     "body": {}
@@ -4566,7 +4632,7 @@
                     },
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package · monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package \u00b7 monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -4805,7 +4871,7 @@
               "item": [
                 {
                   "name": "Quote analytics",
-                  "description": "Latest revision analytics. Accepts the same filters as quote list, plus from/to date boundaries.",
+                  "description": "Filters: status, supply_type, number, company, buyer_email, gstin, state, state_code, quote_date_after/before, total_min/max, line_item, hsn_sac, range, latest_only; from/to also limit quote dates. This endpoint does not apply list search or ordering.",
                   "event": [],
                   "auth": {},
                   "request": {
@@ -4828,7 +4894,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/platform/quotes/stats/?from=2026-01-01&to=2026-12-31",
+                      "raw": "{{baseUrl}}/api/platform/quotes/stats/?status=draft&supply_type=inter_state&number=QT-2026&company=clinic&buyer_email=accounts%40example.com&gstin=29ABCDE1234F1Z5&state=Karnataka&state_code=29&quote_date_after=2026-01-01&quote_date_before=2026-12-31&total_min=1000&total_max=25000&line_item=clinic&hsn_sac=9993&range=30&latest_only=true&from=2026-01-01&to=2026-12-31",
                       "path": [
                         "api",
                         "platform",
@@ -4840,14 +4906,76 @@
                       ],
                       "query": [
                         {
+                          "key": "status",
+                          "value": "draft"
+                        },
+                        {
+                          "key": "supply_type",
+                          "value": "inter_state"
+                        },
+                        {
+                          "key": "number",
+                          "value": "QT-2026"
+                        },
+                        {
+                          "key": "company",
+                          "value": "clinic"
+                        },
+                        {
+                          "key": "buyer_email",
+                          "value": "accounts@example.com"
+                        },
+                        {
+                          "key": "gstin",
+                          "value": "29ABCDE1234F1Z5"
+                        },
+                        {
+                          "key": "state",
+                          "value": "Karnataka"
+                        },
+                        {
+                          "key": "state_code",
+                          "value": "29"
+                        },
+                        {
+                          "key": "quote_date_after",
+                          "value": "2026-01-01"
+                        },
+                        {
+                          "key": "quote_date_before",
+                          "value": "2026-12-31"
+                        },
+                        {
+                          "key": "total_min",
+                          "value": "1000"
+                        },
+                        {
+                          "key": "total_max",
+                          "value": "25000"
+                        },
+                        {
+                          "key": "line_item",
+                          "value": "clinic"
+                        },
+                        {
+                          "key": "hsn_sac",
+                          "value": "9993"
+                        },
+                        {
+                          "key": "range",
+                          "value": "30"
+                        },
+                        {
+                          "key": "latest_only",
+                          "value": "true"
+                        },
+                        {
                           "key": "from",
-                          "value": "2026-01-01",
-                          "type": "text"
+                          "value": "2026-01-01"
                         },
                         {
                           "key": "to",
-                          "value": "2026-12-31",
-                          "type": "text"
+                          "value": "2026-12-31"
                         }
                       ],
                       "variable": []
@@ -4857,6 +4985,672 @@
                   "response": []
                 }
               ]
+            }
+          ]
+        },
+        {
+          "name": "06 - Invoices and payments (Platform Admin)",
+          "description": "Full lifecycle for invoices: drafts, raising numbered tax invoices, partial/full payments, voiding, filtering, and PDF generation.",
+          "item": [
+            {
+              "name": "Get invoice defaults",
+              "description": "Prefill data for invoice creation (next number preview, issuer header, due days, terms).",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/defaults/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "defaults",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                }
+              }
+            },
+            {
+              "name": "Get invoice form metadata",
+              "description": "Dropdown choices: states, GST rates, line types, payment methods, invoice statuses.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/meta/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "meta",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                }
+              }
+            },
+            {
+              "name": "Preview next invoice number",
+              "description": "Preview next invoice sequence number without consuming it.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/next-number/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "next-number",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                }
+              }
+            },
+            {
+              "name": "Validate customer GSTIN",
+              "description": "Validates GSTIN and resolves place of supply (CGST+SGST vs IGST).",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/gstin-info/?gstin=29AAAAA0000A1ZY",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "gstin-info",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "gstin",
+                      "value": "29AAAAA0000A1ZY"
+                    }
+                  ],
+                  "variable": []
+                }
+              }
+            },
+            {
+              "name": "List invoices",
+              "description": "List invoices with search, filters (status, date range, overdue, total), and ordering.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/?page={{page}}&page_size={{pageSize}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "status",
+                      "value": "issued",
+                      "disabled": true
+                    },
+                    {
+                      "key": "search",
+                      "value": "Sunrise",
+                      "disabled": true
+                    },
+                    {
+                      "key": "ordering",
+                      "value": "-issue_date",
+                      "disabled": true
+                    },
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}"
+                    }
+                  ],
+                  "variable": []
+                }
+              }
+            },
+            {
+              "name": "Create draft invoice",
+              "description": "Creates a draft invoice and calculates GST breakdown. Saves id to invoiceId.",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if(pm.response.code===201) pm.environment.set(\"invoiceId\", pm.response.json().id);"
+                    ]
+                  }
+                }
+              ],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"customer_name\": \"Sunrise Healthcare\",\n  \"attention\": \"Dr. Ramesh\",\n  \"address\": \"123 Indiranagar, Bangalore\",\n  \"buyer_email\": \"accounts@sunrise.com\",\n  \"gstin\": \"29AAAAA0000A1ZY\",\n  \"state\": \"Karnataka\",\n  \"due_days\": 15,\n  \"items\": [\n    {\n      \"line_type\": \"custom_service\",\n      \"description\": \"Healthcare Platform Subscription\",\n      \"hsn_sac\": \"9983\",\n      \"specification\": \"Standard Tier monthly subscription\",\n      \"quantity\": 1,\n      \"uom\": \"Month\",\n      \"unit_price\": \"25000.00\",\n      \"discount_percent\": \"0\",\n      \"gst_rate\": \"18.00\"\n    }\n  ],\n  \"notes\": \"Thank you for partnering with O-HM.\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Create and raise invoice immediately",
+              "description": "Creates and issues an invoice with a sequence number in a single request.",
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if(pm.response.code===201) pm.environment.set(\"invoiceId\", pm.response.json().id);"
+                    ]
+                  }
+                }
+              ],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"customer_name\": \"Sunrise Healthcare\",\n  \"attention\": \"Dr. Ramesh\",\n  \"address\": \"123 Indiranagar, Bangalore\",\n  \"buyer_email\": \"accounts@sunrise.com\",\n  \"gstin\": \"29AAAAA0000A1ZY\",\n  \"state\": \"Karnataka\",\n  \"due_days\": 15,\n  \"items\": [\n    {\n      \"line_type\": \"custom_service\",\n      \"description\": \"Healthcare Platform Subscription\",\n      \"hsn_sac\": \"9983\",\n      \"specification\": \"Standard Tier monthly subscription\",\n      \"quantity\": 1,\n      \"uom\": \"Month\",\n      \"unit_price\": \"25000.00\",\n      \"discount_percent\": \"0\",\n      \"gst_rate\": \"18.00\"\n    }\n  ],\n  \"notes\": \"Thank you for partnering with O-HM.\",\n  \"raise_invoice\": true\n}"
+                }
+              }
+            },
+            {
+              "name": "Get invoice detail",
+              "description": "Get full invoice details with line items and payment history.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "{{invoiceId}}",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                }
+              }
+            },
+            {
+              "name": "Update draft invoice",
+              "description": "Update fields or lines on a draft invoice.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "{{invoiceId}}",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"attention\": \"Chief Medical Officer\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Raise invoice",
+              "description": "Finalize a draft invoice, allocating a permanent invoice number.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/raise/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "{{invoiceId}}",
+                    "raise",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                }
+              }
+            },
+            {
+              "name": "Record payment",
+              "description": "Record a manual payment against an issued invoice (updates status to partially_paid or paid).",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/record-payment/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "{{invoiceId}}",
+                    "record-payment",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": \"10000.00\",\n  \"method\": \"bank_transfer\",\n  \"reference\": \"NEFT12345678\"\n}"
+                }
+              }
+            },
+            {
+              "name": "Void invoice",
+              "description": "Void an unpaid invoice.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/void/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "{{invoiceId}}",
+                    "void",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                }
+              }
+            },
+            {
+              "name": "Download invoice PDF",
+              "description": "Download generated PDF for the invoice.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/pdf/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "{{invoiceId}}",
+                    "pdf",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                }
+              }
+            },
+            {
+              "name": "Delete draft invoice",
+              "description": "Delete a draft invoice.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/{{invoiceId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "{{invoiceId}}",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                }
+              }
             }
           ]
         }
@@ -5797,7 +6591,7 @@
           "item": [
             {
               "name": "List workspace users",
-              "description": "Optional filters role=TENANT_ADMIN|CUSTOMER and q for email/name substring.",
+              "description": "Filter by role and q (email/full name). Paginated.",
               "event": [],
               "auth": {},
               "request": {
@@ -5838,25 +6632,19 @@
                   "query": [
                     {
                       "key": "role",
-                      "value": "CUSTOMER",
-                      "description": "Optional tenant-wide role.",
-                      "type": "string"
+                      "value": "CUSTOMER"
                     },
                     {
                       "key": "q",
-                      "value": "alex",
-                      "description": "Case-insensitive email or full name search.",
-                      "type": "string"
+                      "value": "alex"
                     },
                     {
                       "key": "page",
-                      "value": "{{page}}",
-                      "description": "Page number."
+                      "value": "{{page}}"
                     },
                     {
                       "key": "page_size",
-                      "value": "{{pageSize}}",
-                      "description": "Results per page (maximum 100)."
+                      "value": "{{pageSize}}"
                     }
                   ],
                   "variable": []
@@ -6290,13 +7078,11 @@
                   "query": [
                     {
                       "key": "page",
-                      "value": "{{page}}",
-                      "description": "Page number."
+                      "value": "{{page}}"
                     },
                     {
                       "key": "page_size",
-                      "value": "{{pageSize}}",
-                      "description": "Results per page (maximum 100)."
+                      "value": "{{pageSize}}"
                     }
                   ],
                   "variable": []
@@ -7450,7 +8236,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/employees/?q={{searchTerm}}&is_active=true&page={{page}}&page_size={{pageSize}}",
+                      "raw": "{{baseUrl}}/api/employees/?q={{searchTerm}}&is_active=true&category=clinical&search=alex&ordering=last_name&page={{page}}&page_size={{pageSize}}",
                       "path": [
                         "api",
                         "employees"
@@ -7465,14 +8251,24 @@
                           "value": "true"
                         },
                         {
+                          "key": "category",
+                          "value": "clinical"
+                        },
+                        {
+                          "key": "search",
+                          "value": "alex"
+                        },
+                        {
+                          "key": "ordering",
+                          "value": "last_name"
+                        },
+                        {
                           "key": "page",
-                          "value": "{{page}}",
-                          "description": "Page number."
+                          "value": "{{page}}"
                         },
                         {
                           "key": "page_size",
-                          "value": "{{pageSize}}",
-                          "description": "Results per page (maximum 100)."
+                          "value": "{{pageSize}}"
                         }
                       ]
                     },
@@ -7488,7 +8284,8 @@
                     },
                     "description": "Paginated list. Use page and page_size; page_size is capped at 100."
                   },
-                  "response": []
+                  "response": [],
+                  "description": "Filters: q, is_active, category, termination_type. Search fields: first/middle/last name, email, mobile, employee ID. Order by id, first_name, last_name, or date_joined. Paginated."
                 },
                 {
                   "name": "Create employee",
@@ -7801,21 +8598,27 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/customers/?page={{page}}&page_size={{pageSize}}",
+                      "raw": "{{baseUrl}}/api/customers/?search=alex&ordering=first_name&page={{page}}&page_size={{pageSize}}",
                       "path": [
                         "api",
                         "customers"
                       ],
                       "query": [
                         {
+                          "key": "search",
+                          "value": "alex"
+                        },
+                        {
+                          "key": "ordering",
+                          "value": "first_name"
+                        },
+                        {
                           "key": "page",
-                          "value": "{{page}}",
-                          "description": "Page number."
+                          "value": "{{page}}"
                         },
                         {
                           "key": "page_size",
-                          "value": "{{pageSize}}",
-                          "description": "Results per page (maximum 100)."
+                          "value": "{{pageSize}}"
                         }
                       ]
                     },
@@ -7831,7 +8634,8 @@
                     },
                     "description": "Paginated list. Use page and page_size; page_size is capped at 100."
                   },
-                  "response": []
+                  "response": [],
+                  "description": "Search first/middle/last name, email, mobile number, or city; ordering uses customer serializer fields. Paginated."
                 },
                 {
                   "name": "Create customer",
@@ -8219,21 +9023,31 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/staff-for-hire/?page={{page}}&page_size={{pageSize}}",
+                      "raw": "{{baseUrl}}/api/staff-for-hire/?available_for=nursing&search=nurse&ordering=-created_at&page={{page}}&page_size={{pageSize}}",
                       "path": [
                         "api",
                         "staff-for-hire"
                       ],
                       "query": [
                         {
+                          "key": "available_for",
+                          "value": "nursing"
+                        },
+                        {
+                          "key": "search",
+                          "value": "nurse"
+                        },
+                        {
+                          "key": "ordering",
+                          "value": "-created_at"
+                        },
+                        {
                           "key": "page",
-                          "value": "{{page}}",
-                          "description": "Page number."
+                          "value": "{{page}}"
                         },
                         {
                           "key": "page_size",
-                          "value": "{{pageSize}}",
-                          "description": "Results per page (maximum 100)."
+                          "value": "{{pageSize}}"
                         }
                       ]
                     },
@@ -8249,7 +9063,8 @@
                     },
                     "description": "Paginated list. Use page and page_size; page_size is capped at 100."
                   },
-                  "response": []
+                  "response": [],
+                  "description": "Filter by available_for; search staff/vendor/service/language/skill. Paginated."
                 },
                 {
                   "name": "Create staff-for-hire listing",
@@ -8699,28 +9514,18 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/roles/permissions/?page={{page}}&page_size={{pageSize}}",
+                  "raw": "{{baseUrl}}/api/roles/permissions/",
                   "path": [
                     "api",
                     "roles",
                     "permissions"
                   ],
-                  "query": [
-                    {
-                      "key": "page",
-                      "value": "{{page}}",
-                      "description": "Page number."
-                    },
-                    {
-                      "key": "page_size",
-                      "value": "{{pageSize}}",
-                      "description": "Results per page (maximum 100)."
-                    }
-                  ]
+                  "query": []
                 },
                 "description": "Paginated list. Use page and page_size; page_size is capped at 100."
               },
-              "response": []
+              "response": [],
+              "description": "Returns the complete available-permission list; this action is not paginated."
             },
             {
               "name": "List role assignments",
@@ -8749,7 +9554,7 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/role-assignments/?user_id={{userId}}&page={{page}}&page_size={{pageSize}}",
+                  "raw": "{{baseUrl}}/api/role-assignments/?user_id={{userId}}&role_id={{roleId}}&page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
                     "role-assignments"
@@ -8760,20 +9565,23 @@
                       "value": "{{userId}}"
                     },
                     {
+                      "key": "role_id",
+                      "value": "{{roleId}}"
+                    },
+                    {
                       "key": "page",
-                      "value": "{{page}}",
-                      "description": "Page number."
+                      "value": "{{page}}"
                     },
                     {
                       "key": "page_size",
-                      "value": "{{pageSize}}",
-                      "description": "Results per page (maximum 100)."
+                      "value": "{{pageSize}}"
                     }
                   ]
                 },
                 "description": "Paginated list. Use page and page_size; page_size is capped at 100."
               },
-              "response": []
+              "response": [],
+              "description": "Filter by user_id and role_id. Paginated."
             },
             {
               "name": "Assign role to user",
@@ -9461,7 +10269,7 @@
               "item": [
                 {
                   "name": "Get tenant quote tax settings",
-                  "description": "Gets this tenant’s seller GST state. A new record is initialized from the tenant GSTIN when available.",
+                  "description": "Gets this tenant\u2019s seller GST state. A new record is initialized from the tenant GSTIN when available.",
                   "event": [],
                   "auth": {},
                   "request": {
@@ -9725,7 +10533,7 @@
                     },
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"company\": \"Example Clinic\",\n  \"attention\": \"Accounts Payable\",\n  \"address\": \"MG Road, Bengaluru\",\n  \"state\": \"Karnataka\",\n  \"buyer_email\": \"accounts@example.com\",\n  \"cc_emails\": [\n    \"finance@example.com\"\n  ],\n  \"bcc_emails\": [],\n  \"ship_to\": \"MG Road, Bengaluru\",\n  \"your_ref\": \"REQ-1001\",\n  \"valid_days\": 30,\n  \"notes\": \"Quote for requested services\",\n  \"terms\": \"Payment due within 30 days.\\nPrices exclude services not listed.\",\n  \"freight\": \"0.00\",\n  \"packing\": \"0.00\",\n  \"charges_gst_rate\": \"18.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package · monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"0.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                      "raw": "{\n  \"company\": \"Example Clinic\",\n  \"attention\": \"Accounts Payable\",\n  \"address\": \"MG Road, Bengaluru\",\n  \"state\": \"Karnataka\",\n  \"buyer_email\": \"accounts@example.com\",\n  \"cc_emails\": [\n    \"finance@example.com\"\n  ],\n  \"bcc_emails\": [],\n  \"ship_to\": \"MG Road, Bengaluru\",\n  \"your_ref\": \"REQ-1001\",\n  \"valid_days\": 30,\n  \"notes\": \"Quote for requested services\",\n  \"terms\": \"Payment due within 30 days.\\nPrices exclude services not listed.\",\n  \"freight\": \"0.00\",\n  \"packing\": \"0.00\",\n  \"charges_gst_rate\": \"18.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package \u00b7 monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"0.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -9737,7 +10545,7 @@
                 },
                 {
                   "name": "List tenant quotes",
-                  "description": "Supports status, date range, state, GST supply type and amount filters; search=q and ordering parameters are also available.",
+                  "description": "Filters: status, supply_type, number, company, buyer_email, gstin, state, state_code, quote_date_after/before, total_min/max, line_item, hsn_sac, range, latest_only. Search and ordering use the fields exposed by QuoteViewSet.",
                   "event": [],
                   "auth": {},
                   "request": {
@@ -9765,7 +10573,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/platform/quotes/?status=draft&quote_date_after=2026-01-01&search=clinic&ordering=-quote_date",
+                      "raw": "{{baseUrl}}/api/platform/quotes/?status=draft&supply_type=inter_state&quote_date_after=2026-01-01&quote_date_before=2026-12-31&total_min=1000&total_max=25000&line_item=clinic&hsn_sac=9993&latest_only=true&search=clinic&ordering=-quote_date&page={{page}}&page_size={{pageSize}}",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -9773,6 +10581,60 @@
                         "api",
                         "platform",
                         "quotes"
+                      ],
+                      "query": [
+                        {
+                          "key": "status",
+                          "value": "draft"
+                        },
+                        {
+                          "key": "supply_type",
+                          "value": "inter_state"
+                        },
+                        {
+                          "key": "quote_date_after",
+                          "value": "2026-01-01"
+                        },
+                        {
+                          "key": "quote_date_before",
+                          "value": "2026-12-31"
+                        },
+                        {
+                          "key": "total_min",
+                          "value": "1000"
+                        },
+                        {
+                          "key": "total_max",
+                          "value": "25000"
+                        },
+                        {
+                          "key": "line_item",
+                          "value": "clinic"
+                        },
+                        {
+                          "key": "hsn_sac",
+                          "value": "9993"
+                        },
+                        {
+                          "key": "latest_only",
+                          "value": "true"
+                        },
+                        {
+                          "key": "search",
+                          "value": "clinic"
+                        },
+                        {
+                          "key": "ordering",
+                          "value": "-quote_date"
+                        },
+                        {
+                          "key": "page",
+                          "value": "{{page}}"
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}"
+                        }
                       ]
                     },
                     "body": {}
@@ -9876,7 +10738,7 @@
                     },
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package · monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package \u00b7 monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -10135,7 +10997,7 @@
               "item": [
                 {
                   "name": "Tenant quote analytics",
-                  "description": "Latest revision analytics. Accepts the same filters as quote list, plus from/to date boundaries.",
+                  "description": "Filters: status, supply_type, number, company, buyer_email, gstin, state, state_code, quote_date_after/before, total_min/max, line_item, hsn_sac, range, latest_only; from/to also limit quote dates. This endpoint does not apply list search or ordering.",
                   "event": [],
                   "auth": {},
                   "request": {
@@ -10163,7 +11025,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/platform/quotes/stats/",
+                      "raw": "{{baseUrl}}/api/platform/quotes/stats/?status=draft&supply_type=inter_state&number=QT-2026&company=clinic&buyer_email=accounts%40example.com&gstin=29ABCDE1234F1Z5&state=Karnataka&state_code=29&quote_date_after=2026-01-01&quote_date_before=2026-12-31&total_min=1000&total_max=25000&line_item=clinic&hsn_sac=9993&range=30&latest_only=true&from=2026-01-01&to=2026-12-31",
                       "path": [
                         "api",
                         "platform",
@@ -10173,7 +11035,80 @@
                       "host": [
                         "{{baseUrl}}"
                       ],
-                      "query": [],
+                      "query": [
+                        {
+                          "key": "status",
+                          "value": "draft"
+                        },
+                        {
+                          "key": "supply_type",
+                          "value": "inter_state"
+                        },
+                        {
+                          "key": "number",
+                          "value": "QT-2026"
+                        },
+                        {
+                          "key": "company",
+                          "value": "clinic"
+                        },
+                        {
+                          "key": "buyer_email",
+                          "value": "accounts@example.com"
+                        },
+                        {
+                          "key": "gstin",
+                          "value": "29ABCDE1234F1Z5"
+                        },
+                        {
+                          "key": "state",
+                          "value": "Karnataka"
+                        },
+                        {
+                          "key": "state_code",
+                          "value": "29"
+                        },
+                        {
+                          "key": "quote_date_after",
+                          "value": "2026-01-01"
+                        },
+                        {
+                          "key": "quote_date_before",
+                          "value": "2026-12-31"
+                        },
+                        {
+                          "key": "total_min",
+                          "value": "1000"
+                        },
+                        {
+                          "key": "total_max",
+                          "value": "25000"
+                        },
+                        {
+                          "key": "line_item",
+                          "value": "clinic"
+                        },
+                        {
+                          "key": "hsn_sac",
+                          "value": "9993"
+                        },
+                        {
+                          "key": "range",
+                          "value": "30"
+                        },
+                        {
+                          "key": "latest_only",
+                          "value": "true"
+                        },
+                        {
+                          "key": "from",
+                          "value": "2026-01-01"
+                        },
+                        {
+                          "key": "to",
+                          "value": "2026-12-31"
+                        }
+                      ],
                       "variable": []
                     },
                     "body": {}

@@ -100,3 +100,35 @@ def split_tax(taxable, rate, stype):
         return ZERO, ZERO, money(taxable * rate / 100)
     return ZERO, ZERO, ZERO
 
+
+# ---- invoice line / totals helpers (built on the functions above) ----------
+
+def compute_line(*, quantity, unit_price, discount_percent, gst_rate, stype) -> dict:
+    """One invoice line. For INTRA_UT the second half is UTGST, stored in sgst_amount."""
+    gross = money(Decimal(str(quantity)) * Decimal(str(unit_price)))
+    discount = money(gross * Decimal(str(discount_percent)) / 100)
+    taxable = gross - discount
+    cgst, sgst, igst = split_tax(taxable, gst_rate, stype)
+    return {
+        "discount_amount": discount,
+        "taxable_value": taxable,
+        "cgst_amount": cgst,
+        "sgst_amount": sgst,
+        "igst_amount": igst,
+        "amount": taxable + cgst + sgst + igst,
+    }
+
+
+def sum_lines(lines) -> dict:
+    s = lambda k: sum((l[k] for l in lines), ZERO)
+    cgst, sgst, igst = s("cgst_amount"), s("sgst_amount"), s("igst_amount")
+    subtotal = s("taxable_value")
+    return {
+        "subtotal": subtotal,
+        "discount": s("discount_amount"),
+        "cgst_amount": cgst,
+        "sgst_amount": sgst,
+        "igst_amount": igst,
+        "tax_amount": cgst + sgst + igst,
+        "total": subtotal + cgst + sgst + igst,
+    }

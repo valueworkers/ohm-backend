@@ -1,5 +1,6 @@
 from django.contrib import admin, messages
 from django.core.exceptions import ValidationError as DjangoValidationError
+from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 
 from .models import (
@@ -118,7 +119,7 @@ class QuotationAdmin(admin.ModelAdmin):
             try:
                 create_invoice_from_accepted_quotation(quote.pk)
                 created += 1
-            except BillingError as exc:
+            except (BillingError, DjangoValidationError, ValidationError) as exc:
                 errors.append(f"{quote.number}: {exc}")
         self.message_user(request, f"Invoices ready: {created}.", messages.SUCCESS if not errors else messages.WARNING)
         for error in errors:
@@ -241,7 +242,7 @@ class InvoiceAdmin(admin.ModelAdmin):
             try:
                 issue_invoice(invoice.pk)
                 changed += 1
-            except BillingError as exc:
+            except (BillingError, DjangoValidationError, ValidationError) as exc:
                 errors.append(f"{invoice.number}: {exc}")
 
         self.message_user(

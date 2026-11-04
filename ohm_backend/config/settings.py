@@ -153,8 +153,15 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "apps.accounts.permissions.DynamicModelPermissions",
     ],
+
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+
     "DEFAULT_PAGINATION_CLASS": "config.pagination.StandardResultsSetPagination",
-    "PAGE_SIZE": 20,
+    
     "DEFAULT_THROTTLE_RATES": {
         "root_login": "20/minute",
         "login_identity": "10/hour",
@@ -238,6 +245,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.platform.tasks.expire_sent_quotes",
         "schedule": 86400,
     },
+    "mark-overdue-invoices-daily": {
+        "task": "apps.platform.tasks.mark_overdue_invoices_task",
+        "schedule": 86400,
+    },
 }
 
 LANGUAGE_CODE = "en-us"
@@ -245,3 +256,25 @@ TIME_ZONE = "Asia/Kolkata"
 USE_I18N = True
 USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+INVOICE_DEFAULT_ISSUER = {
+    "logo": "",                          # URL of the uploaded logo (optional)
+    "company_name": "O-HM Senior Care",
+    "company_address": "India",
+    "company_phone": "",
+    "gstin": "",                         # seller GSTIN; if blank, "state" below decides CGST+SGST vs IGST
+    "state": "Karnataka",
+    "contact_name": "O-HM Senior Care",
+    "contact_phone": "",
+    "contact_email": "support@o-hm.com",
+}
+ 
+INVOICE_DEFAULT_TERMS = (
+    "Payment as agreed; advance may be required for custom packages.\n"
+    "Services subject to caregiver availability at the venue.\n"
+    "Prices exclude hospital / pharmacy pass-through unless listed.\n"
+    "Cancellation per organization policy.\n"
+    "Subject to laws of India."
+)
+ 
+INVOICE_DEFAULT_DUE_DAYS = 15

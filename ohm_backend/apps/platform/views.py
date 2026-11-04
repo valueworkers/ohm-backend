@@ -1,8 +1,8 @@
 from io import BytesIO
 from rest_framework.filters import OrderingFilter, SearchFilter
 from . import gst
-from .filters import QuoteFilter, latest_revisions
-from .services import get_seller_tax_settings, quote_terms
+from .filters import InvoiceFilter, QuoteFilter, latest_revisions
+from . import services
 
 from django.db.models import Count, DecimalField, F, Q, Sum, Value, ProtectedError
 from django.db.models.functions import Coalesce
@@ -27,7 +27,7 @@ from rest_framework.throttling import AnonRateThrottle
 from decimal import Decimal
 from .models import (
     Feature, Plan, Subscription, Tenant, TenantProvisioning,
-    Quote, QuoteTaxSettings,QuoteLine
+    Quote, QuoteTaxSettings, QuoteLine, Invoice, InvoiceItem, Payment
 )
 from .serializers import (
     ApproveSerializer,
@@ -44,7 +44,10 @@ from .serializers import (
     TenantUpdateSerializer,
     default_trial_plan,
     slug_problem,
-    QuoteLineSerializer, QuoteSerializer, SendTestSerializer, QuoteTaxSettingsSerializer,
+    QuoteLineSerializer, QuoteSerializer,
+    SendTestSerializer, QuoteTaxSettingsSerializer,
+    InvoiceListSerializer, InvoiceSerializer,
+    PaymentReadSerializer, RecordPaymentSerializer,
 )
 from .tasks import provision_tenant_task
 from .services import send_quote, revise_quote, respond_to_quote, recalculate
@@ -552,7 +555,7 @@ class QuoteViewSet(viewsets.ModelViewSet):
         if not gst.is_valid_gstin(gstin):
             raise ValidationError({"gstin": "Not a valid GSTIN (format or check digit)."})
         tenant_id = None if connection.schema_name == get_public_schema_name() else request.tenant.pk
-        seller_code, seller_name, _ = get_seller_tax_settings(tenant_id)
+        seller_code, seller_name, _ = services.get_seller_tax_settings(tenant_id)
         code = gst.state_code_from_gstin(gstin)
         stype = gst.supply_type(seller_code, code)
         return Response({
@@ -754,7 +757,7 @@ class PublicQuoteResponseView(APIView):
             "round_off": quote.round_off,
             "total": quote.total,
             "notes": quote.notes,
-            "terms": quote_terms(quote),
+            "terms": services.quote_terms(quote),
         })
 
 
@@ -774,3 +777,166 @@ class PublicQuoteResponseView(APIView):
         except ValueError as exc:
             raise ValidationError({"detail": str(exc)})
         return Response({"number": quote.number, "status": quote.status})
+
+
+class InvoiceViewSet(viewsets.ModelViewSet):
+    permission_classes = [IsPlatformAdmin]
+    filterset_class = InvoiceFilter
+    search_fields = ["number", "customer_name", "buyer_email", "gstin", "your_ref", "tenant__name"]
+    ordering_fields = ["issue_date", "due_date", "total", "number", "created_at", "status"]
+    ordering = ["-issue_date", "-created_at"]
+
+    def handle_exception(self, exc):
+        return super().handle_exception(exc)
+
+    def get_queryset(self):
+        qs = Invoice.objects.select_related("tenant")
+        if self.action == "list":
+            return qs
+        return qs.prefetch_related("items", "payments")
+
+    def get_serializer_class(self):
+        return InvoiceListSerializer if self.action == "list" else InvoiceSerializer
+
+    @staticmethod
+    def _ensure_draft(invoice):
+        if invoice.status != Invoice.Status.DRAFT:
+            raise ValidationError(
+                "Only draft invoices can be edited or deleted. Void it and create a new one instead."
+            )
+
+    def perform_update(self, serializer):
+        self._ensure_draft(serializer.instance)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._ensure_draft(instance)
+        instance.delete()
+
+    @action(detail=False, methods=["get"])
+    def defaults(self, request):
+        """Prefill data for the 'Raise invoice' form."""
+        today = timezone.localdate()
+        return Response({
+            "number": services.next_invoice_number(today, lock=False),
+            "issue_date": today,
+            "due_days": services.default_due_days(),
+            "issuer": services.default_issuer(),
+            "terms": services.default_terms(),
+        })
+
+    @action(detail=False, methods=["get"])
+    def meta(self, request):
+        """Dropdown options: states, UOMs, GST slabs, line types, payment methods."""
+        return Response({
+            "states": [{"code": c, "name": n} for c, n in sorted(gst.STATE_CODES.items(), key=lambda kv: kv[1])],
+            "gst_rates": [str(r) for r in gst.GST_RATES],
+            "line_types": [{"value": v, "label": l} for v, l in InvoiceItem.LineType.choices],
+            "payment_methods": [{"value": v, "label": l} for v, l in Payment.Method.choices],
+            "statuses": [{"value": v, "label": l} for v, l in Invoice.Status.choices],
+        })
+
+    @action(detail=False, methods=["get"], url_path="gstin-info")
+    def gstin_info(self, request):
+        """Validate a GSTIN offline and say which GST applies against the seller's state."""
+        gstin = request.query_params.get("gstin", "").strip().upper()
+        if not gst.is_valid_gstin(gstin):
+            raise ValidationError({"gstin": "Not a valid GSTIN (format or check digit)."})
+        seller_code, seller_name, _ = services.get_seller_tax_settings(None)
+        if not seller_code:
+            issuer = services.default_issuer()
+            seller_code = gst.resolve_state_code(issuer.get("gstin", ""), issuer.get("state", ""))
+            seller_name = gst.STATE_CODES.get(seller_code, issuer.get("state", ""))
+        code = gst.state_code_from_gstin(gstin)
+        stype = gst.supply_type(seller_code, code)
+        return Response({
+            "gstin": gstin,
+            "pan": gst.pan_from_gstin(gstin),
+            "state_code": code,
+            "state": gst.STATE_CODES[code],
+            "supply_type": stype,
+            "tax": SUPPLY_LABELS.get(stype, stype),
+            "seller_state": seller_name,
+        })
+
+    @action(detail=False, methods=["get"], url_path="next-number")
+    def next_number(self, request):
+        """Preview for the form's Invoice number field. The real number is assigned on raise."""
+        return Response({"number": services.next_invoice_number(timezone.localdate(), lock=False)})
+
+    @action(detail=True, methods=["post"], url_path="raise")
+    def raise_invoice(self, request, pk=None):
+        invoice = services.issue_invoice(self.get_object())
+        return Response(InvoiceSerializer(invoice, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=["post"])
+    def void(self, request, pk=None):
+        invoice = services.void_invoice(self.get_object())
+        return Response(InvoiceSerializer(invoice, context=self.get_serializer_context()).data)
+
+    @action(detail=True, methods=["get"])
+    def pdf(self, request, pk=None):
+        invoice = self.get_object()
+        try:
+            from reportlab.lib.pagesizes import A4
+            from reportlab.pdfgen import canvas
+        except ImportError:
+            return Response({"detail": "PDF rendering is unavailable; install reportlab."}, status=503)
+        buffer = BytesIO()
+        pdf = canvas.Canvas(buffer, pagesize=A4)
+        y = 800
+        issuer = invoice.issuer or {}
+        rows = [
+            f"INVOICE {invoice.number or 'DRAFT'}",
+            f"Issuer: {issuer.get('company_name', 'O-HM Senior Care')}",
+            f"GSTIN: {issuer.get('gstin') or '—'}  State: {issuer.get('state') or '—'}",
+            "",
+            f"Billed to: {invoice.customer_name}",
+            f"GSTIN: {invoice.gstin or '—'}  Place of supply: {invoice.state} ({invoice.state_code or '—'})",
+            f"Email: {invoice.buyer_email or '—'}",
+            f"Issue date: {invoice.issue_date}  Due date: {invoice.due_date or '—'}",
+            f"Status: {invoice.get_status_display()}",
+            "",
+        ]
+        for item in invoice.items.all():
+            rows.append(
+                f"{item.position}. {item.description} [HSN/SAC {item.hsn_sac}] "
+                f"{item.quantity} {item.uom} @ {item.unit_price}  disc {item.discount_percent}%  "
+                f"GST {item.gst_rate}%  = {item.amount}"
+            )
+        rows += [
+            "",
+            f"Subtotal: {invoice.subtotal}  Discount: {invoice.discount}  Tax: {invoice.tax_amount}",
+        ]
+        if invoice.is_interstate:
+            rows.append(f"IGST: {invoice.igst_amount}")
+        else:
+            rows.append(f"CGST: {invoice.cgst_amount}  SGST/UTGST: {invoice.sgst_amount}")
+        rows += [
+            f"Total: {invoice.total} {invoice.currency}",
+            f"Amount Paid: {invoice.amount_paid}  Balance Due: {invoice.balance_due}",
+        ]
+        if invoice.notes:
+            rows += ["", f"Notes: {invoice.notes}"]
+        if invoice.terms:
+            rows += ["", f"Terms: {invoice.terms}"]
+        for text in rows:
+            if y < 50:
+                pdf.showPage()
+                y = 800
+            pdf.drawString(48, y, str(text)[:110])
+            y -= 18
+        pdf.save()
+        from django.http import HttpResponse
+        response = HttpResponse(buffer.getvalue(), content_type="application/pdf")
+        filename = f"Invoice-{invoice.number.replace('/', '-') if invoice.number else 'DRAFT'}.pdf"
+        response["Content-Disposition"] = f'attachment; filename="{filename}"'
+        return response
+
+    @action(detail=True, methods=["post"], url_path="record-payment")
+    def record_payment(self, request, pk=None):
+        invoice = self.get_object()
+        ser = RecordPaymentSerializer(data=request.data)
+        ser.is_valid(raise_exception=True)
+        payment = services.record_payment(invoice, user=request.user, **ser.validated_data)
+        return Response(PaymentReadSerializer(payment).data, status=status.HTTP_201_CREATED)

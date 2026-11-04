@@ -8,7 +8,10 @@ from .views import (
     MyTenantViewSet,
     TenantProvisioningViewSet,
     TenantViewSet,
-    QuoteStatsView, QuoteViewSet, QuoteTaxSettingsView, PublicQuoteResponseView,
+    QuoteStatsView, QuoteViewSet,
+    QuoteTaxSettingsView,
+    PublicQuoteResponseView,
+    InvoiceViewSet,
 )
 
 router = DefaultRouter()
@@ -18,7 +21,9 @@ router.register("tenants", TenantViewSet, basename="tenant")
 router.register("subscriptions", SubscriptionViewSet, basename="subscription")
 router.register("plans", PlanViewSet, basename="plan")
 router.register("quotes", QuoteViewSet, basename="quote")
+router.register("invoices", InvoiceViewSet, basename="invoice")
 
+ 
 urlpatterns = [
     path("quotes/stats/", QuoteStatsView.as_view(), name="quote-stats"),
     path("quotes/tax-settings/", QuoteTaxSettingsView.as_view(), name="quote-tax-settings"),

@@ -3,7 +3,7 @@ import calendar
 from secrets import token_urlsafe
 from datetime import date, datetime, time, timedelta
 from decimal import Decimal, ROUND_HALF_UP
-
+from rest_framework.exceptions import ValidationError
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives, send_mail
 from django.db import IntegrityError, transaction
@@ -17,16 +17,28 @@ from apps.platform.tasks import send_tenant_welcome_email_task
 from apps.accounts.models import User
 from apps.accounts.services import AccountsService
 from .models import (
-    DocumentSequence, Domain, Invoice, InvoiceItem, Payment, Plan, Quotation,
-    QuotationItem, Subscription, Tenant, TenantProvisioning,
-    Quote, QuoteCounter, QuoteEvent, QuoteLine, QuoteTaxSettings,
+    DocumentSequence, Domain, Invoice, InvoiceItem,
+    Payment, Plan, Quotation, Subscription, Tenant,
+    TenantProvisioning, Quote, QuoteCounter, QuoteEvent,
+    QuotationItem, QuoteLine, QuoteTaxSettings,InvoiceSequence
 )
 from .serializers import DEFAULT_TRIAL_DAYS, DEFAULT_TRIAL_PLAN_ID, base_domain
 from .utils import base_domain, schema_for_slug
 from . import gst
 
 
-
+DEFAULT_INVOICE_SAC = "9983"
+MAX_LINES = 30
+LINE_FIELDS = (
+    "line_type", "description", "hsn_sac", "specification", "quantity", "uom",
+    "unit_price", "discount_percent", "lead_time", "gst_rate",
+)
+_ISSUER_FALLBACK = {
+    "logo": "", "company_name": "", "company_address": "", "company_phone": "",
+    "gstin": "", "state": "Karnataka",
+    "contact_name": "", "contact_phone": "", "contact_email": "",
+}
+ 
 logger = logging.getLogger(__name__)
 
 # Sent after the tenant schema, domains and subscription exist, but before the
@@ -37,7 +49,7 @@ logger = logging.getLogger(__name__)
 tenant_provisioned = Signal()
 
 
-class BillingError(Exception):
+class BillingError(ValidationError):
     """Raised when a billing transition or calculation is invalid."""
 
 
@@ -57,16 +69,16 @@ def _next_document_number(prefix, issued_on=None):
 
 
 def recalculate_billing_totals(document):
-    """Calculate line amounts and persisted subtotal/tax/total for a quote or invoice."""
-    if isinstance(document, Quotation):
-        lines = document.items.all()
-    elif isinstance(document, Invoice):
-        lines = document.items.all()
-    else:
+    """Quotation: flat tax_rate maths (unchanged). Invoice: delegates to the GST engine below."""
+    if isinstance(document, Invoice):
+        if document.status != Invoice.Status.DRAFT:
+            raise BillingError("Only a draft invoice can be recalculated.")
+        return save_invoice(document, None)
+    if not isinstance(document, Quotation):
         raise TypeError("document must be a Quotation or Invoice")
-
+ 
     subtotal = Decimal("0.00")
-    for line in lines:
+    for line in document.items.all():
         amount = _money(Decimal(line.quantity) * line.unit_price)
         if line.amount != amount:
             line.amount = amount
@@ -89,6 +101,13 @@ def recalculate_billing_totals(document):
     return document
 
 
+def _address_text(address):
+    """Quotation.billing_address is JSON; Invoice.address is plain text."""
+    if isinstance(address, dict):
+        return "\n".join(str(v).strip() for k, v in address.items() if v and k != "state" and str(v).strip())
+    return str(address or "")
+ 
+ 
 @transaction.atomic
 def create_quotation(*, plan, billing_name, billing_email, items=None, tenant=None,
                      provisioning_request=None, currency=None, discount=0,
@@ -168,7 +187,7 @@ def accept_quotation(quotation_id):
 @transaction.atomic
 def create_invoice_from_accepted_quotation(quotation_id, *, tenant=None, subscription=None,
                                            due_date=None, period_start=None, period_end=None):
-    """Create one invoice from an accepted quote, copying all line and billing snapshots."""
+    """Create one DRAFT invoice from an accepted quote. The number is assigned when it is issued."""
     quotation = Quotation.objects.select_for_update().select_related(
         "tenant", "provisioning_request__tenant", "plan"
     ).get(pk=quotation_id)
@@ -188,36 +207,62 @@ def create_invoice_from_accepted_quotation(quotation_id, *, tenant=None, subscri
         ).order_by("-starts_at").first()
     if subscription and subscription.tenant_id != tenant.pk:
         raise BillingError("The selected subscription does not belong to the invoice tenant.")
-    invoice = Invoice.objects.create(
-        number=_next_document_number("INV"), tenant=tenant, subscription=subscription,
-        quotation=quotation, billing_name=quotation.billing_name,
-        billing_email=quotation.billing_email, gst_number=quotation.gst_number,
-        billing_address=quotation.billing_address, currency=quotation.currency,
-        subtotal=quotation.subtotal, discount=quotation.discount,
-        tax_rate=quotation.tax_rate, tax_amount=quotation.tax_amount, total=quotation.total,
-        due_date=due_date, period_start=period_start, period_end=period_end, notes=quotation.notes,
-    )
-    for item in quotation.items.all():
-        InvoiceItem.objects.create(
-            invoice=invoice, description=item.description, quantity=item.quantity,
-            unit_price=item.unit_price, amount=item.amount,
-        )
-    return invoice
 
+    address = quotation.billing_address or {}
+    issue_date = timezone.localdate()
+    invoice = Invoice(
+        tenant=tenant, subscription=subscription, quotation=quotation,
+        customer_name=quotation.billing_name, buyer_email=quotation.billing_email,
+        gstin=(quotation.gst_number or "").strip().upper(), address=_address_text(address),
+        currency=quotation.currency, issue_date=issue_date,
+        period_start=period_start, period_end=period_end, notes=quotation.notes,
+        terms=quotation.terms or "",
+    )
+    if isinstance(address, dict) and address.get("state"):
+        invoice.state = address["state"]
+    if due_date:
+        invoice.due_days = max((due_date - issue_date).days, 0)
+
+    # The quotation has a flat header discount; invoices only have line discounts, so spread it as a %.
+    discount_pct = Decimal("0")
+    if quotation.subtotal and quotation.discount:
+        discount_pct = (quotation.discount / quotation.subtotal * 100).quantize(gst.CENT, rounding=ROUND_HALF_UP)
+    items = [{
+        "line_type": InvoiceItem.LineType.CUSTOM,
+        "description": item.description,
+        "hsn_sac": DEFAULT_INVOICE_SAC,
+        "quantity": item.quantity,
+        "unit_price": item.unit_price,
+        "discount_percent": discount_pct,
+        "gst_rate": quotation.tax_rate,
+    } for item in quotation.items.all()]
+    return save_invoice(invoice, items)
 
 @transaction.atomic
-def issue_invoice(invoice_id, *, due_date=None):
-    invoice = Invoice.objects.select_for_update().get(pk=invoice_id)
+def issue_invoice(invoice, *, due_date=None):
+    """Raise a draft invoice. Accepts an Invoice or its pk; assigns the next invoice number."""
+    pk = invoice.pk if isinstance(invoice, Invoice) else invoice
+    invoice = Invoice.objects.select_for_update().get(pk=pk)
     if invoice.status != Invoice.Status.DRAFT:
         raise BillingError("Only a draft invoice can be issued.")
-    invoice.status = Invoice.Status.ISSUED
-    invoice.issue_date = timezone.localdate()
+    if not invoice.customer_name.strip():
+        raise ValidationError({"customer_name": "Add the customer name."})
+    if not invoice.items.exists():
+        raise ValidationError({"items": "Add at least one line."})
+    if not (invoice.issuer or {}).get("company_name"):
+        raise ValidationError({"issuer": "Add the company name in the header."})
+ 
     if due_date is not None:
         invoice.due_date = due_date
-    invoice.save(update_fields=["status", "issue_date", "due_date", "updated_at"])
+    if not invoice.number:
+        invoice.number = next_invoice_number(invoice.issue_date)
+    invoice.status = Invoice.Status.ISSUED
+    invoice.save()
+    invoice.refresh_payment_status()   # "amount already received" -> partially paid / paid
+    if invoice.status == Invoice.Status.PAID:
+        _extend_subscription_from_invoice(invoice)
     return invoice
-
-
+ 
 def _extend_subscription_from_invoice(invoice):
     if not invoice.subscription_id:
         return
@@ -281,7 +326,7 @@ def record_gateway_payment(*, invoice_id, gateway, gateway_payment_id, amount, c
     amount = _money(amount)
     if amount <= 0:
         raise BillingError("Payment amount must be greater than zero.")
-    invoice = Invoice.objects.select_for_update().select_related("subscription", "quotation__plan").get(pk=invoice_id)
+    invoice = Invoice.objects.select_for_update(of=("self",)).select_related("subscription", "quotation__plan").get(pk=invoice_id)
     if invoice.status in {Invoice.Status.DRAFT, Invoice.Status.VOID}:
         raise BillingError("Payments can only be recorded against an issued invoice.")
     if currency.upper() != invoice.currency.upper():
@@ -736,3 +781,139 @@ def respond_to_quote(token, accepted):
     quote.save(update_fields=["status", "accepted_at"])
     QuoteEvent.objects.create(quote=quote, kind=quote.status)
     return quote
+
+
+def default_issuer() -> dict:
+    base = {**_ISSUER_FALLBACK, **getattr(settings, "INVOICE_DEFAULT_ISSUER", {})}
+    seller_code, seller_name, seller_gstin = get_seller_tax_settings(None)
+    if seller_gstin and not base.get("gstin"):
+        base["gstin"] = seller_gstin
+    if seller_name and (not base.get("state") or base.get("state") == "Karnataka"):
+        base["state"] = seller_name
+    return base
+ 
+ 
+def default_terms() -> str:
+    return getattr(settings, "INVOICE_DEFAULT_TERMS", "")
+ 
+ 
+def default_due_days() -> int:
+    return getattr(settings, "INVOICE_DEFAULT_DUE_DAYS", 15)
+ 
+ 
+def next_invoice_number(issue_date, *, lock: bool = True) -> str:
+    """e.g. 459/202626. lock=False only previews and does not consume a number."""
+    year = issue_date.year
+    if lock:
+        seq, _ = InvoiceSequence.objects.select_for_update().get_or_create(year=year)
+        seq.last_number += 1
+        seq.save(update_fields=["last_number"])
+        n = seq.last_number
+    else:
+        seq = InvoiceSequence.objects.filter(year=year).first()
+        n = (seq.last_number if seq else 0) + 1
+    return f"{n}/{year}{year % 100:02d}"
+ 
+ 
+@transaction.atomic
+def save_invoice(invoice: Invoice, items, *, raise_now: bool = False) -> Invoice:
+    """Recalculate GST + totals exactly like recalculate(quote), persist lines, optionally raise."""
+    if invoice.pk and invoice.status != Invoice.Status.DRAFT:
+        raise BillingError("Only draft invoices can be edited.")
+    if not invoice.issuer:
+        invoice.issuer = default_issuer()
+    issuer = invoice.issuer
+ 
+    # Seller = the platform's QuoteTaxSettings (same source as platform quotes); issuer header is the fallback.
+    seller_code, _name, seller_gstin = get_seller_tax_settings(None)
+    if not seller_code:
+        seller_code = gst.resolve_state_code(issuer.get("gstin", ""), issuer.get("state", ""))
+    if seller_gstin and not issuer.get("gstin"):
+        invoice.issuer = {**issuer, "gstin": seller_gstin}
+ 
+    buyer_code = gst.resolve_state_code(invoice.gstin, invoice.state)
+    if not buyer_code:
+        raise ValidationError({"state": "Select the customer's state or enter a valid GSTIN."})
+    if not seller_code:
+        raise ValidationError({"issuer": "Set the seller GSTIN/state in quote tax settings or the header."})
+    stype = gst.supply_type(seller_code, buyer_code)   # intra_state / intra_ut / inter_state
+    invoice.state_code = buyer_code
+    invoice.state = gst.STATE_CODES[buyer_code]
+    invoice.is_interstate = stype == gst.INTER_STATE
+ 
+    if invoice.pk is None and not invoice.terms:
+        invoice.terms = default_terms()
+    invoice.due_days = invoice.due_days if invoice.due_days is not None else default_due_days()
+    invoice.due_date = invoice.issue_date + timedelta(days=invoice.due_days)
+ 
+    if items is None:  # recalculation of a saved draft: reuse its lines
+        items = [{k: getattr(i, k) for k in LINE_FIELDS} for i in invoice.items.all()]
+    if len(items) > MAX_LINES:
+        raise ValidationError({"items": f"An invoice can have at most {MAX_LINES} lines."})
+ 
+    computed = []
+    for pos, row in enumerate(items, start=1):
+        calc = gst.compute_line(
+            quantity=row["quantity"], unit_price=row["unit_price"],
+            discount_percent=row.get("discount_percent") or 0, gst_rate=row["gst_rate"], stype=stype,
+        )
+        computed.append({**{k: row[k] for k in LINE_FIELDS if k in row}, **calc, "position": pos})
+ 
+    for field, value in gst.sum_lines(computed).items():
+        setattr(invoice, field, value)
+    if invoice.amount_received is None:
+        invoice.amount_received = Decimal("0.00")
+    if computed and invoice.amount_received > invoice.total:
+        raise ValidationError({"amount_received": "Cannot exceed the invoice total."})
+ 
+    invoice.save()
+    invoice.items.all().delete()
+    InvoiceItem.objects.bulk_create([InvoiceItem(invoice=invoice, **c) for c in computed])
+    if hasattr(invoice, "_prefetched_objects_cache"):
+        invoice._prefetched_objects_cache.clear()
+ 
+    if raise_now:
+        invoice = issue_invoice(invoice)
+    return invoice
+ 
+ 
+@transaction.atomic
+def void_invoice(invoice: Invoice) -> Invoice:
+    invoice = Invoice.objects.select_for_update().get(pk=invoice.pk)
+    if invoice.status == Invoice.Status.VOID:
+        raise BillingError("Invoice is already void.")
+    if invoice.payments.filter(status=Payment.Status.SUCCEEDED).exists():
+        raise BillingError("Refund the recorded payments before voiding this invoice.")
+    invoice.status = Invoice.Status.VOID
+    invoice.save(update_fields=["status", "updated_at"])
+    return invoice
+ 
+ 
+@transaction.atomic
+def record_payment(invoice: Invoice, *, amount, method, reference="", paid_at=None, user=None) -> Payment:
+    """Manual payment (cash / cheque / bank transfer / UPI). Gateway payments use record_gateway_payment."""
+    invoice = Invoice.objects.select_for_update(of=("self",)).select_related("subscription", "quotation__plan").get(pk=invoice.pk)
+    if invoice.status in {Invoice.Status.DRAFT, Invoice.Status.VOID}:
+        raise BillingError("Payments can only be recorded against an issued invoice.")
+    amount = _money(amount)
+    if amount > invoice.balance_due:
+        raise ValidationError({"amount": f"Cannot exceed the balance due ({invoice.balance_due})."})
+    was_paid = invoice.status == Invoice.Status.PAID
+    payment = Payment.objects.create(
+        invoice=invoice, amount=amount, currency=invoice.currency, method=method,
+        status=Payment.Status.SUCCEEDED, reference=reference,
+        paid_at=paid_at or timezone.now(), recorded_by=user,
+    )
+    invoice.refresh_payment_status()
+    if invoice.status == Invoice.Status.PAID and not was_paid:
+        _extend_subscription_from_invoice(invoice)     # same settlement as a gateway payment
+    return payment
+ 
+ 
+def mark_overdue_invoices() -> int:
+    """Run daily (Celery beat). Moves unpaid, past-due invoices to OVERDUE."""
+    n = 0
+    for inv in Invoice.objects.filter(status=Invoice.Status.ISSUED, due_date__lt=timezone.localdate()):
+        inv.refresh_payment_status()
+        n += 1
+    return n
