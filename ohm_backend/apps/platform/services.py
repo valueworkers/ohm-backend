@@ -635,14 +635,14 @@ def create_quote(user, data, lines, *, tenant=None):
         number=number,
         quote_date=today,
         tenant=tenant,
-        created_by=user if tenant is None else None,
-        created_by_email=user.email,
+        created_by=user,
+        created_by_email=user.email if user else "",
         **data,
     )
     for index, line in enumerate(lines, 1):
         QuoteLine.objects.create(quote=quote, position=index, **line)
     recalculate(quote)
-    QuoteEvent.objects.create(quote=quote, kind="created", actor=user if tenant is None else None, detail="" if tenant is None else user.email)
+    QuoteEvent.objects.create(quote=quote, kind="created", actor=user, detail=user.email if user else "")
     return quote
 
 
@@ -722,8 +722,8 @@ def send_quote(quote, user, *, test_recipients=None, response_url=None):
             "terms": quote_terms(quote),
             "accept_url": response_url,
         }
-        email.attach_alternative(render_to_string("ohm-quotation-email.html", email_context), "text/html")
-        email.attach_alternative(render_to_string("ohm-quotation-email.amp.html", email_context), "text/x-amp-html")
+        email.attach_alternative(render_to_string("platform/quotation-email.html", email_context), "text/html")
+        email.attach_alternative(render_to_string("platform/quotation-email.amp.html", email_context), "text/x-amp-html")
     email.send(fail_silently=False)
     if test_recipients:
         QuoteEvent.objects.create(quote=quote, kind="test_sent", detail=", ".join(recipients)[:300], actor=user if quote.tenant_id is None else None)

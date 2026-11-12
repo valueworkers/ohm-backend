@@ -21,7 +21,7 @@ from .models import (
     Tenant,
     TenantProvisioning,
     Quote, QuoteEvent, QuoteLine, QuoteTaxSettings,
-    Invoice, InvoiceItem, Payment
+    Invoice, InvoiceItem, Payment, Booking
 )
 from apps.accounts.services import AccountsService
 from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
@@ -479,6 +479,10 @@ class QuoteSerializer(serializers.ModelSerializer):
     lines = QuoteLineSerializer(many=True)
     events = QuoteEventSerializer(many=True, read_only=True)
     number = serializers.CharField(max_length=30, required=False, allow_blank=True)
+    tenant = serializers.PrimaryKeyRelatedField(queryset=Tenant.objects.all(), required=False, allow_null=True)
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True, default=None)
+    company = serializers.CharField(max_length=200, required=False)
+    buyer_email = serializers.EmailField(required=False)
     cc_emails = EmailListField(required=False)
     bcc_emails = EmailListField(required=False)
     valid_until = serializers.DateField(read_only=True)
@@ -489,8 +493,9 @@ class QuoteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Quote
+        validators = []
         fields = (
-            "id", "number", "revision", "status",
+            "id", "number", "revision", "status", "tenant", "tenant_name",
             "company", "attention", "address", "gstin", "state", "state_code", "buyer_email", "cc_emails", "bcc_emails",
             "ship_to", "your_ref", "quote_date", "valid_days", "valid_until", "notes", "terms",
             "supply_type", "supply_type_display", "state_tax_label", "place_of_supply_code",
@@ -527,6 +532,18 @@ class QuoteSerializer(serializers.ModelSerializer):
     # ---- object level: GSTIN <-> state ----
     def validate(self, attrs):
         inst = self.instance
+        tenant = attrs.get("tenant", getattr(inst, "tenant", None))
+        if tenant:
+            if not attrs.get("company") and not getattr(inst, "company", ""):
+                attrs["company"] = tenant.name
+            if not attrs.get("buyer_email") and not getattr(inst, "buyer_email", ""):
+                attrs["buyer_email"] = tenant.contact_email or "billing@example.com"
+
+        if not attrs.get("company") and not getattr(inst, "company", ""):
+            raise serializers.ValidationError({"company": "Company name is required."})
+        if not attrs.get("buyer_email") and not getattr(inst, "buyer_email", ""):
+            raise serializers.ValidationError({"buyer_email": "Buyer email is required."})
+
         gstin = (attrs.get("gstin", getattr(inst, "gstin", "")) or "").strip().upper()
         state = (attrs.get("state", getattr(inst, "state", "")) or "").strip()
         if gstin:
@@ -535,6 +552,8 @@ class QuoteSerializer(serializers.ModelSerializer):
             code = gst.state_code_from_gstin(gstin)
             attrs["state"] = gst.STATE_CODES[code]           # the GSTIN's first two digits decide the state
         else:
+            if not state:
+                state = "Karnataka"
             code = gst.state_code_from_name(state)
             if not code:
                 raise serializers.ValidationError({"state": "Select a valid state / UT (or enter a GSTIN)."})
@@ -548,7 +567,9 @@ class QuoteSerializer(serializers.ModelSerializer):
 
         request = self.context["request"]
         lines = validated_data.pop("lines")
-        tenant = None if connection.schema_name == get_public_schema_name() else request.tenant
+        tenant = validated_data.pop("tenant", None)
+        if tenant is None and connection.schema_name != get_public_schema_name():
+            tenant = getattr(request, "tenant", None)
         try:
             return create_quote(request.user, validated_data, lines, tenant=tenant)
         except ValueError as exc:
@@ -576,6 +597,66 @@ class QuoteSerializer(serializers.ModelSerializer):
 
 class SendTestSerializer(serializers.Serializer):
     recipients = serializers.ListField(child=serializers.EmailField(), allow_empty=False)
+
+class QuoteListSerializer(serializers.ModelSerializer):
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True, default=None)
+    valid_until = serializers.DateField(read_only=True)
+    lines_count = serializers.IntegerField(source="lines.count", read_only=True)
+
+    class Meta:
+        model = Quote
+        validators = []
+        fields = (
+            "id", "number", "revision", "status", "tenant", "tenant_name",
+            "company", "buyer_email", "gstin", "state", "quote_date",
+            "valid_days", "valid_until", "subtotal", "taxable_amount",
+            "total", "sent_at", "accepted_at", "lines_count", "created_at",
+        )
+
+class BookingSerializer(serializers.ModelSerializer):
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True, default=None)
+    plan_name = serializers.CharField(source="plan.name", read_only=True, default=None)
+    booked_by_email = serializers.CharField(source="booked_by.email", read_only=True, default=None)
+    quote_number = serializers.CharField(source="quote.number", read_only=True, default=None)
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id", "booking_id", "tenant", "tenant_name",
+            "booked_by", "booked_by_email", "plan", "plan_name",
+            "quote", "quote_number", "title", "booking_type", "status",
+            "start_datetime", "end_datetime",
+            "contact_name", "contact_email", "contact_phone",
+            "location", "total_amount", "notes",
+            "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "booking_id", "booked_by", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        start = attrs.get("start_datetime", getattr(self.instance, "start_datetime", None))
+        end = attrs.get("end_datetime", getattr(self.instance, "end_datetime", None))
+        if start and end and end <= start:
+            raise serializers.ValidationError({"end_datetime": "End datetime must be after start datetime."})
+        return attrs
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            validated_data["booked_by"] = request.user
+        return super().create(validated_data)
+
+
+class BookingListSerializer(serializers.ModelSerializer):
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True, default=None)
+    plan_name = serializers.CharField(source="plan.name", read_only=True, default=None)
+
+    class Meta:
+        model = Booking
+        fields = [
+            "id", "booking_id", "tenant", "tenant_name", "plan", "plan_name",
+            "title", "booking_type", "status",
+            "start_datetime", "end_datetime", "total_amount", "created_at",
+        ]
 
 class QuoteTaxSettingsSerializer(serializers.ModelSerializer):
     class Meta:
@@ -708,12 +789,13 @@ class InvoiceSerializer(serializers.ModelSerializer):
     balance_due = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     payments = PaymentReadSerializer(many=True, read_only=True)
     tenant_name = serializers.CharField(source="tenant.name", read_only=True, default=None)
+    booking_id_display = serializers.CharField(source="booking.booking_id", read_only=True, default=None)
 
     class Meta:
         model = Invoice
         fields = [
             "id", "number", "status",
-            "tenant", "tenant_name", "subscription", "quotation",
+            "tenant", "tenant_name", "subscription", "quotation", "booking", "booking_id_display",
             "customer_name", "attention", "address", "buyer_email", "cc_emails", "bcc_emails",
             "gstin", "state", "state_code", "is_interstate", "ship_to", "your_ref",
             "currency", "issue_date", "due_days", "due_date", "period_start", "period_end",
@@ -769,12 +851,48 @@ class InvoiceSerializer(serializers.ModelSerializer):
 
 class InvoiceListSerializer(serializers.ModelSerializer):
     tenant_name = serializers.CharField(source="tenant.name", read_only=True, default=None)
+    booking_id_display = serializers.CharField(source="booking.booking_id", read_only=True, default=None)
     amount_paid = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
     balance_due = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True)
 
     class Meta:
         model = Invoice
         fields = [
-            "id", "number", "status", "tenant", "tenant_name", "customer_name", "buyer_email",
+            "id", "number", "status", "tenant", "tenant_name", "booking", "booking_id_display",
+            "customer_name", "buyer_email",
             "gstin", "issue_date", "due_date", "total", "amount_paid", "balance_due", "currency", "your_ref", "created_at",
         ]
+
+
+class PlatformPaymentSerializer(serializers.ModelSerializer):
+    tenant_name = serializers.CharField(source="tenant.name", read_only=True, default=None)
+    invoice_number = serializers.CharField(source="invoice.number", read_only=True, default=None)
+    recorded_by_email = serializers.CharField(source="recorded_by.email", read_only=True, default=None)
+
+    class Meta:
+        model = Payment
+        fields = [
+            "id", "tenant", "tenant_name", "invoice", "invoice_number",
+            "amount", "currency", "method", "status",
+            "gateway", "gateway_order_id", "gateway_payment_id",
+            "reference", "gateway_response", "failure_reason",
+            "paid_at", "recorded_by", "recorded_by_email", "created_at",
+        ]
+        read_only_fields = ["id", "recorded_by", "created_at"]
+
+    def create(self, validated_data):
+        request = self.context.get("request")
+        if request and request.user.is_authenticated:
+            validated_data["recorded_by"] = request.user
+        if not validated_data.get("paid_at") and validated_data.get("status") == Payment.Status.SUCCEEDED:
+            validated_data["paid_at"] = timezone.now()
+        payment = super().create(validated_data)
+        if payment.invoice:
+            payment.invoice.refresh_payment_status()
+        return payment
+
+    def update(self, instance, validated_data):
+        instance = super().update(instance, validated_data)
+        if instance.invoice:
+            instance.invoice.refresh_payment_status()
+        return instance

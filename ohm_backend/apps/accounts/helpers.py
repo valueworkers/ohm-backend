@@ -17,11 +17,11 @@ OTP_TTL_SECONDS = 300
 OTP_MAX_ATTEMPTS = 5
 
 OTP_EMAIL_CONFIG = {
-    "password_reset": ("Your OHM password reset code", "password_reset_otp.html"),
-    "login":          ("Your OHM login code",          "otp-login.html"),
-    "signup":         ("Verify your OHM account",      "otp-login.html"),
+    "password_reset": ("Your OHM password reset code", "accounts/password_reset_otp.html"),
+    "login":          ("Your OHM login code",          "accounts/otp-login.html"),
+    "signup":         ("Verify your OHM account",      "accounts/otp-login.html"),
 }
-DEFAULT_OTP_EMAIL = ("Your OHM verification code", "otp-login.html")
+DEFAULT_OTP_EMAIL = ("Your OHM verification code", "accounts/otp-login.html")
 
 OTP_EXPIRY_MINUTES = OTP_TTL_SECONDS // 60
 

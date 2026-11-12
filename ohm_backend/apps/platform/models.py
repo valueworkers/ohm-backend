@@ -511,6 +511,85 @@ class QuoteEvent(models.Model):
     at = models.DateTimeField(auto_now_add=True)
 
 
+class Booking(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        CONFIRMED = "confirmed", "Confirmed"
+        IN_PROGRESS = "in_progress", "In Progress"
+        COMPLETED = "completed", "Completed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    class BookingType(models.TextChoices):
+        ONBOARDING = "onboarding", "Onboarding Session"
+        CONSULTATION = "consultation", "Consultation"
+        TRAINING = "training", "Training & Support"
+        SUBSCRIPTION = "subscription", "Subscription Activation"
+        CUSTOM = "custom", "Custom Service"
+
+    booking_id = models.CharField(max_length=50, unique=True, blank=True)
+    tenant = models.ForeignKey(
+        Tenant, on_delete=models.CASCADE, related_name="bookings"
+    )
+    booked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="platform_bookings",
+    )
+    plan = models.ForeignKey(
+        Plan, null=True, blank=True, on_delete=models.SET_NULL, related_name="bookings"
+    )
+    quote = models.ForeignKey(
+        Quote, null=True, blank=True, on_delete=models.SET_NULL, related_name="bookings"
+    )
+    title = models.CharField(max_length=255)
+    booking_type = models.CharField(
+        max_length=30, choices=BookingType.choices, default=BookingType.ONBOARDING
+    )
+    status = models.CharField(
+        max_length=30, choices=Status.choices, default=Status.CONFIRMED
+    )
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    contact_name = models.CharField(max_length=200, blank=True)
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=20, blank=True)
+    location = models.CharField(max_length=255, blank=True, default="Virtual / Online")
+    total_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-start_datetime", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status"]),
+            models.Index(fields=["start_datetime", "end_datetime"]),
+        ]
+
+    def __str__(self):
+        tenant_name = self.tenant.name if self.tenant_id else "No Tenant"
+        return f"{self.booking_id or 'BKG'} - {tenant_name} - {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.booking_id:
+            import random
+            today = timezone.localdate().strftime("%y%m")
+            rand_suffix = random.randint(1000, 9999)
+            self.booking_id = f"BK-{today}-{rand_suffix}"
+        if self.tenant_id:
+            if not self.contact_name:
+                self.contact_name = getattr(self.tenant, "name", "")
+            if not self.contact_email:
+                self.contact_email = getattr(self.tenant, "contact_email", "")
+            if not self.contact_phone:
+                self.contact_phone = getattr(self.tenant, "contact_phone", "")
+        super().save(*args, **kwargs)
+
+
 class InvoiceSequence(models.Model):
     """Gap-free numbering per year; number is assigned when the invoice is raised."""
     year = models.PositiveIntegerField(unique=True)
@@ -538,6 +617,9 @@ class Invoice(models.Model):
     )
     quotation = models.ForeignKey(
         Quotation, null=True, blank=True, on_delete=models.SET_NULL, related_name="invoices"
+    )
+    booking = models.ForeignKey(
+        Booking, null=True, blank=True, on_delete=models.SET_NULL, related_name="invoices"
     )
 
     # Billed to
@@ -679,7 +761,12 @@ class Payment(models.Model):
         REFUNDED = "refunded", "Refunded"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    invoice = models.ForeignKey(Invoice, on_delete=models.PROTECT, related_name="payments")
+    tenant = models.ForeignKey(
+        Tenant, null=True, blank=True, on_delete=models.SET_NULL, related_name="payments"
+    )
+    invoice = models.ForeignKey(
+        Invoice, null=True, blank=True, on_delete=models.SET_NULL, related_name="payments"
+    )
     amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
     currency = models.CharField(max_length=3, default="INR")
     method = models.CharField(max_length=20, choices=Method.choices)
@@ -699,6 +786,9 @@ class Payment(models.Model):
 
     class Meta:
         ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status"]),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["gateway", "gateway_payment_id"],
@@ -708,5 +798,11 @@ class Payment(models.Model):
         ]
 
     def __str__(self):
-        return f"{self.invoice.number} - {self.amount} ({self.status})"
+        target = self.invoice.number if self.invoice else (self.tenant.name if self.tenant else "Direct")
+        return f"{target} - {self.amount} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        if self.invoice_id and self.invoice and not self.tenant_id:
+            self.tenant = self.invoice.tenant
+        super().save(*args, **kwargs)
 

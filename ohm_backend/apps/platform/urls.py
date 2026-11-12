@@ -12,6 +12,8 @@ from .views import (
     QuoteTaxSettingsView,
     PublicQuoteResponseView,
     InvoiceViewSet,
+    BookingViewSet,
+    PaymentViewSet,
 )
 
 router = DefaultRouter()
@@ -21,7 +23,9 @@ router.register("tenants", TenantViewSet, basename="tenant")
 router.register("subscriptions", SubscriptionViewSet, basename="subscription")
 router.register("plans", PlanViewSet, basename="plan")
 router.register("quotes", QuoteViewSet, basename="quote")
+router.register("bookings", BookingViewSet, basename="booking")
 router.register("invoices", InvoiceViewSet, basename="invoice")
+router.register("payments", PaymentViewSet, basename="payment")
 
  
 urlpatterns = [

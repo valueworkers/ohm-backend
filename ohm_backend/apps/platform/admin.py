@@ -17,6 +17,7 @@ from .models import (
     Subscription,
     Tenant,
     TenantProvisioning,
+    Booking,
 )
 from .services import (
     BillingError,
@@ -254,11 +255,18 @@ class InvoiceAdmin(admin.ModelAdmin):
         for error in errors:
             self.message_user(request, error, messages.ERROR)
 
+@admin.register(Booking)
+class BookingAdmin(admin.ModelAdmin):
+    list_display = ("booking_id", "tenant", "title", "booking_type", "status", "start_datetime", "end_datetime", "total_amount")
+    list_filter = ("status", "booking_type", "tenant")
+    search_fields = ("booking_id", "title", "tenant__name", "contact_name", "contact_email")
+
+
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
-    list_display = ("invoice", "gateway", "gateway_payment_id", "amount", "currency", "method", "status", "paid_at")
-    list_filter = ("gateway", "method", "status", "currency")
-    search_fields = ("invoice__number", "gateway_payment_id", "reference")
+    list_display = ("tenant", "invoice", "gateway", "gateway_payment_id", "amount", "currency", "method", "status", "paid_at")
+    list_filter = ("tenant", "gateway", "method", "status", "currency")
+    search_fields = ("invoice__number", "gateway_payment_id", "reference", "tenant__name")
     readonly_fields = ("id", "created_at", "paid_at")
 
     def has_add_permission(self, request):

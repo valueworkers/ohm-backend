@@ -5,7 +5,7 @@ import django_filters as df
 from django.db.models import Exists, OuterRef, Q
 from django.utils import timezone
 
-from .models import Quote, Invoice
+from .models import Quote, Invoice, Booking, Payment
 
 
 def latest_revisions(qs):
@@ -18,6 +18,7 @@ class QuoteFilter(df.FilterSet):
     # ?status=sent&status=draft
     status = df.MultipleChoiceFilter(choices=Quote.Status.choices)
     supply_type = df.MultipleChoiceFilter(choices=Quote.SupplyType.choices)   # intra_state / intra_ut / inter_state
+    tenant = df.NumberFilter(field_name="tenant_id")
     number = df.CharFilter(lookup_expr="icontains")
     company = df.CharFilter(lookup_expr="icontains")
     buyer_email = df.CharFilter(lookup_expr="icontains")
@@ -62,9 +63,11 @@ class InvoiceFilter(df.FilterSet):
     is_interstate = df.BooleanFilter()
     currency = df.CharFilter(lookup_expr="iexact")
 
+    booking = df.NumberFilter(field_name="booking_id")
+
     class Meta:
         model = Invoice
-        fields = ["tenant", "subscription", "quotation", "state_code", "is_interstate", "currency"]
+        fields = ["tenant", "subscription", "quotation", "booking", "state_code", "is_interstate", "currency"]
 
     def filter_status(self, qs, name, value):
         values = self.request.GET.getlist("status") if self.request else []
@@ -84,3 +87,32 @@ class InvoiceFilter(df.FilterSet):
             due_date__lt=timezone.localdate(),
         )
         return qs.filter(cond) if value else qs.exclude(cond)
+
+
+class BookingFilter(df.FilterSet):
+    tenant = df.NumberFilter(field_name="tenant_id")
+    status = df.ChoiceFilter(choices=Booking.Status.choices)
+    booking_type = df.ChoiceFilter(choices=Booking.BookingType.choices)
+    booking_id = df.CharFilter(lookup_expr="icontains")
+    title = df.CharFilter(lookup_expr="icontains")
+    start_date_from = df.DateTimeFilter(field_name="start_datetime", lookup_expr="gte")
+    start_date_to = df.DateTimeFilter(field_name="start_datetime", lookup_expr="lte")
+
+    class Meta:
+        model = Booking
+        fields = ["tenant", "status", "booking_type", "plan", "quote"]
+
+
+class PaymentFilter(df.FilterSet):
+    tenant = df.NumberFilter(field_name="tenant_id")
+    invoice = df.NumberFilter(field_name="invoice_id")
+    method = df.ChoiceFilter(choices=Payment.Method.choices)
+    status = df.ChoiceFilter(choices=Payment.Status.choices)
+    gateway = df.CharFilter(lookup_expr="icontains")
+    reference = df.CharFilter(lookup_expr="icontains")
+    paid_after = df.DateTimeFilter(field_name="paid_at", lookup_expr="gte")
+    paid_before = df.DateTimeFilter(field_name="paid_at", lookup_expr="lte")
+
+    class Meta:
+        model = Payment
+        fields = ["tenant", "invoice", "method", "status", "gateway"]

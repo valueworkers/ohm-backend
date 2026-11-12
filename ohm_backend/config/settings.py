@@ -83,7 +83,9 @@ TENANT_APPS = [
     "django.contrib.messages",
     "django.contrib.admin",
     "apps.accounts",
-    # Product modules go here later, e.g. "apps.patients", "apps.booking", "apps.billing"
+    # Product modules:
+    "apps.catalog",        # Venues, Services, Resources (Facility & Product Catalog)
+    "apps.billing",        # Quotations, Invoices, Bookings, Payments
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [a for a in TENANT_APPS if a not in SHARED_APPS]

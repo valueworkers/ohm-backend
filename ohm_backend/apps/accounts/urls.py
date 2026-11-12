@@ -30,6 +30,15 @@ router.register("staff-for-hire", StaffForHireViewSet, basename="staff-for-hire"
 
 urlpatterns = [
     path("", include(router.urls)),
+
+    # --- Shorthand / Backward-compatibility Auth Aliases ---
+    # Note: Canonical auth routes are registered under /api/auth/* in config/urls.py:
+    #   - /api/auth/login/
+    #   - /api/auth/logout/
+    #   - /api/auth/otp/
+    #   - /api/auth/password-reset/
+    #   - /api/auth/access-tokens/
+    #   - /api/auth/registrations/
     path("login/", UnifiedLoginView.as_view(), name="login"),
     path("logout/", UnifiedLogoutView.as_view(), name="logout"),
     path("change-password/", ChangePasswordView.as_view(), name="change-password"),

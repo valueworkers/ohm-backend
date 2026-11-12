@@ -90,6 +90,114 @@
       "value": "",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "venueId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "resourceId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "photoId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "locationId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "packageId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "patientId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "patientDocumentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "contactBookingId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "primaryOrderId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "secondaryOrderId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "ternaryOrderId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "quoteTaxSettingId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "billingQuoteId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "billingInvoiceId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "platformBookingId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "platformPaymentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment"

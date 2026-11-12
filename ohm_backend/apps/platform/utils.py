@@ -44,7 +44,7 @@ def send_tenant_welcome_email(p, tenant, recipient_email=None):
         f"If you didn't request this, please ignore this email.\n\n"
         f"The O-HM team"
     )
-    html = render_to_string("tenant_welcome.html", ctx)
+    html = render_to_string("platform/tenant_welcome.html", ctx)
 
     msg = EmailMultiAlternatives(subject, text, settings.DEFAULT_FROM_EMAIL, [to_email])
     msg.attach_alternative(html, "text/html")

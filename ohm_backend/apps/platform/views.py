@@ -1,7 +1,7 @@
 from io import BytesIO
 from rest_framework.filters import OrderingFilter, SearchFilter
 from . import gst
-from .filters import InvoiceFilter, QuoteFilter, latest_revisions
+from .filters import InvoiceFilter, QuoteFilter, BookingFilter, PaymentFilter, latest_revisions
 from . import services
 
 from django.db.models import Count, DecimalField, F, Q, Sum, Value, ProtectedError
@@ -27,7 +27,7 @@ from rest_framework.throttling import AnonRateThrottle
 from decimal import Decimal
 from .models import (
     Feature, Plan, Subscription, Tenant, TenantProvisioning,
-    Quote, QuoteTaxSettings, QuoteLine, Invoice, InvoiceItem, Payment
+    Quote, QuoteTaxSettings, QuoteLine, Invoice, InvoiceItem, Payment, Booking
 )
 from .serializers import (
     ApproveSerializer,
@@ -44,10 +44,11 @@ from .serializers import (
     TenantUpdateSerializer,
     default_trial_plan,
     slug_problem,
-    QuoteLineSerializer, QuoteSerializer,
+    QuoteLineSerializer, QuoteSerializer, QuoteListSerializer,
     SendTestSerializer, QuoteTaxSettingsSerializer,
+    BookingSerializer, BookingListSerializer,
     InvoiceListSerializer, InvoiceSerializer,
-    PaymentReadSerializer, RecordPaymentSerializer,
+    PaymentReadSerializer, RecordPaymentSerializer, PlatformPaymentSerializer,
 )
 from .tasks import provision_tenant_task
 from .services import send_quote, revise_quote, respond_to_quote, recalculate
@@ -511,7 +512,7 @@ class QuoteViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = QuoteFilter
     search_fields = [
-        "number", "company", "attention", "gstin", "buyer_email", "your_ref", "state",
+        "number", "company", "attention", "gstin", "buyer_email", "your_ref", "state", "tenant__name",
         "lines__item", "lines__hsn_sac",
     ]
     ordering_fields = [
@@ -525,10 +526,13 @@ class QuoteViewSet(viewsets.ModelViewSet):
             return [IsPlatformAdmin()]
         return [IsAuthenticated()]
 
+    def get_serializer_class(self):
+        return QuoteListSerializer if self.action == "list" else QuoteSerializer
+
     def get_queryset(self):
         qs = super().get_queryset()
         if connection.schema_name == get_public_schema_name():
-            return qs.filter(tenant__isnull=True)
+            return qs
         return qs.filter(tenant=self.request.tenant)
 
     def perform_update(self, serializer):
@@ -637,10 +641,10 @@ class QuoteStatsView(APIView):
 
     def get(self, request):
         qs = latest_revisions(Quote.objects.all())
-        if connection.schema_name == get_public_schema_name():
-            qs = qs.filter(tenant__isnull=True)
-        else:
+        if connection.schema_name != get_public_schema_name():
             qs = qs.filter(tenant=request.tenant)
+        elif request.query_params.get("tenant"):
+            qs = qs.filter(tenant_id=request.query_params.get("tenant"))
         for param, lookup in (("from", "quote_date__gte"), ("to", "quote_date__lte")):   # kept for the existing UI
             raw = request.query_params.get(param)
             if raw:
@@ -959,3 +963,98 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         ser.is_valid(raise_exception=True)
         payment = services.record_payment(invoice, user=request.user, **ser.validated_data)
         return Response(PaymentReadSerializer(payment).data, status=status.HTTP_201_CREATED)
+
+
+class BookingViewSet(viewsets.ModelViewSet):
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = BookingFilter
+    search_fields = ["booking_id", "title", "contact_name", "contact_email", "contact_phone", "tenant__name"]
+    ordering_fields = ["start_datetime", "end_datetime", "created_at", "status", "total_amount"]
+    ordering = ["-start_datetime", "-created_at"]
+
+    def get_permissions(self):
+        if connection.schema_name == get_public_schema_name():
+            return [IsPlatformAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = Booking.objects.select_related("tenant", "booked_by", "plan", "quote")
+        if connection.schema_name != get_public_schema_name():
+            qs = qs.filter(tenant=self.request.tenant)
+        return qs
+
+    def get_serializer_class(self):
+        return BookingListSerializer if self.action == "list" else BookingSerializer
+
+    def perform_create(self, serializer):
+        if connection.schema_name != get_public_schema_name():
+            serializer.save(tenant=self.request.tenant)
+        else:
+            serializer.save()
+
+    @action(detail=True, methods=["post"], url_path="convert-to-invoice")
+    def convert_to_invoice(self, request, pk=None):
+        booking = self.get_object()
+        today = timezone.localdate()
+        issuer = services.default_issuer()
+        tenant = booking.tenant
+        seller_code, seller_name, seller_gstin = services.get_seller_tax_settings(tenant.pk if tenant else None)
+        if seller_gstin:
+            issuer["gstin"] = seller_gstin
+        if seller_name:
+            issuer["state"] = seller_name
+
+        invoice = Invoice.objects.create(
+            tenant=tenant,
+            booking=booking,
+            customer_name=booking.contact_name or (tenant.name if tenant else "Customer"),
+            buyer_email=booking.contact_email or (tenant.contact_email if tenant else ""),
+            your_ref=booking.booking_id,
+            issue_date=today,
+            issuer=issuer,
+            terms=services.default_terms(),
+        )
+        InvoiceItem.objects.create(
+            invoice=invoice,
+            position=1,
+            line_type=InvoiceItem.LineType.CUSTOM,
+            description=f"Booking: {booking.title}",
+            hsn_sac="998319",
+            quantity=Decimal("1.00"),
+            uom="Unit",
+            unit_price=booking.total_amount,
+            gst_rate=Decimal("18.00"),
+            amount=booking.total_amount,
+        )
+        invoice.subtotal = booking.total_amount
+        invoice.total = booking.total_amount
+        invoice.save()
+        return Response(InvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
+
+
+class PaymentViewSet(viewsets.ModelViewSet):
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = PaymentFilter
+    search_fields = ["reference", "gateway_order_id", "gateway_payment_id", "tenant__name", "invoice__number"]
+    ordering_fields = ["created_at", "paid_at", "amount"]
+    ordering = ["-created_at"]
+
+    def get_permissions(self):
+        if connection.schema_name == get_public_schema_name():
+            return [IsPlatformAdmin()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        qs = Payment.objects.select_related("tenant", "invoice", "recorded_by")
+        if connection.schema_name != get_public_schema_name():
+            qs = qs.filter(tenant=self.request.tenant)
+        return qs
+
+    def get_serializer_class(self):
+        return PlatformPaymentSerializer
+
+    def perform_create(self, serializer):
+        if connection.schema_name != get_public_schema_name():
+            serializer.save(tenant=self.request.tenant)
+        else:
+            serializer.save()

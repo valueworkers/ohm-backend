@@ -31,6 +31,8 @@ urlpatterns = [
     # --- Tenant-scoped (only meaningful with X-Tenant) ---
     path("api/auth/registrations/", TenantRegistrationCreateView.as_view(), name="tenant-registration-create"),
     path("api/", include("apps.accounts.urls")),
+    path("api/billing/", include("apps.billing.urls")),
+    path("api/catalog/", include("apps.catalog.urls")),
 
     # --- Platform admin + onboarding (public schema) ---
     path("api/platform/", include("apps.platform.urls")),
