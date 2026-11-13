@@ -270,7 +270,6 @@ class TenantProvisioningViewSet(viewsets.ModelViewSet):
 # --------------------------------------------------------------------------
 
 class TenantViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsPlatformAdmin]
     filterset_fields = ("status",)
     search_fields = ("name", "schema_name", "contact_email", "domains__domain")
     queryset = (
@@ -449,7 +448,6 @@ class TenantViewSet(viewsets.ModelViewSet):
 
 
 class SubscriptionViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsPlatformAdmin]
     serializer_class = SubscriptionSerializer
     filterset_fields = ("tenant", "plan", "status")
     queryset = Subscription.objects.select_related("tenant", "plan").prefetch_related("features")
@@ -467,7 +465,6 @@ class MyTenantViewSet(
 ):
     """Tenants the caller requested. PATCH edits the profile; POST activate goes live."""
 
-    permission_classes = [IsAuthenticated]
     serializer_class = TenantProfileSerializer
     parser_classes = [JSONParser, MultiPartParser, FormParser]
     http_method_names = ["get", "patch", "post", "head", "options"]
@@ -520,11 +517,6 @@ class QuoteViewSet(viewsets.ModelViewSet):
         "total", "sent_at", "accepted_at", "created_at",
     ]
     ordering = ["-quote_date", "-number", "-revision"]
-
-    def get_permissions(self):
-        if connection.schema_name == get_public_schema_name():
-            return [IsPlatformAdmin()]
-        return [IsAuthenticated()]
 
     def get_serializer_class(self):
         return QuoteListSerializer if self.action == "list" else QuoteSerializer
@@ -789,11 +781,6 @@ class InvoiceViewSet(viewsets.ModelViewSet):
     ordering_fields = ["issue_date", "due_date", "total", "number", "created_at", "status"]
     ordering = ["-issue_date", "-created_at"]
 
-    def get_permissions(self):
-        if connection.schema_name == get_public_schema_name():
-            return [IsPlatformAdmin()]
-        return [IsAuthenticated()]
-
     def handle_exception(self, exc):
         return super().handle_exception(exc)
 
@@ -972,11 +959,6 @@ class BookingViewSet(viewsets.ModelViewSet):
     ordering_fields = ["start_datetime", "end_datetime", "created_at", "status", "total_amount"]
     ordering = ["-start_datetime", "-created_at"]
 
-    def get_permissions(self):
-        if connection.schema_name == get_public_schema_name():
-            return [IsPlatformAdmin()]
-        return [IsAuthenticated()]
-
     def get_queryset(self):
         qs = Booking.objects.select_related("tenant", "booked_by", "plan", "quote")
         if connection.schema_name != get_public_schema_name():
@@ -1038,11 +1020,6 @@ class PaymentViewSet(viewsets.ModelViewSet):
     search_fields = ["reference", "gateway_order_id", "gateway_payment_id", "tenant__name", "invoice__number"]
     ordering_fields = ["created_at", "paid_at", "amount"]
     ordering = ["-created_at"]
-
-    def get_permissions(self):
-        if connection.schema_name == get_public_schema_name():
-            return [IsPlatformAdmin()]
-        return [IsAuthenticated()]
 
     def get_queryset(self):
         qs = Payment.objects.select_related("tenant", "invoice", "recorded_by")

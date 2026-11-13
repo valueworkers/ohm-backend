@@ -23,7 +23,7 @@ from apps.accounts.models import (
     EmployeeProfile, Role, RoleAssignment, ShiftSchedule, StaffForHire,
     PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
 )
-from apps.accounts.permissions import CanManageRoles, IsSchemaAdministrator, IsTenantAdmin, IsTenantSchema
+from apps.accounts.permissions import IsTenantAdmin, IsTenantSchema
 from apps.accounts.serializers import (
     CustomerRegisterSerializer,
     BulkEmployeeUploadSerializer,
@@ -80,7 +80,6 @@ class UserViewSet(
     """Let a provider's Tenant Admin manage accounts stored in that provider's schema."""
 
     serializer_class = UserSerializer
-    permission_classes = [IsSchemaAdministrator]
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
@@ -106,7 +105,6 @@ class RoleViewSet(viewsets.ModelViewSet):
     """CRUD for workspace and system roles; managed by Superadmin, Root user, and Tenant Admin."""
 
     serializer_class = RoleSerializer
-    permission_classes = [IsAuthenticated, CanManageRoles]
     queryset = Role.objects.prefetch_related("permissions").order_by("rank", "name")
     http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
 
@@ -139,7 +137,6 @@ class RoleAssignmentViewSet(
     """Role grants, optionally scoped to an object in this workspace; managed by Superadmin, Root user, and Tenant Admin."""
 
     serializer_class = RoleAssignmentSerializer
-    permission_classes = [IsAuthenticated, CanManageRoles]
     queryset = RoleAssignment.objects.select_related("user", "role", "scope_type").order_by("id")
     http_method_names = ["get", "post", "delete", "head", "options"]
 
@@ -177,12 +174,10 @@ class RoleAssignmentViewSet(
 class ShiftScheduleViewSet(viewsets.ModelViewSet):
     queryset = ShiftSchedule.objects.all()
     serializer_class = ShiftScheduleSerializer
-    permission_classes = [IsAuthenticated, IsTenantAdmin]
     http_method_names = ["get", "post", "put", "patch", "delete", "head", "options"]
 
 class EmployeeViewSet(viewsets.ModelViewSet):
     serializer_class = MedicareEmployeeSerializer
-    permission_classes = [IsAuthenticated, IsTenantAdmin]
     search_fields = ["first_name", "middle_name", "last_name", "email", "mobile_number", "employee_profile__employee_id"]
     ordering_fields = ["id", "first_name", "last_name", "date_joined"]
     ordering = ["id"]
@@ -248,7 +243,6 @@ class EmployeeViewSet(viewsets.ModelViewSet):
         return Response(MedicareEmployeeSerializer(employee, context=self.get_serializer_context()).data)
 
 class CustomerViewSet(viewsets.ModelViewSet):
-    permission_classes = [IsAuthenticated, IsTenantAdmin]
     search_fields = ["first_name", "middle_name", "last_name", "email", "mobile_number", "city"]
     ordering = ["first_name"]
 
@@ -271,7 +265,6 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
 class UserDocumentViewSet(viewsets.ModelViewSet):
     serializer_class = UserDocumentSerializer
-    permission_classes = [IsAuthenticated, IsTenantAdmin]
     parser_classes = [MultiPartParser, FormParser]
     queryset = UserDocument.objects.select_related("user", "uploaded_by").prefetch_related("files")
 
@@ -287,15 +280,9 @@ class UserDocumentViewSet(viewsets.ModelViewSet):
 
 class StaffForHireViewSet(viewsets.ModelViewSet):
     serializer_class = StaffForHireSerializer
-    permission_classes = [IsAuthenticated]
     queryset = StaffForHire.objects.select_related("created_by")
     search_fields = ["staff_name", "vendor_name", "available_for", "language", "skill"]
     ordering = ["-created_at"]
-
-    def get_permissions(self):
-        if self.action in {"list", "retrieve"}:
-            return [IsTenantSchema(), IsAuthenticated()]
-        return [IsTenantSchema(), IsTenantAdmin()]
 
     def get_queryset(self):
         queryset = super().get_queryset()

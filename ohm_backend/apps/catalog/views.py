@@ -9,7 +9,7 @@ from rest_framework.response import Response
 from apps.accounts.permissions import is_root_user, is_superadmin, is_tenant_admin
 from .filters import ResourceFilter, ServiceFilter, VenueFilter
 from .models import Photos, Resource, Service, Venue
-from .permissions import CanAssignUsers, EntityAccessPermission, can_manage_entity
+from .permissions import CanAssignUsers, can_manage_entity
 from .serializers import (
     EntityAssignUsersSerializer,
     PhotoUploadSerializer,
@@ -27,7 +27,6 @@ from .services import EntityAssignmentService, PhotoService
 class VenueViewSet(viewsets.ModelViewSet):
     serializer_class = VenueSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    permission_classes = [EntityAccessPermission]
     filterset_class = VenueFilter
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = [
@@ -83,7 +82,6 @@ class VenueViewSet(viewsets.ModelViewSet):
 class ServiceViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    permission_classes = [EntityAccessPermission]
     filterset_class = ServiceFilter
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "description", "address", "city", "contact"]
@@ -130,7 +128,6 @@ class ServiceViewSet(viewsets.ModelViewSet):
 class ResourceViewSet(viewsets.ModelViewSet):
     serializer_class = ResourceSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    permission_classes = [EntityAccessPermission]
     filterset_class = ResourceFilter
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "description", "address"]
@@ -183,7 +180,6 @@ class ResourceViewSet(viewsets.ModelViewSet):
 
 class PhotoViewSet(viewsets.GenericViewSet):
     parser_classes = [MultiPartParser, FormParser, JSONParser]
-    permission_classes = [IsAuthenticated]
     queryset = Photos.objects.all()
     serializer_class = PhotosSerializer
 

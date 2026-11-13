@@ -23,7 +23,6 @@ from apps.accounts.models import (
     EmployeeProfile, Role, RoleAssignment, ShiftSchedule, StaffForHire,
     PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
 )
-from apps.accounts.permissions import IsSchemaAdministrator, IsTenantAdmin, IsTenantSchema
 from apps.accounts.serializers import (
     OTPPasswordResetSerializer,
     OTPRequestSerializer,
@@ -145,7 +144,6 @@ class OwnerViewSet(viewsets.ModelViewSet):
     """
 
     http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
-    permission_classes = [IsSchemaAdministrator]
 
     def owners_qs(self):
         return User.objects.filter(
