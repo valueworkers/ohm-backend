@@ -428,7 +428,7 @@ class StaffForHire(models.Model):
         return f"{self.staff_name} | {self.vendor_name}"
 
 
-# ------------------------ ROLES (use Django's auth.Permission) ------------------------
+# ------------------------ ROLES ------------------------
 class Role(models.Model):
     class Code(models.TextChoices):
         SUPER_ADMIN = "SUPER_ADMIN", "Super Admin"
@@ -444,7 +444,6 @@ class Role(models.Model):
     code = models.CharField(max_length=30, unique=True, choices=Code.choices)
     name = models.CharField(max_length=60)
     rank = models.PositiveSmallIntegerField(help_text="Higher = more authority")
-    permissions = models.ManyToManyField("auth.Permission", blank=True, related_name="roles")
 
     def __str__(self):
         return self.name

@@ -9,6 +9,7 @@ from .public_views import (
 )
 from .tenant_views import (
     BulkEmployeeUploadAPIView, CustomerViewSet, EmployeeViewSet,
+    GroupViewSet, PermissionViewSet,
     RoleAssignmentViewSet, RoleViewSet, ShiftScheduleViewSet,
     StaffForHireViewSet, TenantRegistrationCreateView, UserDocumentViewSet, UserViewSet,
 )
@@ -22,6 +23,8 @@ router.register("users", UserViewSet, basename="tenant-user")
 router.register("owner", OwnerViewSet, basename="owner")
 router.register("roles", RoleViewSet, basename="tenant-role")
 router.register("role-assignments", RoleAssignmentViewSet, basename="tenant-role-assignment")
+router.register("groups", GroupViewSet, basename="tenant-group")
+router.register("permissions", PermissionViewSet, basename="tenant-permission")
 router.register("shifts", ShiftScheduleViewSet, basename="shifts")
 router.register("employees", EmployeeViewSet, basename="employees")
 router.register("customers", CustomerViewSet, basename="customers")

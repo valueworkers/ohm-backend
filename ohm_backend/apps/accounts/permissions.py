@@ -113,21 +113,7 @@ class DynamicModelPermissions(DjangoModelPermissions):
 
         perms = self.get_required_permissions(request.method, queryset.model)
 
-        for perm in perms:
-            if not self._check_perm(request.user, perm):
-                return False
-        return True
-
-    def _check_perm(self, user, perm):
-        if user.has_perm(perm):
-            return True
-        if "." in perm:
-            app_label, codename = perm.split(".", 1)
-            return user.role_assignments.filter(
-                role__permissions__content_type__app_label=app_label,
-                role__permissions__codename=codename,
-            ).exists()
-        return False
+        return all(request.user.has_perm(perm) for perm in perms)
 
 class IsTenantSchema(BasePermission):
     """Allow an endpoint only when the request is routed to a provider schema."""

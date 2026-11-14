@@ -397,7 +397,7 @@ class TenantViewSet(viewsets.ModelViewSet):
 
             assignments = RoleAssignment.objects.filter(scope_type__isnull=False).select_related(
                 "user", "role", "scope_type", "assigned_by"
-            ).prefetch_related("role__permissions").order_by("id")
+            ).order_by("id")
             object_types = []
             tenant_app_labels = {app.split(".")[-1] for app in settings.TENANT_APPS}
             for model in apps.get_models():
@@ -424,7 +424,6 @@ class TenantViewSet(viewsets.ModelViewSet):
             "role_name": assignment.role.name,
             "object_type": f"{assignment.scope_type.app_label}.{assignment.scope_type.model}",
             "object_id": assignment.scope_id,
-            "permission_codes": list(assignment.role.permissions.order_by("code").values_list("code", flat=True)),
         }
 
 

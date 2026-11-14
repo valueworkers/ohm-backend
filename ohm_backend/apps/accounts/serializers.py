@@ -7,7 +7,7 @@ from rest_framework import serializers
 
 from django.contrib.contenttypes.models import ContentType
 from django.conf import settings
-from django.contrib.auth.models import Permission
+from django.contrib.auth.models import Group, Permission
 
 from .models import (
     EmployeeProfile, Role, RoleAssignment, ShiftSchedule, StaffForHire,
@@ -311,14 +311,24 @@ class UserSerializer(serializers.ModelSerializer):
     """Tenant Admin's view of the workspace's users (Tenant Admins and Customers)."""
 
     role = serializers.ChoiceField(choices=Role.Code.choices, source="primary_role", required=False)
+    groups = serializers.PrimaryKeyRelatedField(
+        queryset=Group.objects.all(), many=True, required=False, write_only=True
+    )
+    group_details = serializers.SerializerMethodField()
     password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
     employee_profile = EmployeeProfileSerializer(read_only=True)
 
     class Meta:
         model = User
-        fields = ["id", "email", "first_name", "middle_name", "last_name", "mobile_number", "is_active", "role", "password", "date_joined", "employee_profile"]
-        read_only_fields = ["id", "date_joined"]
+        fields = [
+            "id", "email", "first_name", "middle_name", "last_name", "mobile_number",
+            "is_active", "role", "groups", "group_details", "password", "date_joined", "employee_profile"
+        ]
+        read_only_fields = ["id", "date_joined", "group_details"]
         extra_kwargs = {"email": {"validators": []}}
+
+    def get_group_details(self, user):
+        return [{"id": g.id, "name": g.name} for g in user.groups.all()]
 
     def validate_email(self, value):
         return _check_email(value, self.instance)
@@ -356,14 +366,18 @@ class UserSerializer(serializers.ModelSerializer):
     @transaction.atomic
     def create(self, validated):
         role = validated.pop("primary_role", "CUSTOMER")
+        groups = validated.pop("groups", None)
         password = validated.pop("password")
         user = User.objects.create_user(password=password, **validated)
         AccountsService.set_role(user, role, assigned_by=self.context["request"].user)
+        if groups is not None:
+            user.groups.set(groups)
         return user
 
     @transaction.atomic
     def update(self, instance, validated):
         role = validated.pop("primary_role", None)
+        groups = validated.pop("groups", None)
         validated.pop("password", None)
         validated.pop("email", None)
         self._guard_last_admin(instance, validated.get("is_active"), role)
@@ -372,26 +386,66 @@ class UserSerializer(serializers.ModelSerializer):
         instance.save()
         if role:
             AccountsService.set_role(instance, role, assigned_by=self.context["request"].user)
+        if groups is not None:
+            instance.groups.set(groups)
         return instance
 
 
-class RoleSerializer(serializers.ModelSerializer):
-    code = serializers.CharField(max_length=30)
+class PermissionSerializer(serializers.ModelSerializer):
+    app_label = serializers.CharField(source="content_type.app_label", read_only=True)
+    model = serializers.CharField(source="content_type.model", read_only=True)
+
+    class Meta:
+        model = Permission
+        fields = ("id", "name", "codename", "app_label", "model")
+        read_only_fields = ("id", "name", "codename", "app_label", "model")
+
+
+class GroupSerializer(serializers.ModelSerializer):
     permissions = serializers.PrimaryKeyRelatedField(
         queryset=Permission.objects.all(), many=True, required=False, write_only=True
     )
     permission_details = serializers.SerializerMethodField()
 
     class Meta:
-        model = Role
-        fields = ("id", "code", "name", "rank", "permissions", "permission_details")
+        model = Group
+        fields = ("id", "name", "permissions", "permission_details")
         read_only_fields = ("id", "permission_details")
 
-    def get_permission_details(self, role):
+    def get_permission_details(self, group):
         return [
-            {"id": permission.id, "code": permission.codename, "name": permission.name}
-            for permission in role.permissions.order_by("codename")
+            {
+                "id": perm.id,
+                "name": perm.name,
+                "codename": perm.codename,
+                "app_label": perm.content_type.app_label,
+                "model": perm.content_type.model,
+            }
+            for perm in group.permissions.select_related("content_type").order_by("content_type__app_label", "codename")
         ]
+
+    def create(self, validated_data):
+        permissions = validated_data.pop("permissions", None)
+        group = super().create(validated_data)
+        if permissions is not None:
+            group.permissions.set(permissions)
+        return group
+
+    def update(self, instance, validated_data):
+        permissions = validated_data.pop("permissions", None)
+        group = super().update(instance, validated_data)
+        if permissions is not None:
+            group.permissions.set(permissions)
+        return group
+
+
+class RoleSerializer(serializers.ModelSerializer):
+    code = serializers.CharField(max_length=30)
+
+    class Meta:
+        model = Role
+        fields = ("id", "code", "name", "rank")
+        read_only_fields = ("id",)
 
     def validate_code(self, value):
         value = value.strip().upper()

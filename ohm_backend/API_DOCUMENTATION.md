@@ -575,15 +575,7 @@ If unavailable or reserved:
     "id": 1,
     "code": "TENANT_ADMIN",
     "name": "Tenant Admin",
-    "rank": 100,
-    "permission_details": [
-      {
-        "id": 10,
-        "code": "accounts.view_user",
-        "name": "Can view user",
-        "description": "Can view user for accounts.user"
-      }
-    ]
+    "rank": 80
   }
 ]
 ```
@@ -595,8 +587,7 @@ If unavailable or reserved:
 {
   "code": "HEAD_NURSE",
   "name": "Head Nurse",
-  "rank": 60,
-  "permissions": [10, 11, 14]
+  "rank": 60
 }
 ```
 - **Response `201 Created`**: Returns created role.
@@ -605,11 +596,7 @@ If unavailable or reserved:
 - **Endpoint**: `DELETE /api/roles/{id}/`
 - **Response `204 No Content`**: Deletes custom role. Built-in roles (`TENANT_ADMIN`, `CUSTOMER`) or roles assigned to active users cannot be deleted (returns HTTP 409).
 
-### 10.4 List Available Permissions
-- **Endpoint**: `GET /api/roles/permissions/`
-- **Response `200 OK`**: Array of all available permission codes for role configuration.
-
-### 10.5 List Role Assignments
+### 10.4 List Role Assignments
 - **Endpoint**: `GET /api/role-assignments/`
 - **Query Parameters**: `?user_id=5`, `?role_id=2`
 - **Response `200 OK`**:
@@ -628,7 +615,7 @@ If unavailable or reserved:
 ]
 ```
 
-### 10.6 Assign Role Tenant-Wide or Object-Scoped
+### 10.5 Assign Role Tenant-Wide or Object-Scoped
 - **Endpoint**: `POST /api/role-assignments/`
 - **Request Body (Tenant-Wide)**:
 ```json
@@ -648,11 +635,69 @@ If unavailable or reserved:
 ```
 - **Response `201 Created`**: Role assignment record.
 
-### 10.7 Revoke Role Assignment
+### 10.6 Revoke Role Assignment
 - **Endpoint**: `DELETE /api/role-assignments/{id}/`
 - **Response `204 No Content`**: Revokes the assignment. Safeguard prevents deleting the last active workspace Tenant Admin assignment.
 
-## 11. User Settings
+---
+
+## 11. Django Permission Groups & Permissions
+
+*Standard Django groups (`auth.Group`) and model permissions (`auth.Permission`). Managed by Superadmin, Root user, and Tenant Admin.*
+
+### 11.1 List Permission Groups
+- **Endpoint**: `GET /api/groups/`
+- **Response `200 OK`**:
+```json
+[
+  {
+    "id": 1,
+    "name": "Super User",
+    "permission_details": [
+      {
+        "id": 1,
+        "name": "Can add user",
+        "codename": "add_user",
+        "app_label": "accounts",
+        "model": "user"
+      }
+    ]
+  }
+]
+```
+
+### 11.2 Create Permission Group
+- **Endpoint**: `POST /api/groups/`
+- **Request Body**:
+```json
+{
+  "name": "Booking Coordinators",
+  "permissions": [12, 13, 14]
+}
+```
+- **Response `201 Created`**: Returns created group with assigned permissions.
+
+### 11.3 Update Permission Group
+- **Endpoint**: `PATCH /api/groups/{id}/`
+- **Request Body**:
+```json
+{
+  "name": "Lead Booking Coordinators",
+  "permissions": [12, 13, 14, 15]
+}
+```
+- **Response `200 OK`**: Returns updated group.
+
+### 11.4 Delete Permission Group
+- **Endpoint**: `DELETE /api/groups/{id}/`
+- **Response `204 No Content`**: Deletes group.
+
+### 11.5 List Django Permissions
+- **Endpoint**: `GET /api/permissions/`
+- **Query Parameters**: `?search=booking`, `?content_type__app_label=catalog`
+- **Response `200 OK`**: Array of installed Django permissions with `id`, `name`, `codename`, `app_label`, and `model`.
+
+## 12. User Settings
 
 The settings panel has three scopes. Platform Super Users use the personal settings routes below in the public schema and manage any workspace with `/api/platform/tenants/{id}/` (platform admin only). A tenant owner manages their organization profile and branding through `/api/platform/my/tenants/{id}/` (owner only; public schema). Each tenant user manages their own profile and personal preferences through the same `/api/settings/*` routes while authenticated in that tenant schema. Personal preference records are isolated per schema and per user; organization profile changes do not modify individual user preferences.
 

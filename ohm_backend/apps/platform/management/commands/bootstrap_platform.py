@@ -181,7 +181,6 @@ class Command(BaseCommand):
                 code=spec["code"],
                 defaults={"name": spec["role_name"], "rank": spec["rank"]},
             )
-            role.permissions.set(perms)
 
             group, _ = Group.objects.get_or_create(name=spec["group"])
             group.permissions.set(perms)

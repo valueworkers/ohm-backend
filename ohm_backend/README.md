@@ -280,15 +280,22 @@ All endpoints are hosted on the unified API host (`api.ohm.com`).
 - `DELETE /api/owner/{id}/` — Soft-deactivate co-owner (protected: cannot remove self or last active owner).
 
 ### 10. Tenant Roles & Role Assignments
-*Requires `IsTenantAdmin` and `X-Tenant` header.*
-- `GET /api/roles/` — List workspace roles with permission breakdown.
-- `POST /api/roles/` — Create custom workspace role (`code`, `name`, `rank`, `permissions`).
+*Requires `CanManageRoles` and `X-Tenant` header.*
+- `GET /api/roles/` — List workspace roles.
+- `POST /api/roles/` — Create custom workspace role (`code`, `name`, `rank`).
 - `GET/PUT/PATCH /api/roles/{id}/` — Retrieve or modify custom role.
 - `DELETE /api/roles/{id}/` — Delete custom role (protected: built-in roles and assigned roles cannot be deleted).
-- `GET /api/roles/permissions/` — List all assignable permission codes.
 - `GET /api/role-assignments/` — List role assignments (`?user_id=`, `?role_id=`).
 - `POST /api/role-assignments/` — Assign role tenant-wide or scoped to an object (`object_type`, `object_id`).
 - `DELETE /api/role-assignments/{id}/` — Revoke role assignment.
+
+### 11. Django Permission Groups & Permissions
+*Standard Django `Group` and `Permission` management.*
+- `GET /api/groups/` — List permission groups with permission details.
+- `POST /api/groups/` — Create permission group with permissions list (`name`, `permissions`).
+- `GET/PUT/PATCH /api/groups/{id}/` — Retrieve or update permission group.
+- `DELETE /api/groups/{id}/` — Delete permission group.
+- `GET /api/permissions/` — List available Django permissions with filtering by app_label/model.
 
 *See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for complete payload and response schemas.*
 

@@ -9,7 +9,7 @@ from .public_views import (
     UserProfileView, UserSessionsView, VerifyOTPView,
 )
 from .tenant_views import (
-    BulkEmployeeUploadAPIView, CustomerViewSet, EmployeeViewSet, RoleAssignmentViewSet,
-    RoleViewSet, ShiftScheduleViewSet, StaffForHireViewSet, TenantRegistrationCreateView,
-    UserDocumentViewSet, UserViewSet,
+    BulkEmployeeUploadAPIView, CustomerViewSet, EmployeeViewSet, GroupViewSet, PermissionViewSet,
+    RoleAssignmentViewSet, RoleViewSet, ShiftScheduleViewSet, StaffForHireViewSet,
+    TenantRegistrationCreateView, UserDocumentViewSet, UserViewSet,
 )

@@ -9128,7 +9128,7 @@
           ]
         },
         {
-          "name": "05 - Roles and assignments (Tenant Admin)",
+          "name": "05 - Roles, groups and permissions (Tenant Admin)",
           "description": "Tenant Admin only. Requires X-Tenant: {{tenantSlug}}.",
           "item": [
             {
@@ -9220,7 +9220,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"code\": \"AUDITOR_DEMO\",\n  \"name\": \"Auditor\",\n  \"rank\": 30,\n  \"permissions\": []\n}",
+                  "raw": "{\n  \"code\": \"AUDITOR_DEMO\",\n  \"name\": \"Auditor\",\n  \"rank\": 30\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -9321,7 +9321,7 @@
                 },
                 "body": {
                   "mode": "raw",
-                  "raw": "{\n  \"name\": \"Senior Auditor\",\n  \"rank\": 35,\n  \"permissions\": []\n}",
+                  "raw": "{\n  \"name\": \"Senior Auditor\",\n  \"rank\": 35\n}",
                   "options": {
                     "raw": {
                       "language": "json"
@@ -9370,7 +9370,7 @@
               "description": "Delete a custom role after removing all role assignments."
             },
             {
-              "name": "List available permissions",
+              "name": "List permission groups",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -9396,18 +9396,272 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/roles/permissions/",
+                  "raw": "{{baseUrl}}/api/groups/?page={{page}}&page_size={{pageSize}}",
                   "path": [
                     "api",
-                    "roles",
-                    "permissions"
+                    "groups"
                   ],
-                  "query": []
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}",
+                      "description": "Page number."
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}",
+                      "description": "Results per page (maximum 100)."
+                    }
+                  ]
                 },
-                "description": "Paginated list. Use page and page_size; page_size is capped at 100."
+                "description": "List Django permission groups with permission details. Paginated."
+              },
+              "response": []
+            },
+            {
+              "name": "Create permission group",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/",
+                  "path": [
+                    "api",
+                    "groups"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"User Managers\",\n  \"permissions\": [\n    1,\n    2\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Creates a Django permission group and saves its ID as groupId."
               },
               "response": [],
-              "description": "Returns the complete available-permission list; this action is not paginated."
+              "event": [
+                {
+                  "listen": "test",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "if(pm.response.code===201)pm.environment.set('groupId',pm.response.json().id);"
+                    ],
+                    "packages": {}
+                  }
+                }
+              ]
+            },
+            {
+              "name": "Get permission group",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/",
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}"
+                  ]
+                },
+                "description": "Retrieve a Django permission group including detailed permissions breakdown."
+              },
+              "response": []
+            },
+            {
+              "name": "Update permission group",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/",
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}"
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Senior User Managers\",\n  \"permissions\": [\n    1,\n    2,\n    3\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Update a Django permission group name or permission IDs list."
+              },
+              "response": []
+            },
+            {
+              "name": "Delete permission group",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/",
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}"
+                  ]
+                },
+                "description": "Delete a Django permission group."
+              },
+              "response": []
+            },
+            {
+              "name": "List Django permissions",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/permissions/?page={{page}}&page_size={{pageSize}}&search=user",
+                  "path": [
+                    "api",
+                    "permissions"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}",
+                      "description": "Page number."
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}",
+                      "description": "Results per page (maximum 100)."
+                    },
+                    {
+                      "key": "search",
+                      "value": "user",
+                      "description": "Filter by name, codename, app_label, or model."
+                    }
+                  ]
+                },
+                "description": "Paginated list of all installed Django model permissions with id, name, codename, app_label, and model."
+              },
+              "response": []
             },
             {
               "name": "List role assignments",

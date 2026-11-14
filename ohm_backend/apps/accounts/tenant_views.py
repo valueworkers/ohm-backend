@@ -18,7 +18,9 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from config.pagination import StandardResultsSetPagination
 
-from django.contrib.auth.models import Permission
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework import filters
+from django.contrib.auth.models import Group, Permission
 from apps.accounts.models import (
     EmployeeProfile, Role, RoleAssignment, ShiftSchedule, StaffForHire,
     PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
@@ -33,6 +35,8 @@ from apps.accounts.serializers import (
     OwnerCreateSerializer,
     OwnerSerializer,
     UserSerializer,
+    GroupSerializer,
+    PermissionSerializer,
     RoleSerializer,
     RoleAssignmentSerializer,
     CustomerListSerializer,
@@ -101,20 +105,35 @@ class UserViewSet(
 
         return queryset.distinct()
 
+class GroupViewSet(viewsets.ModelViewSet):
+    """CRUD for Django permission groups; managed by Superadmin, Root user, and Tenant Admin."""
+
+    serializer_class = GroupSerializer
+    queryset = Group.objects.prefetch_related("permissions__content_type").order_by("name")
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
+    search_fields = ["name"]
+    ordering_fields = ["name", "id"]
+    http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
+
+
+class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
+    """Read-only view for available Django permissions."""
+
+    serializer_class = PermissionSerializer
+    queryset = Permission.objects.select_related("content_type").order_by("content_type__app_label", "codename")
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ["content_type__app_label", "content_type__model"]
+    search_fields = ["name", "codename", "content_type__app_label", "content_type__model"]
+    ordering_fields = ["codename", "name", "id"]
+    http_method_names = ["get", "head", "options"]
+
+
 class RoleViewSet(viewsets.ModelViewSet):
     """CRUD for workspace and system roles; managed by Superadmin, Root user, and Tenant Admin."""
 
     serializer_class = RoleSerializer
-    queryset = Role.objects.prefetch_related("permissions").order_by("rank", "name")
+    queryset = Role.objects.order_by("rank", "name")
     http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
-
-    @action(detail=False, methods=["get"])
-    def permissions(self, request):
-        permissions = Permission.objects.order_by("codename")
-        return Response([
-            {"id": permission.id, "code": permission.codename, "name": permission.name}
-            for permission in permissions
-        ])
 
     def destroy(self, request, *args, **kwargs):
         role = self.get_object()
