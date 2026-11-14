@@ -2,21 +2,13 @@ from django.db import connection
 from django_tenants.utils import get_public_schema_name
 from rest_framework.permissions import BasePermission, DjangoModelPermissions
 from apps.platform.permissions import IsPlatformAdmin
-from .models import Role
-
-
 def is_superadmin(user):
     """Check if the user is a superadmin."""
     if not (user and user.is_authenticated):
         return False
     return bool(
         user.is_superuser
-        or user.groups.filter(name="Super User").exists()
-        or user.role_assignments.filter(
-            role__code=Role.Code.SUPER_ADMIN,
-            scope_type__isnull=True,
-            scope_id__isnull=True,
-        ).exists()
+        or user.groups.filter(name__in=["Super User", "SUPER_ADMIN"]).exists()
     )
 
 
@@ -27,11 +19,7 @@ def is_root_user(user):
     return bool(
         user.is_staff
         or hasattr(user, "platform_admin_profile")
-        or user.role_assignments.filter(
-            role__code__in=[Role.Code.OPS_MANAGER, Role.Code.STAFF],
-            scope_type__isnull=True,
-            scope_id__isnull=True,
-        ).exists()
+        or user.groups.filter(name__in=["OPS_MANAGER", "STAFF", "Ops Manager", "Staff Member"]).exists()
     )
 
 
@@ -43,11 +31,6 @@ def is_tenant_admin(user):
         return False
     return bool(
         user.groups.filter(name__in=["TENANT_ADMIN", "Tenant Admin"]).exists()
-        or user.role_assignments.filter(
-            role__code=Role.Code.TENANT_ADMIN,
-            scope_type__isnull=True,
-            scope_id__isnull=True,
-        ).exists()
     )
 
 
@@ -70,7 +53,6 @@ class CanManageRoles(BasePermission):
         if is_tenant_admin(user):
             return True
         return False
-
 
 class DynamicModelPermissions(DjangoModelPermissions):
     """Apply the Django model permission matching the HTTP method and view model.
@@ -100,7 +82,7 @@ class DynamicModelPermissions(DjangoModelPermissions):
         ):
             return False
 
-        if is_superadmin(request.user) or is_tenant_admin(request.user):
+        if is_superadmin(request.user) or is_root_user(request.user) or is_tenant_admin(request.user):
             return True
 
         try:
@@ -113,7 +95,22 @@ class DynamicModelPermissions(DjangoModelPermissions):
 
         perms = self.get_required_permissions(request.method, queryset.model)
 
-        return all(request.user.has_perm(perm) for perm in perms)
+        for perm in perms:
+            if not self._check_perm(request.user, perm):
+                return False
+        return True
+
+    def _check_perm(self, user, perm):
+        if user.has_perm(perm):
+            return True
+        if "." in perm:
+            app_label, codename = perm.split(".", 1)
+            return user.groups.filter(
+                permissions__content_type__app_label=app_label,
+                permissions__codename=codename,
+            ).exists()
+        return False
+
 
 class IsTenantSchema(BasePermission):
     """Allow an endpoint only when the request is routed to a provider schema."""

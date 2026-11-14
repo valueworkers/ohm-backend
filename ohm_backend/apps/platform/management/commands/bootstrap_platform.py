@@ -23,7 +23,7 @@ from django.db.models import Q
 from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, get_tenant_model, schema_context
 
-from apps.accounts.models import User, Role, RoleAssignment
+from apps.accounts.models import User
 from apps.accounts.services import AccountsService
 from apps.platform.models import Domain, PlatformAdmin, Plan, Tenant
 
@@ -35,14 +35,14 @@ SYSTEM_APPS = ["admin", "auth", "contenttypes", "sessions"]
 # Rule keys: apps, models, exclude_apps, prefixes.
 ROLE_SPECS = [
     {
-        "code": Role.Code.SUPER_ADMIN,
+        "code": "SUPER_ADMIN",
         "role_name": "Super Admin",
         "group": "Super User",
         "rank": 100,
         "scopes": {"public": [{}], "tenant": [{}]},
     },
     {
-        "code": Role.Code.TENANT_ADMIN,
+        "code": "TENANT_ADMIN",
         "role_name": "Tenant Admin",
         "group": "Tenant Admin",
         "rank": 80,
@@ -61,44 +61,44 @@ ROLE_SPECS = [
     # their empty permission groups in the bootstrap catalogue so runtime code
     # can assign them without creating a second set of groups.
     {
-        "code": Role.Code.CUSTOMER,
+        "code": "CUSTOMER",
         "role_name": "Customer / User",
-        "group": Role.Code.CUSTOMER,
+        "group": "CUSTOMER",
         "rank": 10,
         "scopes": {"tenant": []},
     },
     {
-        "code": Role.Code.OPS_MANAGER,
+        "code": "OPS_MANAGER",
         "role_name": "Ops Manager",
-        "group": Role.Code.OPS_MANAGER,
+        "group": "OPS_MANAGER",
         "rank": 80,
         "scopes": {"public": [], "tenant": []},
     },
     {
-        "code": Role.Code.VENUE_ADMIN,
+        "code": "VENUE_ADMIN",
         "role_name": "Venue Admin",
-        "group": Role.Code.VENUE_ADMIN,
+        "group": "VENUE_ADMIN",
         "rank": 70,
         "scopes": {"tenant": []},
     },
     {
-        "code": Role.Code.SERVICE_ADMIN,
+        "code": "SERVICE_ADMIN",
         "role_name": "Service Admin",
-        "group": Role.Code.SERVICE_ADMIN,
+        "group": "SERVICE_ADMIN",
         "rank": 70,
         "scopes": {"tenant": []},
     },
     {
-        "code": Role.Code.RESOURCE_ADMIN,
+        "code": "RESOURCE_ADMIN",
         "role_name": "Resource Admin",
-        "group": Role.Code.RESOURCE_ADMIN,
+        "group": "RESOURCE_ADMIN",
         "rank": 70,
         "scopes": {"tenant": []},
     },
     {
-        "code": Role.Code.STAFF,
+        "code": "STAFF",
         "role_name": "Staff Member",
-        "group": Role.Code.STAFF,
+        "group": "STAFF",
         "rank": 50,
         "scopes": {"public": [], "tenant": []},
     },
@@ -170,17 +170,12 @@ class Command(BaseCommand):
         return list(dict.fromkeys(hosts))  # de-dupe, keep order
 
     def seed_roles(self, scope):
-        """Create/sync Groups + Roles for the current schema ('public' or 'tenant' scope)."""
+        """Create/sync Groups for the current schema ('public' or 'tenant' scope)."""
         for spec in ROLE_SPECS:
             rules = spec["scopes"].get(scope)
             if rules is None:
                 continue
             perms = Permission.objects.filter(pk__in=permission_ids(rules))
-
-            role, _ = Role.objects.update_or_create(
-                code=spec["code"],
-                defaults={"name": spec["role_name"], "rank": spec["rank"]},
-            )
 
             group, _ = Group.objects.get_or_create(name=spec["group"])
             group.permissions.set(perms)
@@ -283,23 +278,18 @@ class Command(BaseCommand):
                 profile.title = opts["title"]
                 profile.save(update_fields=["title"])
 
-            # 5. Assign Super User group + SUPER_ADMIN role (platform-wide, null scope)
+            # 5. Assign Super User group (platform-wide)
             user.groups.add(Group.objects.get(name="Super User"))
-            super_role = Role.objects.get(code=Role.Code.SUPER_ADMIN)
-            RoleAssignment.objects.get_or_create(
-                user=user, role=super_role, scope_type=None, scope_id=None,
-                defaults={"assigned_by": user},
-            )
             AccountsService.assign_all_permissions_to_superuser(user)
 
-        # Optional: groups & roles inside tenant schemas
+        # Optional: groups inside tenant schemas
         for schema in dict.fromkeys(extra_schemas):
-            self.stdout.write(f"Seeding groups & roles ({schema})...")
+            self.stdout.write(f"Seeding groups ({schema})...")
             with schema_context(schema):
                 self.seed_roles("tenant")
 
         self.stdout.write(self.style.SUCCESS(
             f"Platform ready on: {', '.join(hosts)}\n"
             f"Admin: {user.email} ({'created' if created_user else 'existing'}), "
-            f"title: {profile.title}, group: Super User, role: {super_role.name}"
+            f"title: {profile.title}, group: Super User"
         ))

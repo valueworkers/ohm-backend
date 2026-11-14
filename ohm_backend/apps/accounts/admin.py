@@ -2,7 +2,7 @@ from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
 from .models import (
-    EmployeeProfile, Role, RoleAssignment, ShiftSchedule,
+    EmployeeProfile, ShiftSchedule,
     StaffForHire, User, UserDocument
 )
 
@@ -26,5 +26,5 @@ class UserAdmin(DjangoUserAdmin):
 
 
 admin.site.register((
-    Role, RoleAssignment, EmployeeProfile, ShiftSchedule, UserDocument, StaffForHire,
+    EmployeeProfile, ShiftSchedule, UserDocument, StaffForHire,
 ))

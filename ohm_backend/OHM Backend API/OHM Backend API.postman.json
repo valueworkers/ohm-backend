@@ -332,7 +332,7 @@
           "item": [
             {
               "name": "Public: review sent quote",
-              "description": "Uses the buyer\u2019s quote accept token. No login required.",
+              "description": "Uses the buyer’s quote accept token. No login required.",
               "event": [],
               "auth": {},
               "request": {
@@ -4671,7 +4671,7 @@
                     },
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package \u00b7 monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package · monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -9128,247 +9128,9 @@
           ]
         },
         {
-          "name": "05 - Roles, groups and permissions (Tenant Admin)",
+          "name": "05 - Groups and permissions (Tenant Admin)",
           "description": "Tenant Admin only. Requires X-Tenant: {{tenantSlug}}.",
           "item": [
-            {
-              "name": "List roles",
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{tenantAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "X-Tenant",
-                    "value": "{{tenantSlug}}",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/roles/?page={{page}}&page_size={{pageSize}}",
-                  "path": [
-                    "api",
-                    "roles"
-                  ],
-                  "query": [
-                    {
-                      "key": "page",
-                      "value": "{{page}}",
-                      "description": "Page number."
-                    },
-                    {
-                      "key": "page_size",
-                      "value": "{{pageSize}}",
-                      "description": "Results per page (maximum 100)."
-                    }
-                  ]
-                },
-                "description": "Paginated list. Use page and page_size; page_size is capped at 100."
-              },
-              "response": []
-            },
-            {
-              "name": "Create role",
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{tenantAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "X-Tenant",
-                    "value": "{{tenantSlug}}",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/roles/",
-                  "path": [
-                    "api",
-                    "roles"
-                  ]
-                },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"code\": \"AUDITOR_DEMO\",\n  \"name\": \"Auditor\",\n  \"rank\": 30\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": [],
-              "description": "Creates a custom role and saves its ID as roleId. Choose a unique code for each workspace.",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "if(pm.response.code===201)pm.environment.set('roleId',pm.response.json().id);"
-                    ],
-                    "packages": {}
-                  }
-                }
-              ]
-            },
-            {
-              "name": "Get role",
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{tenantAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "GET",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "X-Tenant",
-                    "value": "{{tenantSlug}}",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/roles/{{roleId}}/",
-                  "path": [
-                    "api",
-                    "roles",
-                    "{{roleId}}"
-                  ]
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Update role",
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{tenantAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "PATCH",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "X-Tenant",
-                    "value": "{{tenantSlug}}",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/roles/{{roleId}}/",
-                  "path": [
-                    "api",
-                    "roles",
-                    "{{roleId}}"
-                  ]
-                },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"name\": \"Senior Auditor\",\n  \"rank\": 35\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
-              },
-              "response": []
-            },
-            {
-              "name": "Delete role",
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{tenantAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "DELETE",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "X-Tenant",
-                    "value": "{{tenantSlug}}",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/roles/{{roleId}}/",
-                  "path": [
-                    "api",
-                    "roles",
-                    "{{roleId}}"
-                  ]
-                }
-              },
-              "response": [],
-              "description": "Delete a custom role after removing all role assignments."
-            },
             {
               "name": "List permission groups",
               "request": {
@@ -9610,6 +9372,156 @@
               "response": []
             },
             {
+              "name": "List group members",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/users/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "users",
+                    ""
+                  ]
+                },
+                "description": "List users who are members of this permission group."
+              },
+              "response": []
+            },
+            {
+              "name": "Add group members",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/users/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "users",
+                    ""
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"user_ids\": [\n    {{userId}}\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Add one or more users to this permission group."
+              },
+              "response": []
+            },
+            {
+              "name": "Remove group member",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{groupId}}/users/?user_id={{userId}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{groupId}}",
+                    "users",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "user_id",
+                      "value": "{{userId}}",
+                      "description": "ID of user to remove from this group"
+                    }
+                  ]
+                },
+                "description": "Remove a user from this permission group."
+              },
+              "response": []
+            },
+            {
               "name": "List Django permissions",
               "request": {
                 "auth": {
@@ -9664,7 +9576,7 @@
               "response": []
             },
             {
-              "name": "List role assignments",
+              "name": "List Django permissions grouped",
               "request": {
                 "auth": {
                   "type": "bearer",
@@ -9690,135 +9602,20 @@
                   }
                 ],
                 "url": {
-                  "raw": "{{baseUrl}}/api/role-assignments/?user_id={{userId}}&role_id={{roleId}}&page={{page}}&page_size={{pageSize}}",
-                  "path": [
-                    "api",
-                    "role-assignments"
+                  "raw": "{{baseUrl}}/api/permissions/grouped/",
+                  "host": [
+                    "{{baseUrl}}"
                   ],
-                  "query": [
-                    {
-                      "key": "user_id",
-                      "value": "{{userId}}"
-                    },
-                    {
-                      "key": "role_id",
-                      "value": "{{roleId}}"
-                    },
-                    {
-                      "key": "page",
-                      "value": "{{page}}"
-                    },
-                    {
-                      "key": "page_size",
-                      "value": "{{pageSize}}"
-                    }
-                  ]
-                },
-                "description": "Paginated list. Use page and page_size; page_size is capped at 100."
-              },
-              "response": [],
-              "description": "Filter by user_id and role_id. Paginated."
-            },
-            {
-              "name": "Assign role to user",
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{tenantAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "POST",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "Content-Type",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "X-Tenant",
-                    "value": "{{tenantSlug}}",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/role-assignments/",
                   "path": [
                     "api",
-                    "role-assignments"
+                    "permissions",
+                    "grouped",
+                    ""
                   ]
                 },
-                "body": {
-                  "mode": "raw",
-                  "raw": "{\n  \"user_id\": \"{{userId}}\",\n  \"role_id\": \"{{roleId}}\"\n}",
-                  "options": {
-                    "raw": {
-                      "language": "json"
-                    }
-                  }
-                }
+                "description": "List all Django permissions grouped by application and model (mirroring Django Admin permissions tree)."
               },
-              "response": [],
-              "description": "Assign a role to a user globally, or optionally specify content_type and object_id for object-level permissions.",
-              "event": [
-                {
-                  "listen": "test",
-                  "script": {
-                    "type": "text/javascript",
-                    "exec": [
-                      "if(pm.response.code===201)pm.environment.set('assignmentId',pm.response.json().id);"
-                    ],
-                    "packages": {}
-                  }
-                }
-              ]
-            },
-            {
-              "name": "Revoke role assignment",
-              "request": {
-                "auth": {
-                  "type": "bearer",
-                  "bearer": [
-                    {
-                      "key": "token",
-                      "value": "{{tenantAccessToken}}",
-                      "type": "string"
-                    }
-                  ]
-                },
-                "method": "DELETE",
-                "header": [
-                  {
-                    "key": "Accept",
-                    "value": "application/json",
-                    "type": "string"
-                  },
-                  {
-                    "key": "X-Tenant",
-                    "value": "{{tenantSlug}}",
-                    "type": "text"
-                  }
-                ],
-                "url": {
-                  "raw": "{{baseUrl}}/api/role-assignments/{{assignmentId}}/",
-                  "path": [
-                    "api",
-                    "role-assignments",
-                    "{{assignmentId}}"
-                  ]
-                }
-              },
-              "response": [],
-              "description": "Removes the selected role grant. The last active Tenant Admin grant cannot be removed."
+              "response": []
             }
           ]
         },

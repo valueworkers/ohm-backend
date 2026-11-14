@@ -22,10 +22,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.contrib.auth.models import Group, Permission
 from apps.accounts.models import (
-    EmployeeProfile, Role, RoleAssignment, ShiftSchedule, StaffForHire,
+    EmployeeProfile, ShiftSchedule, StaffForHire,
     PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
 )
-from apps.accounts.permissions import IsTenantAdmin, IsTenantSchema
+from apps.accounts.permissions import CanManageRoles, IsTenantAdmin, IsTenantSchema
 from apps.accounts.serializers import (
     CustomerRegisterSerializer,
     BulkEmployeeUploadSerializer,
@@ -37,8 +37,6 @@ from apps.accounts.serializers import (
     UserSerializer,
     GroupSerializer,
     PermissionSerializer,
-    RoleSerializer,
-    RoleAssignmentSerializer,
     CustomerListSerializer,
     EmployeeTerminationSerializer,
     MedicareEmployeeSerializer,
@@ -68,10 +66,10 @@ class TenantRegistrationCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         with transaction.atomic():
-            user = User.objects.create_user(
-                **data,
-            )
-            RoleAssignment.objects.create(user=user, role=Role.objects.get(code=Role.Code.CUSTOMER))
+            user = User.objects.create_user(**data)
+            customer_group = Group.objects.filter(name__in=["CUSTOMER", "Customer"]).first()
+            if customer_group:
+                user.groups.add(customer_group)
         return Response({"email": user.email}, status=status.HTTP_201_CREATED)
 
 class UserViewSet(
@@ -87,14 +85,16 @@ class UserViewSet(
     http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_queryset(self):
-        queryset = User.objects.all().order_by("id").prefetch_related("role_assignments__role")
+        queryset = User.objects.all().order_by("id").prefetch_related(
+            "groups", "user_permissions"
+        )
 
-        role = self.request.query_params.get("role")
-        if role:
-            queryset = queryset.filter(
-                role_assignments__role__code=role,
-                role_assignments__scope_type__isnull=True,
-            )
+        group = self.request.query_params.get("group") or self.request.query_params.get("role")
+        if group:
+            if str(group).isdigit():
+                queryset = queryset.filter(groups__id=group)
+            else:
+                queryset = queryset.filter(groups__name__iexact=group)
 
         search = self.request.query_params.get("q")
         if search:
@@ -106,20 +106,80 @@ class UserViewSet(
         return queryset.distinct()
 
 class GroupViewSet(viewsets.ModelViewSet):
-    """CRUD for Django permission groups; managed by Superadmin, Root user, and Tenant Admin."""
+    """CRUD for Django permission groups (used as roles); managed by Superadmin, Root user, and Tenant Admin."""
 
     serializer_class = GroupSerializer
-    queryset = Group.objects.prefetch_related("permissions__content_type").order_by("name")
+    permission_classes = [CanManageRoles]
+    queryset = Group.objects.prefetch_related("permissions__content_type", "user_set").order_by("name")
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name"]
     ordering_fields = ["name", "id"]
     http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
+
+    def destroy(self, request, *args, **kwargs):
+        group = self.get_object()
+        if group.name in {"Super User", "Tenant Admin"}:
+            raise ValidationError({"name": "Built-in permission groups cannot be deleted."})
+        return super().destroy(request, *args, **kwargs)
+
+    @action(detail=True, methods=["get", "post", "delete"], url_path="users")
+    def users(self, request, pk=None):
+        """List, add, or remove users in this permission group / role."""
+        group = self.get_object()
+        if request.method == "GET":
+            users = group.user_set.all().order_by("id")
+            return Response([
+                {
+                    "id": u.id,
+                    "email": u.email,
+                    "first_name": u.first_name,
+                    "last_name": u.last_name,
+                    "is_active": u.is_active,
+                }
+                for u in users
+            ])
+
+        user_id = request.data.get("user_id")
+        user_ids = request.data.get("user_ids")
+        if not user_id and not user_ids and request.method == "DELETE":
+            user_id = request.query_params.get("user_id")
+
+        target_ids = list(user_ids) if user_ids else ([user_id] if user_id else [])
+        if not target_ids:
+            raise ValidationError({"user_id": "Provide user_id or user_ids."})
+
+        target_users = list(User.objects.filter(pk__in=target_ids))
+        if not target_users:
+            raise ValidationError({"user_id": "No matching active users found."})
+
+        if request.method == "POST":
+            for u in target_users:
+                u.groups.add(group)
+            return Response({
+                "message": f"Added {len(target_users)} user(s) to group '{group.name}'.",
+                "group_id": group.id,
+                "users": [u.id for u in target_users],
+            }, status=status.HTTP_200_OK)
+
+        if request.method == "DELETE":
+            if group.name in {"Tenant Admin", "TENANT_ADMIN"}:
+                for u in target_users:
+                    if u.is_active:
+                        other_admins = User.objects.filter(
+                            is_active=True, groups__name__in=["Tenant Admin", "TENANT_ADMIN"]
+                        ).exclude(pk=u.pk).exists()
+                        if not other_admins:
+                            raise ValidationError({"detail": "Cannot remove the last active Tenant Admin from the group."})
+            for u in target_users:
+                u.groups.remove(group)
+            return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
     """Read-only view for available Django permissions."""
 
     serializer_class = PermissionSerializer
+    permission_classes = [CanManageRoles]
     queryset = Permission.objects.select_related("content_type").order_by("content_type__app_label", "codename")
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ["content_type__app_label", "content_type__model"]
@@ -127,68 +187,25 @@ class PermissionViewSet(viewsets.ReadOnlyModelViewSet):
     ordering_fields = ["codename", "name", "id"]
     http_method_names = ["get", "head", "options"]
 
+    @action(detail=False, methods=["get"], url_path="grouped")
+    def grouped(self, request):
+        """Return permissions grouped by app_label and model, mirroring Django Admin structure."""
+        permissions = self.filter_queryset(self.get_queryset())
+        grouped_data = {}
+        for perm in permissions:
+            app_label = perm.content_type.app_label
+            model_name = perm.content_type.model
+            if app_label not in grouped_data:
+                grouped_data[app_label] = {}
+            if model_name not in grouped_data[app_label]:
+                grouped_data[app_label][model_name] = []
+            grouped_data[app_label][model_name].append({
+                "id": perm.id,
+                "name": perm.name,
+                "codename": perm.codename,
+            })
+        return Response(grouped_data)
 
-class RoleViewSet(viewsets.ModelViewSet):
-    """CRUD for workspace and system roles; managed by Superadmin, Root user, and Tenant Admin."""
-
-    serializer_class = RoleSerializer
-    queryset = Role.objects.order_by("rank", "name")
-    http_method_names = ["get", "post", "patch", "put", "delete", "head", "options"]
-
-    def destroy(self, request, *args, **kwargs):
-        role = self.get_object()
-        if role.code in set(Role.Code.values):
-            raise ValidationError({"code": "Built-in roles cannot be deleted."})
-        try:
-            return super().destroy(request, *args, **kwargs)
-        except ProtectedError:
-            return Response(
-                {"detail": "This role is assigned to users. Remove its assignments before deleting it."},
-                status=status.HTTP_409_CONFLICT,
-            )
-
-class RoleAssignmentViewSet(
-    mixins.ListModelMixin,
-    mixins.CreateModelMixin,
-    mixins.DestroyModelMixin,
-    viewsets.GenericViewSet,
-):
-    """Role grants, optionally scoped to an object in this workspace; managed by Superadmin, Root user, and Tenant Admin."""
-
-    serializer_class = RoleAssignmentSerializer
-    queryset = RoleAssignment.objects.select_related("user", "role", "scope_type").order_by("id")
-    http_method_names = ["get", "post", "delete", "head", "options"]
-
-    def get_queryset(self):
-        queryset = super().get_queryset()
-        user_id = self.request.query_params.get("user_id")
-        role_id = self.request.query_params.get("role_id")
-        if user_id:
-            queryset = queryset.filter(user_id=user_id)
-        if role_id:
-            queryset = queryset.filter(role_id=role_id)
-        return queryset
-
-    def perform_destroy(self, instance):
-        if (instance.scope_type_id is None and instance.role.code == Role.Code.TENANT_ADMIN
-                and instance.user.is_active):
-            another_admin = User.objects.filter(
-                is_active=True,
-                role_assignments__role__code=Role.Code.TENANT_ADMIN,
-                role_assignments__scope_type__isnull=True,
-            ).exclude(pk=instance.user_id).exists()
-            if not another_admin:
-                raise ValidationError({"detail": "A workspace must keep at least one active Tenant Admin."})
-        elif (instance.scope_type_id is None and instance.role.code == Role.Code.SUPER_ADMIN
-                and instance.user.is_active):
-            another_super = User.objects.filter(
-                is_active=True,
-                role_assignments__role__code=Role.Code.SUPER_ADMIN,
-                role_assignments__scope_type__isnull=True,
-            ).exclude(pk=instance.user_id).exists()
-            if not another_super:
-                raise ValidationError({"detail": "The platform must keep at least one active Super Admin."})
-        instance.delete()
 
 class ShiftScheduleViewSet(viewsets.ModelViewSet):
     queryset = ShiftSchedule.objects.all()
@@ -273,9 +290,9 @@ class CustomerViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         user = serializer.save()
-        role = Role.objects.filter(code=Role.Code.CUSTOMER).first()
-        if role:
-            RoleAssignment.objects.get_or_create(user=user, role=role)
+        customer_group = Group.objects.filter(name__in=["CUSTOMER", "Customer"]).first()
+        if customer_group:
+            user.groups.add(customer_group)
 
     def destroy(self, request, *args, **kwargs):
         user = self.get_object()
@@ -356,12 +373,14 @@ class BulkEmployeeUploadAPIView(APIView):
                         created_by=request.user,
                     )
                     EmployeeProfile.objects.create(user=user, **profile_fields)
-                    code = str(record.get("role") or Role.Code.STAFF).upper()
-                    allowed_roles = {Role.Code.STAFF, Role.Code.OPS_MANAGER, Role.Code.VENUE_ADMIN, Role.Code.SERVICE_ADMIN, Role.Code.RESOURCE_ADMIN}
+                    code = str(record.get("role") or "STAFF").upper()
+                    allowed_roles = {"STAFF", "OPS_MANAGER", "VENUE_ADMIN", "SERVICE_ADMIN", "RESOURCE_ADMIN"}
                     if code not in allowed_roles:
                         raise ValueError("role must be a staff or manager role")
-                    role = Role.objects.get(code=code)
-                    RoleAssignment.objects.get_or_create(user=user, role=role)
+                    from apps.accounts.services import AccountsService
+                    group = Group.objects.filter(name__in=[code, AccountsService._group_name(code)]).first()
+                    if group:
+                        user.groups.add(group)
                 results["created"].append({"row": row_number, "email": email, "id": user.pk})
             except Exception as exc:
                 results["failed"].append({"row": row_number, "email": email, "error": str(exc)})

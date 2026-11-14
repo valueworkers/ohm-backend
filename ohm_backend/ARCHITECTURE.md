@@ -9,7 +9,7 @@ OHM is a multi-tenant aggregator platform for healthcare service providers (hosp
 1. **Strict Data Isolation (Healthcare Compliance)**: Operational healthcare records, patient identities, appointments, and financial records never mix across providers. Every provider workspace is allocated its own database schema.
 2. **Unified API Gateway**: React frontends communicate with a single API hostname (`api.ohm.com`). Schema switching is determined dynamically via the `X-Tenant` header or direct verified domain lookup.
 3. **Single Identity, Contextual Access**: The `accounts.User` model exists across schemas. A user's JWT token contains an explicit `schema` claim, binding authorization tokens strictly to the schema in which they were issued.
-4. **Dual-Layer RBAC Engine**: Combines Django's standard `auth.Permission` and `auth.Group` with product-level `accounts.Role`, `accounts.Permission`, and object-scoped `accounts.RoleAssignment`.
+4. **Django-Native RBAC Engine**: Utilizes Django's standard `auth.Permission` and `auth.Group` models as roles, mirroring the Django Admin permission structure and eliminating separate role/role assignment entities.
 5. **Non-blocking Asynchronous Operations**: Heavy workloads (schema migrations, tenant provisioning, custom domain DNS verification) are offloaded to **Celery** workers backed by **Redis**.
 
 ---
@@ -44,7 +44,7 @@ OHM is a multi-tenant aggregator platform for healthcare service providers (hosp
 | **Platform Staff & Profiles**| OHM Super Admins | `public` | `accounts.User` (`is_staff`/`is_superuser`), `platform.PlatformAdmin` |
 | **Provider Onboarding** | Platform Admin & Applicant | `public` | `platform.TenantProvisioning` |
 | **Workspace Identity & Staff** | Tenant Admin | Tenant Schema | `accounts.User`, `accounts.EmployeeProfile` |
-| **Workspace RBAC & Permissions** | Tenant Admin | Tenant Schema | `accounts.Role`, `accounts.Permission`, `accounts.RoleAssignment` |
+| **Workspace RBAC & Permissions** | Tenant Admin | Tenant Schema | `auth.Group`, `auth.Permission` |
 | **Operational Records** | Healthcare Provider | Tenant Schema | Future modules: `booking`, `analysis`, `payroll`, `venue_manager`, `wallet`, `faq` |
 
 > [!IMPORTANT]
@@ -130,61 +130,46 @@ The authorization layer bridges Django standard permissions and tenant product p
 
 ```mermaid
 flowchart TD
-    subgraph Django Auth Layer
-        AP[Django auth.Permission] --> AG[Django auth.Group]
+    subgraph Django Auth & RBAC Layer
+        AP[Django auth.Permission] --> AG[Django auth.Group / Role]
         AG --> U[accounts.User]
+        AP -.->|Direct Model Perms| U
     end
-
-    subgraph Product RBAC Layer
-        ACP[accounts.Permission] --> R[accounts.Role]
-        R --> RA[accounts.RoleAssignment]
-        RA --> U
-        CT[ContentType + Scope ID] -.->|Optional Object Scope| RA
-    end
-
-    AP -.->|Synchronized to| ACP
 ```
 
 ### 1. Group Rules & Default Permissions Matrix
-When a schema is created or synced, `seed_roles_and_groups_for_schema` automatically builds `auth.Group` and `accounts.Role` instances based on `GROUP_RULES`:
+When a schema is created or synced, `seed_roles` automatically builds `auth.Group` instances with assigned `auth.Permission` sets based on `ROLE_SPECS`:
 
 ```python
-GROUP_RULES = {
+ROLE_SPECS = [
     # Public Platform Super Admin: unrestricted access
-    Role.Code.SUPER_ADMIN: "__all__",
+    {"code": "SUPER_ADMIN", "group": "Super User", "scopes": {"public": [{}], "tenant": [{}]}},
 
     # Tenant Admin: unrestricted access across all tenant product modules
-    Role.Code.TENANT_ADMIN: {
-        "apps": ["accounts", "venue_manager", "booking", "payroll", "notification", "analysis", "wallet", "faq"],
-        "actions": "__all__",
-    },
+    {"code": "TENANT_ADMIN", "group": "Tenant Admin", "scopes": {
+        "public": [{"apps": ["platform"], "prefixes": ["view_"]}, {"apps": ["accounts"], "models": ["user"], "prefixes": ["view_", "change_"]}],
+        "tenant": [{"exclude_apps": SYSTEM_APPS + ["platform"]}],
+    }},
 
-    # Ops Manager: view, change, add across all operational modules
-    Role.Code.OPS_MANAGER: {
-        "apps": ["accounts", "venue_manager", "booking", "payroll", "notification", "analysis", "wallet", "faq"],
-        "actions": ["view", "change", "add"],
-    },
-
-    # Specific Admins & Staff: scoped module actions
-    Role.Code.VENUE_ADMIN:    {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view", "change", "add"]},
-    Role.Code.SERVICE_ADMIN:  {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view", "change", "add"]},
-    Role.Code.RESOURCE_ADMIN: {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view", "change", "add"]},
-    Role.Code.STAFF:          {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view"]},
-
-    # Customer: view & add on end-user features
-    Role.Code.CUSTOMER:       {"apps": ["booking", "wallet", "accounts"], "actions": ["view", "add"]},
-}
+    # Specific built-in role groups:
+    {"code": "CUSTOMER", "group": "CUSTOMER", "scopes": {"tenant": []}},
+    {"code": "OPS_MANAGER", "group": "OPS_MANAGER", "scopes": {"public": [], "tenant": []}},
+    {"code": "VENUE_ADMIN", "group": "VENUE_ADMIN", "scopes": {"tenant": []}},
+    {"code": "SERVICE_ADMIN", "group": "SERVICE_ADMIN", "scopes": {"tenant": []}},
+    {"code": "RESOURCE_ADMIN", "group": "RESOURCE_ADMIN", "scopes": {"tenant": []}},
+    {"code": "STAFF", "group": "STAFF", "scopes": {"public": [], "tenant": []}},
+]
 ```
 
-### 2. Tenant-Wide vs. Object-Scoped Permissions
-- **Tenant-Wide**: `RoleAssignment.scope_type = None` and `scope_id = None`. The user holds the role across the entire workspace.
-- **Object-Scoped**: `RoleAssignment` connects to a specific Django `ContentType` and model instance ID (e.g. `booking.Venue` ID 4). This allows fine-grained permissions such as assigning a user as `VENUE_ADMIN` for a specific physical branch.
+### 2. Permissions Structure & Group Management
+- **Direct Django Groups as Roles**: Permission groups (`auth.Group`) act as roles. Tenants create and manage them directly via `/api/groups/` with permissions assigned in a single step.
+- **Group Members**: Users are added or removed from groups via `/api/groups/{id}/users/`.
+- **Hierarchical Permission Tree**: `/api/permissions/grouped/` provides all Django permissions grouped by application and model, matching the Django Admin interface.
+- **User Permission Assignment**: Users support `groups` and direct `user_permissions` (with serialized `group_details` and `user_permission_details`), mirroring Django Admin.
 
 ### 3. Protection Invariants
-- Built-in roles (`TENANT_ADMIN`, `CUSTOMER`) cannot have their codes or ranks modified, and cannot be deleted.
-- Custom roles cannot be assigned ranks $\ge 100$ (reserved for administrators).
-- A workspace cannot deactivate or revoke its last active `TENANT_ADMIN`.
-- Deleting a role that has active assignments returns HTTP 409 Conflict.
+- Built-in permission groups (`Super User`, `Tenant Admin`) cannot be deleted.
+- A workspace cannot deactivate or revoke its last active `Tenant Admin`.
 
 ---
 

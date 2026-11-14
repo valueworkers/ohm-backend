@@ -562,111 +562,35 @@ If unavailable or reserved:
 
 ---
 
-## 10. Roles & Role Assignments
+## 10. Permission Groups (Roles) & Django Permissions
 
-*Requires `CanManageRoles` (`IsAuthenticated` with Superadmin, Root user across all schemas, or Tenant Admin in tenant workspaces).*
+*The RBAC system utilizes Django's native Permissions (`auth.Permission`) and Permission Groups (`auth.Group`) as roles, mirroring the Django Admin dashboard's permission structure. This eliminates the need to manage roles and role assignments as separate entities. Managed by Superadmin and Root user in the Public Schema, and Tenant Admin in tenant workspaces.*
 
-### 10.1 List Roles
-- **Endpoint**: `GET /api/roles/`
-- **Response `200 OK`**:
-```json
-[
-  {
-    "id": 1,
-    "code": "TENANT_ADMIN",
-    "name": "Tenant Admin",
-    "rank": 80
-  }
-]
-```
-
-### 10.2 Create Custom Role
-- **Endpoint**: `POST /api/roles/`
-- **Request Body**:
-```json
-{
-  "code": "HEAD_NURSE",
-  "name": "Head Nurse",
-  "rank": 60
-}
-```
-- **Response `201 Created`**: Returns created role.
-
-### 10.3 Delete Custom Role
-- **Endpoint**: `DELETE /api/roles/{id}/`
-- **Response `204 No Content`**: Deletes custom role. Built-in roles (`TENANT_ADMIN`, `CUSTOMER`) or roles assigned to active users cannot be deleted (returns HTTP 409).
-
-### 10.4 List Role Assignments
-- **Endpoint**: `GET /api/role-assignments/`
-- **Query Parameters**: `?user_id=5`, `?role_id=2`
-- **Response `200 OK`**:
-```json
-[
-  {
-    "id": 7,
-    "user_id": 5,
-    "user_email": "nurse@cityhospital.com",
-    "role_id": 3,
-    "role_code": "HEAD_NURSE",
-    "role_name": "Head Nurse",
-    "scope": null,
-    "created_at": "2026-10-21T14:30:00Z"
-  }
-]
-```
-
-### 10.5 Assign Role Tenant-Wide or Object-Scoped
-- **Endpoint**: `POST /api/role-assignments/`
-- **Request Body (Tenant-Wide)**:
-```json
-{
-  "user_id": 5,
-  "role_id": 3
-}
-```
-- **Request Body (Object-Scoped)**:
-```json
-{
-  "user_id": 5,
-  "role_id": 3,
-  "object_type": "venue_manager.venue",
-  "object_id": 2
-}
-```
-- **Response `201 Created`**: Role assignment record.
-
-### 10.6 Revoke Role Assignment
-- **Endpoint**: `DELETE /api/role-assignments/{id}/`
-- **Response `204 No Content`**: Revokes the assignment. Safeguard prevents deleting the last active workspace Tenant Admin assignment.
-
----
-
-## 11. Django Permission Groups & Permissions
-
-*Standard Django groups (`auth.Group`) and model permissions (`auth.Permission`). Managed by Superadmin, Root user, and Tenant Admin.*
-
-### 11.1 List Permission Groups
+### 10.1 List Permission Groups (Roles)
 - **Endpoint**: `GET /api/groups/`
+- **Query Parameters**: `?search=nurse`, `?ordering=name`
 - **Response `200 OK`**:
 ```json
 [
   {
     "id": 1,
-    "name": "Super User",
+    "name": "Head Nurse",
+    "permissions": [12, 13, 14],
     "permission_details": [
       {
-        "id": 1,
-        "name": "Can add user",
-        "codename": "add_user",
-        "app_label": "accounts",
-        "model": "user"
+        "id": 12,
+        "name": "Can view venue",
+        "codename": "view_venue",
+        "app_label": "catalog",
+        "model": "venue"
       }
-    ]
+    ],
+    "user_count": 5
   }
 ]
 ```
 
-### 11.2 Create Permission Group
+### 10.2 Create Permission Group (Role)
 - **Endpoint**: `POST /api/groups/`
 - **Request Body**:
 ```json
@@ -677,8 +601,12 @@ If unavailable or reserved:
 ```
 - **Response `201 Created`**: Returns created group with assigned permissions.
 
-### 11.3 Update Permission Group
-- **Endpoint**: `PATCH /api/groups/{id}/`
+### 10.3 Retrieve Permission Group
+- **Endpoint**: `GET /api/groups/{id}/`
+- **Response `200 OK`**: Returns group details, permissions array, permission details, and user count.
+
+### 10.4 Update Permission Group
+- **Endpoint**: `PUT /api/groups/{id}/` / `PATCH /api/groups/{id}/`
 - **Request Body**:
 ```json
 {
@@ -688,14 +616,52 @@ If unavailable or reserved:
 ```
 - **Response `200 OK`**: Returns updated group.
 
-### 11.4 Delete Permission Group
+### 10.5 Delete Permission Group
 - **Endpoint**: `DELETE /api/groups/{id}/`
-- **Response `204 No Content`**: Deletes group.
+- **Response `204 No Content`**: Deletes group. Built-in groups (`Super User`, `Tenant Admin`) cannot be deleted.
 
-### 11.5 List Django Permissions
+### 10.6 Manage Group Members (Assign / Remove Role)
+- **List members**: `GET /api/groups/{id}/users/`
+- **Add members**: `POST /api/groups/{id}/users/`
+```json
+{
+  "user_ids": [5, 6]
+}
+```
+- **Remove member**: `DELETE /api/groups/{id}/users/` with body `{"user_id": 5}` or query parameter `?user_id=5`.
+
+### 10.7 List Django Permissions
 - **Endpoint**: `GET /api/permissions/`
 - **Query Parameters**: `?search=booking`, `?content_type__app_label=catalog`
 - **Response `200 OK`**: Array of installed Django permissions with `id`, `name`, `codename`, `app_label`, and `model`.
+
+### 10.8 List Django Permissions Grouped (Django Admin Dashboard Structure)
+- **Endpoint**: `GET /api/permissions/grouped/`
+- **Response `200 OK`**:
+```json
+{
+  "accounts": {
+    "user": [
+      {"id": 1, "name": "Can add user", "codename": "add_user"},
+      {"id": 2, "name": "Can change user", "codename": "change_user"},
+      {"id": 3, "name": "Can delete user", "codename": "delete_user"},
+      {"id": 4, "name": "Can view user", "codename": "view_user"}
+    ]
+  },
+  "catalog": {
+    "venue": [
+      {"id": 12, "name": "Can view venue", "codename": "view_venue"}
+    ]
+  }
+}
+```
+
+### 10.9 User Permissions & Group Assignment (Django Admin User Model)
+Tenants assign permission groups and direct model permissions directly on the User (`/api/users/`), mirroring Django Admin's user management interface:
+- **`groups`**: Array of group IDs assigned to the user (acts as roles).
+- **`user_permissions`**: Array of direct Django permission IDs granted specifically to this user.
+- **`group_details`**: Summary array of assigned groups with `id` and `name`.
+- **`user_permission_details`**: Summary array of direct permissions with `id`, `name`, `codename`, `app_label`, and `model`.
 
 ## 12. User Settings
 

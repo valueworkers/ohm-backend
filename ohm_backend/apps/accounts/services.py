@@ -4,15 +4,17 @@ from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from .access import TenantAccessManager
-from .models import Role, RoleAssignment, User, UserSession
+from .models import User, UserSession
 
 logger = logging.getLogger(__name__)
 
 MANAGED_ROLES = ("TENANT_ADMIN", "CUSTOMER")
 
 ROLE_GROUP_NAMES = {
-    Role.Code.SUPER_ADMIN: "Super User",
-    Role.Code.TENANT_ADMIN: "Tenant Admin",
+    "SUPER_ADMIN": "Super User",
+    "TENANT_ADMIN": "Tenant Admin",
+    "OPS_MANAGER": "Ops Manager",
+    "STAFF": "Staff Member",
 }
 
 
@@ -33,19 +35,10 @@ class AccountsService:
 
     @classmethod
     def assign_all_permissions_to_superuser(cls, user):
-        """Assign the bootstrapped Super User group and role in the public schema."""
+        """Assign the bootstrapped Super User group in the public schema."""
         public_schema = get_public_schema_name()
         with schema_context(public_schema):
-            TenantAccessManager(public_schema).assign_group(user, cls._group_name(Role.Code.SUPER_ADMIN))
-
-            super_role = Role.objects.filter(code=Role.Code.SUPER_ADMIN).first()
-            if super_role:
-                RoleAssignment.objects.get_or_create(
-                    user=user,
-                    role=super_role,
-                    scope_type=None,
-                    scope_id=None,
-                )
+            TenantAccessManager(public_schema).assign_group(user, cls._group_name("SUPER_ADMIN"))
 
             updated_fields = []
             if not user.is_superuser:
@@ -64,19 +57,7 @@ class AccountsService:
         """Provide default permissions to a non-superuser public root user (staff/platform admin)."""
         public_schema = get_public_schema_name()
         with schema_context(public_schema):
-            TenantAccessManager(public_schema).assign_group(user, cls._group_name(Role.Code.OPS_MANAGER))
-
-            staff_role = (
-                Role.objects.filter(code=Role.Code.OPS_MANAGER).first()
-                or Role.objects.filter(code=Role.Code.STAFF).first()
-            )
-            if staff_role:
-                RoleAssignment.objects.get_or_create(
-                    user=user,
-                    role=staff_role,
-                    scope_type=None,
-                    scope_id=None,
-                )
+            TenantAccessManager(public_schema).assign_group(user, cls._group_name("OPS_MANAGER"))
 
             if not user.is_staff:
                 user.is_staff = True
@@ -86,46 +67,27 @@ class AccountsService:
 
     @classmethod
     def assign_tenant_admin_permissions(cls, user, role=None, *, create_role_assignment=True):
-        """Assign the bootstrapped Tenant Admin group and its role assignment."""
-        if role is None:
-            role = Role.objects.get(code=Role.Code.TENANT_ADMIN)
-        if create_role_assignment:
-            RoleAssignment.objects.get_or_create(
-                user=user,
-                role=role,
-                scope_type=None,
-                scope_id=None,
-            )
+        """Assign the bootstrapped Tenant Admin group."""
         access = TenantAccessManager(connection.schema_name)
-        group_name = cls._group_name(Role.Code.TENANT_ADMIN)
+        group_name = cls._group_name("TENANT_ADMIN")
         access.assign_group(user, group_name)
         logger.info("Assigned Tenant Admin group to %s in current schema.", user.email)
 
     @classmethod
     def assign_public_tenant_owner_role(cls, tenant, public_user):
-        """Grant the public owner tenant-scoped role access and Django permissions."""
-        from django.contrib.contenttypes.models import ContentType
-
+        """Grant the public owner Tenant Admin group access."""
         public_schema = get_public_schema_name()
         with schema_context(public_schema):
             owner = User.objects.get(email__iexact=public_user.email)
-            role = Role.objects.get(code=Role.Code.TENANT_ADMIN)
             access = TenantAccessManager(public_schema)
-            group_name = cls._group_name(Role.Code.TENANT_ADMIN)
+            group_name = cls._group_name("TENANT_ADMIN")
             access.assign_group(owner, group_name)
-            tenant_type = ContentType.objects.get_for_model(tenant, for_concrete_model=False)
-            assignment, _ = RoleAssignment.objects.get_or_create(
-                user=owner,
-                role=role,
-                scope_type=tenant_type,
-                scope_id=tenant.pk,
-            )
             logger.info(
                 "Assigned public TENANT_ADMIN access to %s for tenant %s.",
                 owner.email,
                 tenant.schema_name,
             )
-            return assignment
+            return None
 
     @classmethod
     def assign_role_default_permissions(cls, user, role_code):
@@ -134,18 +96,14 @@ class AccountsService:
 
     @classmethod
     def set_role(cls, user, code, assigned_by=None):
-        """Give the user exactly one managed tenant-wide role and its Django group."""
-        RoleAssignment.objects.filter(user=user, scope_type__isnull=True, role__code__in=MANAGED_ROLES).delete()
-        managed_group_names = [cls._group_name(role_code) for role_code in MANAGED_ROLES]
+        """Give the user exactly one managed tenant-wide group."""
+        managed_group_names = [cls._group_name(role_code) for role_code in MANAGED_ROLES] + list(MANAGED_ROLES)
         user.groups.remove(*user.groups.filter(name__in=managed_group_names))
-        role = Role.objects.get(code=code)
-        RoleAssignment.objects.create(user=user, role=role, assigned_by=assigned_by)
         cls.assign_role_default_permissions(user, code)
 
     @classmethod
     def ensure_tenant_admin(cls, public_user):
         """Mirror an OHM user into the current tenant schema as its tenant-wide admin with default permissions."""
-        role = Role.objects.get(code=Role.Code.TENANT_ADMIN)
         user, _ = User.objects.get_or_create(
             email=public_user.email.lower(),
             defaults={
@@ -169,13 +127,7 @@ class AccountsService:
         if updated_fields:
             user.save(update_fields=updated_fields)
 
-        RoleAssignment.objects.get_or_create(
-            user=user,
-            role=role,
-            scope_type=None,
-            scope_id=None,
-        )
-        cls.assign_tenant_admin_permissions(user, role=role, create_role_assignment=False)
+        cls.assign_tenant_admin_permissions(user)
         return user
 
     @classmethod
@@ -314,16 +266,8 @@ class AccountsService:
                 assigned_owners.append(admin_user.email)
 
             for user in User.objects.all():
-                assignments = user.role_assignments.select_related("role").all()
-                if not assignments.exists():
-                    continue
-                for ra in assignments:
-                    role_code = ra.role.code
-                    if role_code == Role.Code.TENANT_ADMIN:
-                        cls.assign_tenant_admin_permissions(user)
-                    else:
-                        cls.assign_role_default_permissions(user, role_code)
-                synced_users.append(user.email)
+                if user.groups.exists():
+                    synced_users.append(user.email)
 
         return {
             "tenant": tenant.schema_name,

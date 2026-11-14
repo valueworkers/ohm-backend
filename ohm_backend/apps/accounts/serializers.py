@@ -3,6 +3,7 @@ import re
 from django.contrib.auth.password_validation import validate_password as django_validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
+from django.db.models import Q
 from rest_framework import serializers
 
 from django.contrib.contenttypes.models import ContentType
@@ -10,7 +11,7 @@ from django.conf import settings
 from django.contrib.auth.models import Group, Permission
 
 from .models import (
-    EmployeeProfile, Role, RoleAssignment, ShiftSchedule, StaffForHire,
+    EmployeeProfile, ShiftSchedule, StaffForHire,
     User, UserDocument, UserDocumentFile
 )
 from .services import AccountsService
@@ -139,21 +140,30 @@ class MedicareUserSerializer(serializers.ModelSerializer):
         return instance
 
 
+EMPLOYEE_ROLE_CHOICES = (
+    ("STAFF", "Staff"),
+    ("OPS_MANAGER", "Ops Manager"),
+    ("VENUE_ADMIN", "Venue Admin"),
+    ("SERVICE_ADMIN", "Service Admin"),
+    ("RESOURCE_ADMIN", "Resource Admin"),
+)
+
+
 class MedicareEmployeeSerializer(MedicareUserSerializer):
     employee_profile = EmployeeProfileSerializer(required=False)
-    role = serializers.ChoiceField(choices=[(code, code.replace("_", " ").title()) for code in (Role.Code.STAFF, Role.Code.OPS_MANAGER, Role.Code.VENUE_ADMIN, Role.Code.SERVICE_ADMIN, Role.Code.RESOURCE_ADMIN)], required=False, write_only=True)
+    role = serializers.ChoiceField(choices=EMPLOYEE_ROLE_CHOICES, required=False, write_only=True)
 
     class Meta(MedicareUserSerializer.Meta):
         fields = MedicareUserSerializer.Meta.fields + ("role",)
 
     def create(self, validated_data):
         profile_data = validated_data.pop("employee_profile", {})
-        role_code = validated_data.pop("role", Role.Code.STAFF)
+        role_code = validated_data.pop("role", "STAFF")
         user = super().create(validated_data)
         EmployeeProfile.objects.create(user=user, **profile_data)
-        role = Role.objects.filter(code=role_code).first()
-        if role:
-            RoleAssignment.objects.get_or_create(user=user, role=role)
+        group = Group.objects.filter(name__in=[role_code, AccountsService._group_name(role_code)]).first()
+        if group:
+            user.groups.add(group)
         return user
 
     def update(self, instance, validated_data):
@@ -167,7 +177,11 @@ class MedicareEmployeeSerializer(MedicareUserSerializer):
             profile.full_clean()
             profile.save()
         if role_code:
-            AccountsService.set_role(user, role_code, assigned_by=self.context.get("request").user)
+            assigned_by = self.context.get("request").user if (self.context.get("request") and self.context["request"].user.is_authenticated) else None
+            AccountsService.set_role(user, role_code, assigned_by=assigned_by)
+            group = Group.objects.filter(name__in=[role_code, AccountsService._group_name(role_code)]).first()
+            if group:
+                user.groups.add(group)
         return user
 
 
@@ -308,13 +322,17 @@ class OwnerCreateSerializer(serializers.ModelSerializer):
         return user
 
 class UserSerializer(serializers.ModelSerializer):
-    """Tenant Admin's view of the workspace's users (Tenant Admins and Customers)."""
+    """Tenant Admin's view of the workspace's users, mirroring Django Admin dashboard permission structure."""
 
-    role = serializers.ChoiceField(choices=Role.Code.choices, source="primary_role", required=False)
+    role = serializers.CharField(source="primary_role", required=False, allow_blank=True)
     groups = serializers.PrimaryKeyRelatedField(
-        queryset=Group.objects.all(), many=True, required=False, write_only=True
+        queryset=Group.objects.all(), many=True, required=False
     )
     group_details = serializers.SerializerMethodField()
+    user_permissions = serializers.PrimaryKeyRelatedField(
+        queryset=Permission.objects.all(), many=True, required=False
+    )
+    user_permission_details = serializers.SerializerMethodField()
     password = serializers.CharField(write_only=True, required=False, trim_whitespace=False)
     employee_profile = EmployeeProfileSerializer(read_only=True)
 
@@ -322,13 +340,26 @@ class UserSerializer(serializers.ModelSerializer):
         model = User
         fields = [
             "id", "email", "first_name", "middle_name", "last_name", "mobile_number",
-            "is_active", "role", "groups", "group_details", "password", "date_joined", "employee_profile"
+            "is_active", "role", "groups", "group_details", "user_permissions", "user_permission_details",
+            "password", "date_joined", "employee_profile"
         ]
-        read_only_fields = ["id", "date_joined", "group_details"]
+        read_only_fields = ["id", "date_joined", "group_details", "user_permission_details"]
         extra_kwargs = {"email": {"validators": []}}
 
     def get_group_details(self, user):
         return [{"id": g.id, "name": g.name} for g in user.groups.all()]
+
+    def get_user_permission_details(self, user):
+        return [
+            {
+                "id": p.id,
+                "name": p.name,
+                "codename": p.codename,
+                "app_label": p.content_type.app_label,
+                "model": p.content_type.model,
+            }
+            for p in user.user_permissions.select_related("content_type").order_by("content_type__app_label", "codename")
+        ]
 
     def validate_email(self, value):
         return _check_email(value, self.instance)
@@ -344,18 +375,35 @@ class UserSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"email": "Email cannot be changed."})
         return attrs
 
-    def _guard_last_admin(self, user, is_active, role):
+    def _guard_last_admin(self, user, is_active, role, groups=None):
         """Never leave a workspace without an active Tenant Admin, and never self-deactivate."""
-        if not (user.is_active and user.primary_role == "TENANT_ADMIN"):
+        is_admin = user.is_active and (
+            user.primary_role == "TENANT_ADMIN"
+            or user.groups.filter(name__in=["TENANT_ADMIN", "Tenant Admin"]).exists()
+        )
+        if not is_admin:
             return
-        losing = is_active is False or (role is not None and role != "TENANT_ADMIN")
+
+        losing = False
+        if is_active is False:
+            losing = True
+        elif groups is not None:
+            group_names = {g.name for g in groups}
+            if not ({"TENANT_ADMIN", "Tenant Admin"} & group_names):
+                losing = True
+        elif role is not None and role not in {"TENANT_ADMIN", "Tenant Admin"}:
+            losing = True
+
         if not losing:
             return
-        if is_active is False and user.pk == self.context["request"].user.pk:
+
+        if is_active is False and self.context.get("request") and user.pk == self.context["request"].user.pk:
             raise serializers.ValidationError("You cannot deactivate your own account.")
+
         others = (
-            User.objects.filter(
-                is_active=True, role_assignments__role__code="TENANT_ADMIN", role_assignments__scope_type__isnull=True
+            User.objects.filter(is_active=True)
+            .filter(
+                Q(groups__name__in=["TENANT_ADMIN", "Tenant Admin"])
             )
             .exclude(pk=user.pk)
             .exists()
@@ -367,27 +415,58 @@ class UserSerializer(serializers.ModelSerializer):
     def create(self, validated):
         role = validated.pop("primary_role", "CUSTOMER")
         groups = validated.pop("groups", None)
+        user_permissions = validated.pop("user_permissions", None)
         password = validated.pop("password")
         user = User.objects.create_user(password=password, **validated)
-        AccountsService.set_role(user, role, assigned_by=self.context["request"].user)
+
+        assigned_by = self.context.get("request").user if (self.context.get("request") and self.context["request"].user.is_authenticated) else None
+
         if groups is not None:
             user.groups.set(groups)
+        elif role:
+            group_name = AccountsService._group_name(role)
+            group = Group.objects.filter(name__in=[role, group_name]).first()
+            if group:
+                user.groups.add(group)
+            AccountsService.set_role(user, role, assigned_by=assigned_by)
+        else:
+            default_group = Group.objects.filter(name__in=["CUSTOMER", "Customer"]).first()
+            if default_group:
+                user.groups.add(default_group)
+
+        if user_permissions is not None:
+            user.user_permissions.set(user_permissions)
+
         return user
 
     @transaction.atomic
     def update(self, instance, validated):
         role = validated.pop("primary_role", None)
         groups = validated.pop("groups", None)
+        user_permissions = validated.pop("user_permissions", None)
         validated.pop("password", None)
         validated.pop("email", None)
-        self._guard_last_admin(instance, validated.get("is_active"), role)
+
+        self._guard_last_admin(instance, validated.get("is_active"), role, groups)
+
         for key, value in validated.items():
             setattr(instance, key, value)
         instance.save()
-        if role:
-            AccountsService.set_role(instance, role, assigned_by=self.context["request"].user)
+
+        assigned_by = self.context.get("request").user if (self.context.get("request") and self.context["request"].user.is_authenticated) else None
+
         if groups is not None:
             instance.groups.set(groups)
+        elif role:
+            group_name = AccountsService._group_name(role)
+            group = Group.objects.filter(name__in=[role, group_name]).first()
+            if group:
+                instance.groups.set([group])
+            AccountsService.set_role(instance, role, assigned_by=assigned_by)
+
+        if user_permissions is not None:
+            instance.user_permissions.set(user_permissions)
+
         return instance
 
 
@@ -403,14 +482,15 @@ class PermissionSerializer(serializers.ModelSerializer):
 
 class GroupSerializer(serializers.ModelSerializer):
     permissions = serializers.PrimaryKeyRelatedField(
-        queryset=Permission.objects.all(), many=True, required=False, write_only=True
+        queryset=Permission.objects.all(), many=True, required=False
     )
     permission_details = serializers.SerializerMethodField()
+    user_count = serializers.SerializerMethodField()
 
     class Meta:
         model = Group
-        fields = ("id", "name", "permissions", "permission_details")
-        read_only_fields = ("id", "permission_details")
+        fields = ("id", "name", "permissions", "permission_details", "user_count")
+        read_only_fields = ("id", "permission_details", "user_count")
 
     def get_permission_details(self, group):
         return [
@@ -423,6 +503,20 @@ class GroupSerializer(serializers.ModelSerializer):
             }
             for perm in group.permissions.select_related("content_type").order_by("content_type__app_label", "codename")
         ]
+
+    def get_user_count(self, group):
+        return group.user_set.count()
+
+    def validate_name(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Group name cannot be blank.")
+        qs = Group.objects.filter(name__iexact=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
+            raise serializers.ValidationError("A group with this name already exists.")
+        return value
 
     def create(self, validated_data):
         permissions = validated_data.pop("permissions", None)
@@ -437,106 +531,3 @@ class GroupSerializer(serializers.ModelSerializer):
         if permissions is not None:
             group.permissions.set(permissions)
         return group
-
-
-class RoleSerializer(serializers.ModelSerializer):
-    code = serializers.CharField(max_length=30)
-
-    class Meta:
-        model = Role
-        fields = ("id", "code", "name", "rank")
-        read_only_fields = ("id",)
-
-    def validate_code(self, value):
-        value = value.strip().upper()
-        if not re.fullmatch(r"[A-Z][A-Z0-9_]{0,29}", value):
-            raise serializers.ValidationError("Use 1–30 uppercase letters, numbers, or underscores; start with a letter.")
-        if value in set(Role.Code.values) and not (
-            self.instance and self.instance.code == value
-        ):
-            raise serializers.ValidationError("This code is reserved for a built-in role.")
-        existing = Role.objects.filter(code=value)
-        if self.instance:
-            existing = existing.exclude(pk=self.instance.pk)
-        if existing.exists():
-            raise serializers.ValidationError("A role with this code already exists.")
-        return value
-
-    def validate_rank(self, value):
-        if value < 1 or value >= 100:
-            raise serializers.ValidationError("Custom role rank must be between 1 and 99.")
-        return value
-
-    def validate(self, attrs):
-        if self.instance and self.instance.code in set(Role.Code.values):
-            if attrs.get("code", self.instance.code) != self.instance.code:
-                raise serializers.ValidationError({"code": "Built-in role codes cannot be changed."})
-            if attrs.get("rank", self.instance.rank) != self.instance.rank:
-                raise serializers.ValidationError({"rank": "Built-in role ranks cannot be changed."})
-        return attrs
-
-
-class RoleAssignmentSerializer(serializers.ModelSerializer):
-    user_id = serializers.PrimaryKeyRelatedField(source="user", queryset=User.objects.all(), write_only=True)
-    role_id = serializers.PrimaryKeyRelatedField(source="role", queryset=Role.objects.all(), write_only=True)
-    user_email = serializers.EmailField(source="user.email", read_only=True)
-    role_code = serializers.CharField(source="role.code", read_only=True)
-    role_name = serializers.CharField(source="role.name", read_only=True)
-    object_type = serializers.CharField(write_only=True, required=False, allow_blank=True)
-    object_id = serializers.IntegerField(write_only=True, required=False, min_value=1)
-    scope = serializers.SerializerMethodField()
-
-    class Meta:
-        model = RoleAssignment
-        fields = (
-            "id", "user_id", "user_email", "role_id", "role_code", "role_name",
-            "object_type", "object_id", "scope", "created_at",
-        )
-        read_only_fields = ("id", "created_at", "scope")
-
-    def get_scope(self, assignment):
-        if assignment.scope_type_id is None:
-            return None
-        return {"object_type": f"{assignment.scope_type.app_label}.{assignment.scope_type.model}",
-                "object_id": assignment.scope_id}
-
-    def validate(self, attrs):
-        request = self.context.get("request")
-        role = attrs.get("role")
-        if request and request.user and role and role.code == Role.Code.SUPER_ADMIN:
-            from apps.accounts.permissions import is_superadmin
-            if not is_superadmin(request.user):
-                raise serializers.ValidationError({"role_id": "Only a Superadmin can assign the Super Admin role."})
-        object_type = attrs.pop("object_type", "")
-        object_id = attrs.pop("object_id", None)
-        if bool(object_type) != bool(object_id):
-            raise serializers.ValidationError({"scope": "Provide both object_type and object_id, or neither."})
-        attrs["scope_type"] = None
-        attrs["scope_id"] = None
-        if object_type:
-            try:
-                app_label, model_name = object_type.lower().split(".", 1)
-                content_type = ContentType.objects.get(app_label=app_label, model=model_name)
-                model = content_type.model_class()
-                tenant_app_labels = {app.split(".")[-1] for app in settings.TENANT_APPS}
-                if (model is None or model._meta.proxy or model._meta.app_label not in tenant_app_labels
-                        or model._meta.app_label == "accounts"):
-                    raise ContentType.DoesNotExist
-                model.objects.get(pk=object_id)
-            except (ValueError, ContentType.DoesNotExist):
-                raise serializers.ValidationError({"object_type": "Choose an existing object type and object in this tenant."})
-            except model.DoesNotExist:
-                raise serializers.ValidationError({"object_id": "The object was not found in this tenant."})
-            attrs["scope_type"] = content_type
-            attrs["scope_id"] = object_id
-        return attrs
-
-    def create(self, validated_data):
-        validated_data["assigned_by"] = self.context["request"].user
-        assigned_by = validated_data.pop("assigned_by")
-        assignment, _ = RoleAssignment.objects.get_or_create(
-            user=validated_data["user"], role=validated_data["role"],
-            scope_type=validated_data["scope_type"], scope_id=validated_data["scope_id"],
-            defaults={"assigned_by": assigned_by},
-        )
-        return assignment

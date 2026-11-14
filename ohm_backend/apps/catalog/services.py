@@ -93,8 +93,8 @@ class EntityAssignmentService:
         staff_to_add = []
 
         for emp in employees:
-            if getattr(emp, "is_manager", False) or emp.role_assignments.filter(
-                role__code__in=["OPS_MANAGER", "VENUE_ADMIN", "SERVICE_ADMIN", "RESOURCE_ADMIN"]
+            if getattr(emp, "is_manager", False) or emp.groups.filter(
+                name__in=["OPS_MANAGER", "VENUE_ADMIN", "SERVICE_ADMIN", "RESOURCE_ADMIN", "Ops Manager", "Venue Admin", "Service Admin", "Resource Admin"]
             ).exists():
                 managers_to_add.append(emp)
             else:

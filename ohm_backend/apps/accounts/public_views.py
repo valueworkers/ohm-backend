@@ -20,7 +20,7 @@ from config.pagination import StandardResultsSetPagination
 
 from django.contrib.auth.models import Permission
 from apps.accounts.models import (
-    EmployeeProfile, Role, RoleAssignment, ShiftSchedule, StaffForHire,
+    EmployeeProfile, ShiftSchedule, StaffForHire,
     PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
 )
 from apps.accounts.serializers import (
@@ -147,8 +147,7 @@ class OwnerViewSet(viewsets.ModelViewSet):
 
     def owners_qs(self):
         return User.objects.filter(
-            role_assignments__role__code=Role.Code.TENANT_ADMIN,
-            role_assignments__scope_type__isnull=True,
+            groups__name__in=["TENANT_ADMIN", "Tenant Admin"]
         ).distinct()
 
     def get_queryset(self):

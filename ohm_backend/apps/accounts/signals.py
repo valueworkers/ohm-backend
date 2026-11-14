@@ -17,7 +17,7 @@ from django.utils import timezone
 from django_tenants.signals import post_schema_sync
 from django_tenants.utils import get_public_schema_name, schema_context
 
-from apps.accounts.models import Role, RoleAssignment, User, UserSession
+from apps.accounts.models import User, UserSession
 from apps.accounts.services import AccountsService
 from apps.platform.models import PlatformAdmin, Tenant
 from apps.platform.services import tenant_provisioned
@@ -106,27 +106,17 @@ def on_tenant_owners_changed(sender, instance, action, pk_set, **kwargs):
                     AccountsService.ensure_tenant_admin(public_user)
             return
 
-        from django.contrib.contenttypes.models import ContentType
-
         with schema_context(public_schema):
             users = list(User.objects.filter(pk__in=pk_set))
-            tenant_type = ContentType.objects.get_for_model(tenant, for_concrete_model=False)
-            RoleAssignment.objects.filter(
-                user__in=users, role__code=Role.Code.TENANT_ADMIN,
-                scope_type=tenant_type, scope_id=tenant.pk,
-            ).delete()
         with schema_context(tenant.schema_name):
             for public_user in users:
                 mirror = User.objects.filter(email__iexact=public_user.email).first()
                 if not mirror:
                     continue
-                mirror.role_assignments.filter(
-                    role__code=Role.Code.TENANT_ADMIN, scope_type__isnull=True, scope_id__isnull=True,
-                ).delete()
-                tenant_admin_group = mirror.groups.filter(name="Tenant Admin").first()
-                if tenant_admin_group:
-                    mirror.groups.remove(tenant_admin_group)
-                if not mirror.role_assignments.exists() and not mirror.is_superuser:
+                tenant_admin_groups = mirror.groups.filter(name__in=["Tenant Admin", "TENANT_ADMIN"])
+                if tenant_admin_groups.exists():
+                    mirror.groups.remove(*tenant_admin_groups)
+                if not mirror.groups.exists() and not mirror.is_superuser:
                     mirror.is_active = False
                     mirror.save(update_fields=["is_active"])
                     UserSession.objects.filter(user=mirror, revoked_at__isnull=True).update(

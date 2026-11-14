@@ -58,7 +58,7 @@ class VenueViewSet(viewsets.ModelViewSet):
             return qs.filter(owner=user)
         elif getattr(user, "is_manager", False):
             return qs.filter(manager=user)
-        elif user.role_assignments.filter(role__code="STAFF").exists():
+        elif user.groups.filter(name__in=["STAFF", "Staff Member"]).exists():
             return qs.filter(staff=user)
 
         return qs.filter(is_active=True)
@@ -104,7 +104,7 @@ class ServiceViewSet(viewsets.ModelViewSet):
             return qs.filter(owner=user)
         elif getattr(user, "is_manager", False):
             return qs.filter(manager=user)
-        elif user.role_assignments.filter(role__code="STAFF").exists():
+        elif user.groups.filter(name__in=["STAFF", "Staff Member"]).exists():
             return qs.filter(staff=user)
 
         return qs.filter(is_active=True)
@@ -157,7 +157,7 @@ class ResourceViewSet(viewsets.ModelViewSet):
             return qs.filter(owner=user)
         elif getattr(user, "is_manager", False):
             return qs.filter(manager=user)
-        elif user.role_assignments.filter(role__code="STAFF").exists():
+        elif user.groups.filter(name__in=["STAFF", "Staff Member"]).exists():
             return qs.filter(staff=user)
 
         return qs.filter(is_active=True)

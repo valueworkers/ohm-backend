@@ -3,12 +3,12 @@ from decimal import Decimal
 from PIL import Image
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django_tenants.test.cases import TenantTestCase
 from rest_framework import status
 from rest_framework.test import APIClient
 
-from apps.accounts.models import Role, RoleAssignment
 from apps.billing.constants import BookingType
 from apps.billing.models import Location
 from apps.catalog.models import Photos, Resource, Service, Venue
@@ -37,19 +37,10 @@ class CatalogE2ETestCase(TenantTestCase):
         self.client = APIClient()
         self.client.defaults["HTTP_X_TENANT"] = self.tenant.schema_name
 
-        # Create roles
-        self.role_admin, _ = Role.objects.get_or_create(
-            code=Role.Code.TENANT_ADMIN,
-            defaults={"name": "Tenant Admin", "rank": 100},
-        )
-        self.role_manager, _ = Role.objects.get_or_create(
-            code=Role.Code.VENUE_ADMIN,
-            defaults={"name": "Venue Admin", "rank": 80},
-        )
-        self.role_staff, _ = Role.objects.get_or_create(
-            code=Role.Code.STAFF,
-            defaults={"name": "Staff Member", "rank": 20},
-        )
+        # Create groups
+        self.group_admin, _ = Group.objects.get_or_create(name="Tenant Admin")
+        self.group_manager, _ = Group.objects.get_or_create(name="VENUE_ADMIN")
+        self.group_staff, _ = Group.objects.get_or_create(name="STAFF")
 
         # Create users
         self.admin_user = User.objects.create_user(
@@ -58,7 +49,7 @@ class CatalogE2ETestCase(TenantTestCase):
             first_name="Admin",
             last_name="User",
         )
-        RoleAssignment.objects.create(user=self.admin_user, role=self.role_admin)
+        self.admin_user.groups.add(self.group_admin)
 
         self.owner_user = User.objects.create_user(
             email="owner@example.com",
@@ -66,7 +57,7 @@ class CatalogE2ETestCase(TenantTestCase):
             first_name="Owner",
             last_name="User",
         )
-        RoleAssignment.objects.create(user=self.owner_user, role=self.role_admin)
+        self.owner_user.groups.add(self.group_admin)
 
         self.manager_user = User.objects.create_user(
             email="manager@example.com",
@@ -74,7 +65,7 @@ class CatalogE2ETestCase(TenantTestCase):
             first_name="Manager",
             last_name="User",
         )
-        RoleAssignment.objects.create(user=self.manager_user, role=self.role_manager)
+        self.manager_user.groups.add(self.group_manager)
 
         self.staff_user = User.objects.create_user(
             email="staff@example.com",
@@ -82,7 +73,7 @@ class CatalogE2ETestCase(TenantTestCase):
             first_name="Staff",
             last_name="User",
         )
-        RoleAssignment.objects.create(user=self.staff_user, role=self.role_staff)
+        self.staff_user.groups.add(self.group_staff)
 
         self.client.force_authenticate(user=self.owner_user)
 

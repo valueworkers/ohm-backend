@@ -343,88 +343,19 @@ class TenantViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=["get", "post", "delete"], url_path="object-permissions")
     def object_permissions(self, request, pk=None):
-        """Manage role grants scoped to concrete objects in a tenant schema."""
-        from apps.accounts.models import Role, RoleAssignment
-
+        """Object-scoped RoleAssignments have been deprecated in favor of Django Groups & Permissions."""
         tenant = self.get_object()
-        with schema_context(tenant.schema_name):
-            if request.method == "POST":
-                user_id = request.data.get("user_id")
-                role_code = request.data.get("role_code")
-                object_type = request.data.get("object_type", "")
-                object_id = request.data.get("object_id")
-                if not all((user_id, role_code, object_type, object_id)):
-                    raise ValidationError({"detail": "user_id, role_code, object_type, and object_id are required."})
-                try:
-                    object_id = int(object_id)
-                except (TypeError, ValueError):
-                    raise ValidationError({"object_id": "Object IDs must be positive integers."})
-                if object_id < 1:
-                    raise ValidationError({"object_id": "Object IDs must be positive integers."})
-                try:
-                    app_label, model_name = object_type.lower().split(".", 1)
-                    content_type = ContentType.objects.get(app_label=app_label, model=model_name)
-                    model = content_type.model_class()
-                    tenant_app_labels = {app.split(".")[-1] for app in settings.TENANT_APPS}
-                    if (model is None or model._meta.proxy or model._meta.app_label not in tenant_app_labels
-                            or model._meta.app_label == "accounts"):
-                        raise ContentType.DoesNotExist
-                except (ValueError, ContentType.DoesNotExist):
-                    raise ValidationError({"detail": "The user, role, or target object was not found in this tenant."})
-                try:
-                    model.objects.get(pk=object_id)
-                except model.DoesNotExist:
-                    raise ValidationError({"detail": "The user, role, or target object was not found in this tenant."})
-                User = apps.get_model("accounts", "User")
-                try:
-                    user = User.objects.get(pk=user_id)
-                    role = Role.objects.get(code=role_code)
-                except (User.DoesNotExist, Role.DoesNotExist):
-                    raise ValidationError({"detail": "The user, role, or target object was not found in this tenant."})
-                assignment, created = RoleAssignment.objects.get_or_create(
-                    user=user, role=role, scope_type=content_type, scope_id=object_id,
-                )
-                return Response(self._object_permission_data(assignment), status=201 if created else 200)
-
-            if request.method == "DELETE":
-                assignment_id = request.data.get("assignment_id") or request.query_params.get("assignment_id")
-                if not assignment_id:
-                    raise ValidationError({"assignment_id": "This field is required."})
-                deleted, _ = RoleAssignment.objects.filter(pk=assignment_id, scope_type__isnull=False).delete()
-                if not deleted:
-                    raise ValidationError({"assignment_id": "Object permission grant not found."})
-                return Response(status=204)
-
-            assignments = RoleAssignment.objects.filter(scope_type__isnull=False).select_related(
-                "user", "role", "scope_type", "assigned_by"
-            ).order_by("id")
-            object_types = []
-            tenant_app_labels = {app.split(".")[-1] for app in settings.TENANT_APPS}
-            for model in apps.get_models():
-                if model._meta.proxy or model._meta.auto_created or not model._meta.managed:
-                    continue
-                if model._meta.app_label not in tenant_app_labels or model._meta.app_label == "accounts":
-                    continue
-                object_types.append({"code": f"{model._meta.app_label}.{model._meta.model_name}",
-                                     "name": model._meta.verbose_name.title()})
-            return Response({
-                "tenant_id": tenant.pk,
-                "object_types": sorted(object_types, key=lambda item: item["name"].lower()),
-                "roles": [{"code": role.code, "name": role.name} for role in Role.objects.order_by("rank", "name")],
-                "grants": [self._object_permission_data(assignment) for assignment in assignments],
-            })
-
-    @staticmethod
-    def _object_permission_data(assignment):
-        return {
-            "assignment_id": assignment.pk,
-            "user_id": assignment.user_id,
-            "user_email": assignment.user.email,
-            "role_code": assignment.role.code,
-            "role_name": assignment.role.name,
-            "object_type": f"{assignment.scope_type.app_label}.{assignment.scope_type.model}",
-            "object_id": assignment.scope_id,
-        }
+        if request.method in ("POST", "DELETE"):
+            return Response(
+                {"detail": "Role and RoleAssignment have been removed. Use Django Groups and Permissions instead."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({
+            "tenant_id": tenant.pk,
+            "object_types": [],
+            "roles": [],
+            "grants": [],
+        })
 
 
     @action(detail=True, methods=["post"])

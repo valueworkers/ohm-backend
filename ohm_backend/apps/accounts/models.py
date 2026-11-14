@@ -49,11 +49,11 @@ class UserManager(BaseUserManager):
         return self.filter(employee_profile__isnull=False)
 
     def customers(self):
-        return self.with_role(Role.Code.CUSTOMER)
+        return self.with_role("CUSTOMER", "Customer", "Customer / User")
 
     def with_role(self, *role_codes):
-        """Users holding any of these roles (tenant-wide or scoped)."""
-        return self.filter(role_assignments__role__code__in=role_codes).distinct()
+        """Users holding any of these permission groups / roles."""
+        return self.filter(groups__name__in=role_codes).distinct()
 
 
 # ------------------------ USER ------------------------
@@ -61,7 +61,7 @@ class User(AbstractBaseUser, PermissionsMixin):
     """One table per schema: platform staff in public, tenant users in each tenant schema.
 
     Uses Django's own PermissionsMixin (is_superuser, groups, user_permissions) and
-    auth.Permission / auth.Group. Role + RoleAssignment (below) add scoped role grants.
+    auth.Permission / auth.Group. Groups are effectively utilized as roles.
     """
 
     GENDER_CHOICES = [
@@ -130,12 +130,27 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     @property
     def primary_role(self):
-        """Highest-ranked tenant-wide role name (None for platform users such as the Super Admin)."""
-        best = None
-        for a in self.role_assignments.all():
-            if a.scope_type_id is None and (best is None or a.role.rank > best.rank):
-                best = a.role
-        return best.name if best else None
+        """Highest-ranked tenant-wide group / role name (None for platform users such as the Super Admin)."""
+        group_names = set(self.groups.values_list("name", flat=True))
+        if {"Tenant Admin", "TENANT_ADMIN"} & group_names:
+            return "Tenant Admin"
+        if {"Super User", "SUPER_ADMIN"} & group_names:
+            return "Super User"
+        if {"Ops Manager", "OPS_MANAGER"} & group_names:
+            return "Ops Manager"
+        if {"Venue Admin", "VENUE_ADMIN"} & group_names:
+            return "Venue Admin"
+        if {"Service Admin", "SERVICE_ADMIN"} & group_names:
+            return "Service Admin"
+        if {"Resource Admin", "RESOURCE_ADMIN"} & group_names:
+            return "Resource Admin"
+        if {"Staff Member", "STAFF"} & group_names:
+            return "Staff Member"
+        if {"Customer", "CUSTOMER", "Customer / User"} & group_names:
+            return "Customer"
+        if group_names:
+            return sorted(group_names)[0]
+        return None
 
     @property
     def employee_id(self):
@@ -144,11 +159,17 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     @property
     def is_owner(self):
-        return self.is_superuser or self.role_assignments.filter(role__code=Role.Code.TENANT_ADMIN, scope_type__isnull=True).exists()
+        return (
+            self.is_superuser
+            or self.groups.filter(name__in=["TENANT_ADMIN", "Tenant Admin"]).exists()
+        )
 
     @property
     def is_manager(self):
-        return self.role_assignments.filter(role__code__in=(Role.Code.OPS_MANAGER, Role.Code.VENUE_ADMIN, Role.Code.SERVICE_ADMIN, Role.Code.RESOURCE_ADMIN)).exists()
+        return self.groups.filter(name__in=(
+            "OPS_MANAGER", "VENUE_ADMIN", "SERVICE_ADMIN", "RESOURCE_ADMIN",
+            "Ops Manager", "Venue Admin", "Service Admin", "Resource Admin",
+        )).exists()
 
     def soft_delete(self):
         self.is_active = False
@@ -426,47 +447,3 @@ class StaffForHire(models.Model):
 
     def __str__(self):
         return f"{self.staff_name} | {self.vendor_name}"
-
-
-# ------------------------ ROLES ------------------------
-class Role(models.Model):
-    class Code(models.TextChoices):
-        SUPER_ADMIN = "SUPER_ADMIN", "Super Admin"
-        TENANT_ADMIN = "TENANT_ADMIN", "Tenant Admin"
-        CUSTOMER = "CUSTOMER", "Customer / User"
-        # Reserved for later: sub-roles that will sit under Tenant Admin (not seeded yet)
-        VENUE_ADMIN = "VENUE_ADMIN", "Venue Admin"
-        SERVICE_ADMIN = "SERVICE_ADMIN", "Service Admin"
-        RESOURCE_ADMIN = "RESOURCE_ADMIN", "Resource Admin"
-        OPS_MANAGER = "OPS_MANAGER", "Ops Manager"
-        STAFF = "STAFF", "Staff Member"
-
-    code = models.CharField(max_length=30, unique=True, choices=Code.choices)
-    name = models.CharField(max_length=60)
-    rank = models.PositiveSmallIntegerField(help_text="Higher = more authority")
-
-    def __str__(self):
-        return self.name
-
-
-class RoleAssignment(models.Model):
-    """Grants a role tenant-wide or on one object (Tenant, Venue, Service, Resource)."""
-
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="role_assignments")
-    role = models.ForeignKey(Role, on_delete=models.PROTECT, related_name="assignments")
-    scope_type = models.ForeignKey(ContentType, null=True, blank=True, on_delete=models.CASCADE)
-    scope_id = models.PositiveBigIntegerField(null=True, blank=True)
-    scope = GenericForeignKey("scope_type", "scope_id")
-    assigned_by = models.ForeignKey(
-        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
-    )
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["user", "role", "scope_type", "scope_id"],
-                nulls_distinct=False,
-                name="uniq_user_role_scope",
-            )
-        ]
