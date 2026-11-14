@@ -166,10 +166,13 @@ class User(AbstractBaseUser, PermissionsMixin):
 
     @property
     def is_manager(self):
-        return self.groups.filter(name__in=(
-            "OPS_MANAGER", "VENUE_ADMIN", "SERVICE_ADMIN", "RESOURCE_ADMIN",
-            "Ops Manager", "Venue Admin", "Service Admin", "Resource Admin",
-        )).exists()
+        return (
+            self.is_superuser
+            or self.groups.filter(name__in=(
+                "OPS_MANAGER", "VENUE_ADMIN", "SERVICE_ADMIN", "RESOURCE_ADMIN",
+                "Ops Manager", "Venue Admin", "Service Admin", "Resource Admin",
+            )).exists()
+        )
 
     def soft_delete(self):
         self.is_active = False

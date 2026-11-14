@@ -159,6 +159,11 @@ If unavailable or reserved:
 }
 ```
 
+> [!NOTE]
+> **Super User Tenant Access**: Platform Super Users can access any tenant schema using their public credentials:
+> 1. **Direct Workspace Login**: Call `POST /api/auth/login/` with `X-Tenant: <slug>` and Super User credentials. The system authenticates against the canonical public account, automatically mirrors the user into the tenant schema with full `Super User` and `Tenant Admin` privileges, and issues a tenant-scoped session and tokens.
+> 2. **Cross-Schema Token Access**: Present a public-schema Super User JWT access token (`Authorization: Bearer <public_token>`) alongside `X-Tenant: <slug>` on any tenant API endpoint. The authentication backend verifies the active public session, provisions/synchronizes the superuser in the tenant schema, and grants full administrative access.
+
 ### 2.2 Request Login or Password-Reset OTP
 - **Endpoint**: `POST /api/auth/otp/`
 - **Authentication**: None (Public)

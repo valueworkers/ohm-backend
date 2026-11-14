@@ -216,7 +216,7 @@ All endpoints are hosted on the unified API host (`api.ohm.com`).
 - `GET /api/platform/onboarding/check-slug/?slug=<slug>` — Live subdomain availability check.
 
 ### 2. Unified Authentication
-- `POST /api/auth/login/` — Unified login using email or phone with password or OTP. Omit `X-Tenant` for platform staff; provide `X-Tenant: <slug>` for tenant users. Returns `tokens`, `user`, and `schema_name`.
+- `POST /api/auth/login/` — Unified login using email or phone with password or OTP. Omit `X-Tenant` for platform staff; provide `X-Tenant: <slug>` for tenant users. Super Users can log in directly with `X-Tenant: <slug>` using their credentials to access any workspace with full administrative privileges. Returns `tokens`, `user`, and `schema_name`.
 - `POST /api/auth/otp/` — Request a 6-digit OTP for login or password reset (`username`, `purpose`).
 - `POST /api/auth/password-reset/` — Reset password using OTP (`username`, `otp`, `new_password`).
 - `POST /api/auth/access-tokens/` — Exchange the current session refresh token for a new access token (15-minute access-token lifetime).

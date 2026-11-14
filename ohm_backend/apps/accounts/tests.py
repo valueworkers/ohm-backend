@@ -2,9 +2,10 @@ from django.contrib.auth.models import Group, Permission
 from django.contrib.contenttypes.models import ContentType
 from django.db import connection
 from django.test import TestCase
-from django_tenants.utils import get_public_schema_name
+from django_tenants.test.cases import TenantTestCase
+from django_tenants.utils import get_public_schema_name, schema_context
 from rest_framework.exceptions import ValidationError
-from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
 
 from apps.accounts.models import User
 from apps.accounts.permissions import (
@@ -382,3 +383,132 @@ class DjangoGroupsAndPermissionsTest(TestCase):
         with self.assertRaises(ValidationError) as ctx:
             serializer.save()
         self.assertIn("A workspace must keep at least one active Tenant Admin.", str(ctx.exception))
+
+
+class SuperUserTenantAccessTestCase(TenantTestCase):
+    @classmethod
+    def setup_tenant(cls, tenant):
+        tenant.name = "Health Provider"
+        tenant.status = "active"
+
+    def setUp(self):
+        super().setUp()
+        self.client = APIClient()
+        self.public_schema = get_public_schema_name()
+
+        # Create superuser and regular user in public schema
+        with schema_context(self.public_schema):
+            self.superuser = User.objects.create_user(
+                email="superadmin@example.com",
+                password="SuperSecretPassword123!",
+                first_name="Super",
+                last_name="Admin",
+                is_superuser=True,
+                is_staff=True,
+                is_active=True,
+            )
+            super_group, _ = Group.objects.get_or_create(name="Super User")
+            self.superuser.groups.add(super_group)
+
+            self.regular_public_user = User.objects.create_user(
+                email="publicguy@example.com",
+                password="Password123!",
+                first_name="Public",
+                last_name="Guy",
+                is_superuser=False,
+                is_staff=False,
+                is_active=True,
+            )
+
+    def test_superuser_can_login_to_tenant_schema_with_creds(self):
+        # Superuser logs in targeting the tenant workspace using their credentials
+        res = self.client.post(
+            "/api/auth/login/",
+            {
+                "username": "superadmin@example.com",
+                "password": "SuperSecretPassword123!",
+                "method": "password",
+            },
+            format="json",
+            HTTP_X_TENANT=self.tenant.schema_name,
+        )
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(res.data["schema_name"], self.tenant.schema_name)
+        self.assertIn("tokens", res.data)
+        access_token = res.data["tokens"]["access"]
+        self.assertTrue(bool(access_token))
+
+        # Verify superuser was mirrored into tenant schema with full superuser privileges
+        tenant_user = User.objects.get(email="superadmin@example.com")
+        self.assertTrue(tenant_user.is_superuser)
+        self.assertTrue(tenant_user.is_staff)
+        self.assertTrue(tenant_user.is_active)
+        self.assertTrue(tenant_user.is_owner)
+        self.assertTrue(tenant_user.is_manager)
+
+        # Verify tenant-issued access token can access tenant-scoped resources
+        group_res = self.client.get(
+            "/api/groups/",
+            HTTP_X_TENANT=self.tenant.schema_name,
+            HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        )
+        self.assertEqual(group_res.status_code, 200, group_res.data)
+
+        # Superuser can create groups in tenant schema
+        create_res = self.client.post(
+            "/api/groups/",
+            {"name": "Emergency Doctors", "permissions": []},
+            format="json",
+            HTTP_X_TENANT=self.tenant.schema_name,
+            HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        )
+        self.assertEqual(create_res.status_code, 201, create_res.data)
+
+    def test_superuser_public_token_can_access_tenant_apis(self):
+        # Superuser logs into public schema (no X-Tenant header)
+        login_res = self.client.post(
+            "/api/auth/login/",
+            {
+                "username": "superadmin@example.com",
+                "password": "SuperSecretPassword123!",
+                "method": "password",
+            },
+            format="json",
+        )
+        self.assertEqual(login_res.status_code, 200)
+        self.assertEqual(login_res.data["schema_name"], self.public_schema)
+        public_token = login_res.data["tokens"]["access"]
+
+        # Superuser accesses tenant workspace API with their public token and X-Tenant header
+        tenant_api_res = self.client.get(
+            "/api/groups/",
+            HTTP_X_TENANT=self.tenant.schema_name,
+            HTTP_AUTHORIZATION=f"Bearer {public_token}",
+        )
+        self.assertEqual(tenant_api_res.status_code, 200, tenant_api_res.data)
+
+    def test_superuser_wrong_password_rejected_on_tenant(self):
+        res = self.client.post(
+            "/api/auth/login/",
+            {
+                "username": "superadmin@example.com",
+                "password": "WrongPassword!",
+                "method": "password",
+            },
+            format="json",
+            HTTP_X_TENANT=self.tenant.schema_name,
+        )
+        self.assertEqual(res.status_code, 401)
+
+    def test_non_superuser_public_user_cannot_login_to_tenant(self):
+        res = self.client.post(
+            "/api/auth/login/",
+            {
+                "username": "publicguy@example.com",
+                "password": "Password123!",
+                "method": "password",
+            },
+            format="json",
+            HTTP_X_TENANT=self.tenant.schema_name,
+        )
+        self.assertEqual(res.status_code, 401)

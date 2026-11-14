@@ -19,10 +19,13 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from config.pagination import StandardResultsSetPagination
 
 from django.contrib.auth.models import Permission
+from django_tenants.utils import get_public_schema_name, schema_context
 from apps.accounts.models import (
     EmployeeProfile, ShiftSchedule, StaffForHire,
     PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
 )
+from apps.accounts.permissions import is_superadmin
+from apps.accounts.services import AccountsService
 from apps.accounts.serializers import (
     OTPPasswordResetSerializer,
     OTPRequestSerializer,
@@ -56,33 +59,68 @@ class UnifiedLoginView(APIView):
         data = serializer.validated_data
 
         user = find_user(data["username"])
-        if not user:
-            return _invalid() if data["method"] == "password" else _invalid("Invalid or expired OTP.")
+        is_tenant_schema = connection.schema_name != get_public_schema_name()
+        public_superuser = None
 
-        # --- Verify credentials (password or OTP) ---
-        if data["method"] == "password":
-            if not has_password(user):
-                if user.is_active:
-                    return Response(
-                        {
-                            "error": "Password has not been set for this account. Please try OTP login.",
-                            "code": "password_not_set",
-                        },
-                        status=status.HTTP_400_BAD_REQUEST,
-                    )
-                return _invalid()
-            if not user.check_password(data["password"]):
-                return _invalid()
+        if is_tenant_schema:
+            with schema_context(get_public_schema_name()):
+                pub_user = find_user(data["username"])
+                if pub_user and (pub_user.is_superuser or is_superadmin(pub_user)):
+                    public_superuser = pub_user
+
+        if public_superuser:
+            if data["method"] == "password":
+                if not has_password(public_superuser):
+                    if public_superuser.is_active:
+                        return Response(
+                            {
+                                "error": "Password has not been set for this account. Please try OTP login.",
+                                "code": "password_not_set",
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    return _invalid()
+                if not public_superuser.check_password(data["password"]):
+                    return _invalid()
+            else:
+                if not (consume_otp(public_superuser, "login", data["otp"]) or (user and consume_otp(user, "login", data["otp"]))):
+                    return _invalid("Invalid or expired OTP.")
+
+            if not public_superuser.is_active:
+                return Response(
+                    {"error": "Account pending approval by Master Admin."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
+
+            user = AccountsService.ensure_superuser(public_superuser)
         else:
-            if not consume_otp(user, "login", data["otp"]):
-                return _invalid("Invalid or expired OTP.")
+            if not user:
+                return _invalid() if data["method"] == "password" else _invalid("Invalid or expired OTP.")
 
-        # --- Account state checks (credentials already verified) ---
-        if not user.is_active:
-            return Response(
-                {"error": "Account pending approval by Master Admin."},
-                status=status.HTTP_403_FORBIDDEN,
-            )
+            # --- Verify credentials (password or OTP) ---
+            if data["method"] == "password":
+                if not has_password(user):
+                    if user.is_active:
+                        return Response(
+                            {
+                                "error": "Password has not been set for this account. Please try OTP login.",
+                                "code": "password_not_set",
+                            },
+                            status=status.HTTP_400_BAD_REQUEST,
+                        )
+                    return _invalid()
+                if not user.check_password(data["password"]):
+                    return _invalid()
+            else:
+                if not consume_otp(user, "login", data["otp"]):
+                    return _invalid("Invalid or expired OTP.")
+
+            # --- Account state checks (credentials already verified) ---
+            if not user.is_active:
+                return Response(
+                    {"error": "Account pending approval by Master Admin."},
+                    status=status.HTTP_403_FORBIDDEN,
+                )
 
         # --- Issue tokens ---
         user.last_login = timezone.now()
@@ -116,24 +154,26 @@ class UnifiedLogoutView(APIView):
         session_id = getattr(request.auth, "get", lambda *_: None)("sid")
         if not session_id:
             raise AuthenticationFailed("Session expired. Please sign in again.")
-        session = UserSession.objects.filter(
-            pk=session_id, user=request.user, revoked_at__isnull=True
-        ).first()
-        if not session:
-            raise AuthenticationFailed("Session has already been revoked.")
-        refresh_token = request.data.get("refresh_token")
-        if refresh_token:
-            try:
-                refresh = RefreshToken(refresh_token)
-            except Exception:
-                raise ValidationError({"refresh_token": "Invalid refresh token."})
-            if (refresh.get("schema") != connection.schema_name
-                    or refresh.get("sid") != str(session.pk)
-                    or str(refresh.get("user_id")) != str(request.user.pk)
-                    or refresh.get("jti") != session.refresh_jti):
-                raise ValidationError({"refresh_token": "Refresh token does not belong to this active session."})
-        session.revoked_at = timezone.now()
-        session.save(update_fields=["revoked_at"])
+        token_schema = getattr(request.auth, "get", lambda *_: None)("schema") or connection.schema_name
+        with schema_context(token_schema):
+            session = UserSession.objects.filter(
+                pk=session_id, user=request.user, revoked_at__isnull=True
+            ).first()
+            if not session:
+                raise AuthenticationFailed("Session has already been revoked.")
+            refresh_token = request.data.get("refresh_token")
+            if refresh_token:
+                try:
+                    refresh = RefreshToken(refresh_token)
+                except Exception:
+                    raise ValidationError({"refresh_token": "Invalid refresh token."})
+                if (refresh.get("schema") != token_schema
+                        or refresh.get("sid") != str(session.pk)
+                        or str(refresh.get("user_id")) != str(request.user.pk)
+                        or refresh.get("jti") != session.refresh_jti):
+                    raise ValidationError({"refresh_token": "Refresh token does not belong to this active session."})
+            session.revoked_at = timezone.now()
+            session.save(update_fields=["revoked_at"])
         return Response({"message": "Logout successful"}, status=status.HTTP_200_OK)
 
 class OwnerViewSet(viewsets.ModelViewSet):
@@ -193,6 +233,11 @@ class OTPRequestView(APIView):
         data = serializer.validated_data
 
         user = find_user(data["username"])
+        if not user and connection.schema_name != get_public_schema_name():
+            with schema_context(get_public_schema_name()):
+                pub_user = find_user(data["username"])
+                if pub_user and (pub_user.is_superuser or is_superadmin(pub_user)):
+                    user = pub_user
         # Identical response for unknown, inactive and ineligible accounts.
         if user and user.is_active:
             issue_otp(user, data["username"], data["purpose"])

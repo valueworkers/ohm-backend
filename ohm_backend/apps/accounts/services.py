@@ -131,6 +131,42 @@ class AccountsService:
         return user
 
     @classmethod
+    def ensure_superuser(cls, public_user):
+        """Mirror an OHM superuser into the current tenant schema with full superuser and tenant admin access."""
+        from django.contrib.auth.models import Group
+
+        user, _ = User.objects.get_or_create(
+            email=public_user.email.lower(),
+            defaults={
+                "first_name": public_user.first_name,
+                "middle_name": public_user.middle_name,
+                "last_name": public_user.last_name,
+                "mobile_number": public_user.mobile_number,
+                "is_active": True,
+                "is_staff": True,
+                "is_superuser": True,
+                "password": public_user.password,
+            },
+        )
+        updated_fields = []
+        for field in ("first_name", "middle_name", "last_name", "mobile_number", "password"):
+            value = getattr(public_user, field, None)
+            if value is not None and getattr(user, field, None) != value:
+                setattr(user, field, value)
+                updated_fields.append(field)
+        for field in ("is_active", "is_staff", "is_superuser"):
+            if not getattr(user, field, False):
+                setattr(user, field, True)
+                updated_fields.append(field)
+        if updated_fields:
+            user.save(update_fields=updated_fields)
+
+        super_group, _ = Group.objects.get_or_create(name="Super User")
+        admin_group, _ = Group.objects.get_or_create(name="Tenant Admin")
+        user.groups.add(super_group, admin_group)
+        return user
+
+    @classmethod
     def sync_owner_profile(cls, user, update_fields=None):
         """Copy shared identity fields between an owner and their schema mirrors.
 

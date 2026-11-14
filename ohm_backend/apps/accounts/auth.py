@@ -15,11 +15,11 @@ from .models import UserSession
 
 
 class TenantJWTAuthentication(JWTAuthentication):
-    """JWT auth that only accepts tokens issued for the schema serving this request."""
+    """JWT auth that only accepts tokens issued for the schema serving this request, or public superuser tokens."""
 
     def get_user(self, validated_token):
-        if validated_token.get("schema") != connection.schema_name:
-            raise AuthenticationFailed("Token is not valid for this tenant.", code="token_tenant_mismatch")
+        token_schema = validated_token.get("schema")
+        current_schema = connection.schema_name
         session_id = validated_token.get("sid")
         if not session_id:
             raise AuthenticationFailed("Session expired. Please sign in again.", code="session_missing")
@@ -27,6 +27,32 @@ class TenantJWTAuthentication(JWTAuthentication):
             session_id = uuid.UUID(str(session_id))
         except (TypeError, ValueError):
             raise AuthenticationFailed("Session token is invalid.", code="session_invalid")
+
+        if token_schema != current_schema:
+            from django_tenants.utils import get_public_schema_name, schema_context
+            public_schema = get_public_schema_name()
+            if token_schema == public_schema:
+                with schema_context(public_schema):
+                    try:
+                        public_user = super().get_user(validated_token)
+                    except Exception:
+                        raise AuthenticationFailed("Token is not valid for this tenant.", code="token_tenant_mismatch")
+                    from apps.accounts.permissions import is_superadmin
+                    if not (public_user and (public_user.is_superuser or is_superadmin(public_user))):
+                        raise AuthenticationFailed("Token is not valid for this tenant.", code="token_tenant_mismatch")
+                    session = UserSession.objects.filter(
+                        pk=session_id, user_id=public_user.pk, revoked_at__isnull=True
+                    ).first()
+                    if not session:
+                        raise AuthenticationFailed("Session has been revoked.", code="session_revoked")
+                    session.last_seen_at = timezone.now()
+                    session.save(update_fields=["last_seen_at"])
+
+                from apps.accounts.services import AccountsService
+                return AccountsService.ensure_superuser(public_user)
+
+            raise AuthenticationFailed("Token is not valid for this tenant.", code="token_tenant_mismatch")
+
         user = super().get_user(validated_token)
         session = UserSession.objects.filter(
             pk=session_id, user_id=user.pk, revoked_at__isnull=True
@@ -43,15 +69,15 @@ class TenantJWTAuthentication(JWTAuthentication):
 
 
 class ScopedTokenRefreshSerializer(TokenRefreshSerializer):
-    """Refresh only the current schema's latest, unrevoked session token."""
+    """Refresh only the current schema's latest, unrevoked session token (or public superuser token)."""
 
     def validate(self, attrs):
         try:
             refresh = RefreshToken(attrs["refresh"])
         except TokenError as exc:
             raise InvalidToken(str(exc))
-        if refresh.get("schema") != connection.schema_name:
-            raise InvalidToken("Refresh token does not belong to this workspace.")
+        token_schema = refresh.get("schema")
+        current_schema = connection.schema_name
         session_id = refresh.get("sid")
         if not session_id:
             raise InvalidToken("Session expired. Please sign in again.")
@@ -59,25 +85,42 @@ class ScopedTokenRefreshSerializer(TokenRefreshSerializer):
             session_id = uuid.UUID(str(session_id))
         except (TypeError, ValueError):
             raise InvalidToken("Session token is invalid.")
-        with transaction.atomic():
-            session = UserSession.objects.select_for_update().filter(
-                pk=session_id,
-                user_id=refresh.get(api_settings.USER_ID_CLAIM),
-                refresh_jti=refresh.get("jti"),
-                revoked_at__isnull=True,
-            ).first()
-            if not session:
-                raise InvalidToken("Refresh token has been revoked or replaced.")
-            data = super().validate(attrs)
-            if data.get("refresh"):
-                try:
-                    rotated = RefreshToken(data["refresh"])
-                except TokenError as exc:
-                    raise InvalidToken(str(exc))
-                session.refresh_jti = rotated.get("jti", "")
-            session.last_seen_at = timezone.now()
-            session.save(update_fields=["refresh_jti", "last_seen_at"])
-            return data
+
+        from django_tenants.utils import get_public_schema_name, schema_context
+        public_schema = get_public_schema_name()
+        schema_to_check = current_schema
+
+        if token_schema != current_schema:
+            if token_schema == public_schema:
+                with schema_context(public_schema):
+                    from apps.accounts.models import User
+                    from apps.accounts.permissions import is_superadmin
+                    pub_user = User.objects.filter(pk=refresh.get(api_settings.USER_ID_CLAIM)).first()
+                    if pub_user and (pub_user.is_superuser or is_superadmin(pub_user)):
+                        schema_to_check = public_schema
+            if schema_to_check != token_schema:
+                raise InvalidToken("Refresh token does not belong to this workspace.")
+
+        with schema_context(schema_to_check):
+            with transaction.atomic():
+                session = UserSession.objects.select_for_update().filter(
+                    pk=session_id,
+                    user_id=refresh.get(api_settings.USER_ID_CLAIM),
+                    refresh_jti=refresh.get("jti"),
+                    revoked_at__isnull=True,
+                ).first()
+                if not session:
+                    raise InvalidToken("Refresh token has been revoked or replaced.")
+                data = super().validate(attrs)
+                if data.get("refresh"):
+                    try:
+                        rotated = RefreshToken(data["refresh"])
+                    except TokenError as exc:
+                        raise InvalidToken(str(exc))
+                    session.refresh_jti = rotated.get("jti", "")
+                session.last_seen_at = timezone.now()
+                session.save(update_fields=["refresh_jti", "last_seen_at"])
+                return data
 
 
 class ScopedTokenRefreshView:

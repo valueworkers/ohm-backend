@@ -30,7 +30,8 @@ def is_tenant_admin(user):
     if connection.schema_name == get_public_schema_name():
         return False
     return bool(
-        user.groups.filter(name__in=["TENANT_ADMIN", "Tenant Admin"]).exists()
+        is_superadmin(user)
+        or user.groups.filter(name__in=["TENANT_ADMIN", "Tenant Admin"]).exists()
     )
 
 
