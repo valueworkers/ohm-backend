@@ -35,10 +35,14 @@ class AccountsService:
 
     @classmethod
     def assign_all_permissions_to_superuser(cls, user):
-        """Assign the bootstrapped Super User group in the public schema."""
+        """Assign the Super User group in the public schema if it exists."""
+        from django.contrib.auth.models import Group
+
         public_schema = get_public_schema_name()
         with schema_context(public_schema):
-            TenantAccessManager(public_schema).assign_group(user, cls._group_name("SUPER_ADMIN"))
+            super_group = Group.objects.filter(name=cls._group_name("SUPER_ADMIN")).first()
+            if super_group:
+                user.groups.add(super_group)
 
             updated_fields = []
             if not user.is_superuser:
@@ -102,13 +106,16 @@ class AccountsService:
         cls.assign_role_default_permissions(user, code)
 
     @classmethod
-    def ensure_tenant_admin(cls, public_user):
-        """Mirror an OHM user into the current tenant schema as its tenant-wide admin with default permissions."""
+    def ensure_tenant_admin(cls, public_user, *, as_superuser=True):
+        """Mirror an OHM user into the current tenant schema as its tenant admin (and superuser)."""
+        if as_superuser:
+            return cls.ensure_superuser(public_user)
+
         user, _ = User.objects.get_or_create(
             email=public_user.email.lower(),
             defaults={
                 "first_name": public_user.first_name,
-                "middle_name": public_user.middle_name,
+                "middle_name": getattr(public_user, "middle_name", ""),
                 "last_name": public_user.last_name,
                 "mobile_number": public_user.mobile_number,
                 "is_active": public_user.is_active,
@@ -120,8 +127,8 @@ class AccountsService:
         # were previously populated in the tenant schema.
         updated_fields = []
         for field in ("first_name", "middle_name", "last_name", "mobile_number", "is_active", "password"):
-            value = getattr(public_user, field)
-            if getattr(user, field) != value:
+            value = getattr(public_user, field, None)
+            if value is not None and getattr(user, field, None) != value:
                 setattr(user, field, value)
                 updated_fields.append(field)
         if updated_fields:
@@ -131,40 +138,98 @@ class AccountsService:
         return user
 
     @classmethod
-    def ensure_superuser(cls, public_user):
-        """Mirror an OHM superuser into the current tenant schema with full superuser and tenant admin access."""
+    def ensure_superuser(cls, public_user_or_credentials, schema_name=None):
+        """Create or mirror a superuser into the specified or current tenant schema.
+
+        Handles user creation using the provided tenant user or credentials,
+        maintaining schema context and ensuring idempotency with full superuser
+        and tenant admin access.
+        """
+        if schema_name and connection.schema_name != schema_name:
+            with schema_context(schema_name):
+                return cls.ensure_superuser(public_user_or_credentials)
+
         from django.contrib.auth.models import Group
 
-        user, _ = User.objects.get_or_create(
-            email=public_user.email.lower(),
+        if isinstance(public_user_or_credentials, dict):
+            email = public_user_or_credentials.get("email", "").strip().lower()
+            if not email:
+                raise ValueError("Email is required to create a superuser.")
+            raw_password = public_user_or_credentials.get("password")
+            first_name = public_user_or_credentials.get("first_name", "")
+            middle_name = public_user_or_credentials.get("middle_name", "")
+            last_name = public_user_or_credentials.get("last_name", "")
+            mobile_number = public_user_or_credentials.get("mobile_number")
+            is_active = public_user_or_credentials.get("is_active", True)
+            is_raw_password = bool(raw_password and not raw_password.startswith(("pbkdf2_", "argon2", "bcrypt", "!")))
+        else:
+            public_user = public_user_or_credentials
+            email = public_user.email.lower()
+            raw_password = getattr(public_user, "password", None)
+            first_name = getattr(public_user, "first_name", "")
+            middle_name = getattr(public_user, "middle_name", "")
+            last_name = getattr(public_user, "last_name", "")
+            mobile_number = getattr(public_user, "mobile_number", None)
+            is_active = getattr(public_user, "is_active", True)
+            is_raw_password = False
+
+        user, created = User.objects.get_or_create(
+            email=email,
             defaults={
-                "first_name": public_user.first_name,
-                "middle_name": public_user.middle_name,
-                "last_name": public_user.last_name,
-                "mobile_number": public_user.mobile_number,
-                "is_active": True,
+                "first_name": first_name,
+                "middle_name": middle_name,
+                "last_name": last_name,
+                "mobile_number": mobile_number,
+                "is_active": is_active,
                 "is_staff": True,
                 "is_superuser": True,
-                "password": public_user.password,
+                "password": raw_password or "",
             },
         )
-        updated_fields = []
-        for field in ("first_name", "middle_name", "last_name", "mobile_number", "password"):
-            value = getattr(public_user, field, None)
-            if value is not None and getattr(user, field, None) != value:
-                setattr(user, field, value)
-                updated_fields.append(field)
-        for field in ("is_active", "is_staff", "is_superuser"):
-            if not getattr(user, field, False):
-                setattr(user, field, True)
-                updated_fields.append(field)
-        if updated_fields:
-            user.save(update_fields=updated_fields)
+        if created and is_raw_password:
+            user.set_password(raw_password)
+            user.save(update_fields=["password"])
 
-        super_group, _ = Group.objects.get_or_create(name="Super User")
+        updated_fields = []
+        for field, val in (
+            ("first_name", first_name),
+            ("middle_name", middle_name),
+            ("last_name", last_name),
+            ("mobile_number", mobile_number),
+        ):
+            if val is not None and getattr(user, field, None) != val:
+                setattr(user, field, val)
+                updated_fields.append(field)
+
+        if raw_password:
+            if is_raw_password:
+                if not user.check_password(raw_password):
+                    user.set_password(raw_password)
+                    updated_fields.append("password")
+            elif getattr(user, "password", None) != raw_password:
+                user.password = raw_password
+                updated_fields.append("password")
+
+        for flag in ("is_active", "is_staff", "is_superuser"):
+            if not getattr(user, flag, False):
+                setattr(user, flag, True)
+                updated_fields.append(flag)
+
+        if updated_fields:
+            user.save(update_fields=list(set(updated_fields)))
+
         admin_group, _ = Group.objects.get_or_create(name="Tenant Admin")
-        user.groups.add(super_group, admin_group)
+        user.groups.add(admin_group)
+        super_group = Group.objects.filter(name="Super User").first()
+        if super_group:
+            user.groups.add(super_group)
         return user
+
+    @classmethod
+    def create_tenant_superuser(cls, tenant_or_schema, user_or_credentials):
+        """Create or ensure a superuser within the specified tenant schema using provided credentials."""
+        schema_name = getattr(tenant_or_schema, "schema_name", tenant_or_schema)
+        return cls.ensure_superuser(user_or_credentials, schema_name=schema_name)
 
     @classmethod
     def sync_owner_profile(cls, user, update_fields=None):

@@ -10,6 +10,9 @@ One-shot initial setup for the O-hm platform (idempotent, safe to re-run):
 
 python manage.py bootstrap_platform --email admin@ohm.com --password admin --first-name "Pankaj" --last-name "shinde" --mobile-number "9518972842"
 
+Optional: only generate groups & roles (no tenant, domains, plans, or users created)
+  --groups-only
+
 Optional: also seed groups/roles inside tenant schemas
   --all-tenants            every existing tenant schema
   --schema acme            specific tenant schema (repeatable)
@@ -39,7 +42,7 @@ ROLE_SPECS = [
         "role_name": "Super Admin",
         "group": "Super User",
         "rank": 100,
-        "scopes": {"public": [{}], "tenant": [{}]},
+        "scopes": {"public": [{}]},
     },
     {
         "code": "TENANT_ADMIN",
@@ -68,13 +71,6 @@ ROLE_SPECS = [
         "scopes": {"tenant": []},
     },
     {
-        "code": "OPS_MANAGER",
-        "role_name": "Ops Manager",
-        "group": "OPS_MANAGER",
-        "rank": 80,
-        "scopes": {"public": [], "tenant": []},
-    },
-    {
         "code": "VENUE_ADMIN",
         "role_name": "Venue Admin",
         "group": "VENUE_ADMIN",
@@ -94,13 +90,6 @@ ROLE_SPECS = [
         "group": "RESOURCE_ADMIN",
         "rank": 70,
         "scopes": {"tenant": []},
-    },
-    {
-        "code": "STAFF",
-        "role_name": "Staff Member",
-        "group": "STAFF",
-        "rank": 50,
-        "scopes": {"public": [], "tenant": []},
     },
 ]
 
@@ -142,12 +131,17 @@ def permission_ids(rules):
 class Command(BaseCommand):
     help = (
         "Initial platform setup: public tenant + domains, Super User / Tenant Admin "
-        "groups & roles, Trial plan, Super Admin user with group + role. Idempotent."
+        "groups & roles, Trial plan, Super Admin user with group + role. Idempotent. "
+        "Use --groups-only to only generate groups and roles."
     )
 
     def add_arguments(self, parser):
-        parser.add_argument("--email", required=True)
-        parser.add_argument("--password", required=True)
+        parser.add_argument("--groups-only", action="store_true",
+                            help="Only generate/seed groups and roles without creating tenants, domains, plans, or users.")
+        parser.add_argument("--email", default=None,
+                            help="Email for the platform super admin (required unless --groups-only is set).")
+        parser.add_argument("--password", default=None,
+                            help="Password for the platform super admin (required unless --groups-only is set).")
         parser.add_argument("--first-name", default=None)
         parser.add_argument("--last-name", default=None)
         parser.add_argument("--mobile-number", default=None)
@@ -195,9 +189,6 @@ class Command(BaseCommand):
     def handle(self, *args, **opts):
         public = get_public_schema_name()
         Tenant_ = get_tenant_model()
-        email = opts["email"].strip().lower()
-        hosts = self._hosts()
-        now = timezone.now()
 
         extra_schemas = []
         if opts["all_tenants"]:
@@ -210,6 +201,26 @@ class Command(BaseCommand):
             if not Tenant_.objects.filter(schema_name=name).exists():
                 raise CommandError(f"Unknown tenant schema: {name}")
             extra_schemas.append(name)
+
+        if opts["groups_only"]:
+            with schema_context(public):
+                self.stdout.write("Seeding groups & roles (public)...")
+                self.seed_roles("public")
+
+            for schema in dict.fromkeys(extra_schemas):
+                self.stdout.write(f"Seeding groups ({schema})...")
+                with schema_context(schema):
+                    self.seed_roles("tenant")
+
+            self.stdout.write(self.style.SUCCESS("Groups and roles seeded successfully."))
+            return
+
+        if not opts.get("email") or not opts.get("password"):
+            raise CommandError("--email and --password are required unless --groups-only is specified.")
+
+        email = opts["email"].strip().lower()
+        hosts = self._hosts()
+        now = timezone.now()
 
         with schema_context(public):
             # 1. Public tenant
@@ -279,14 +290,24 @@ class Command(BaseCommand):
                 profile.save(update_fields=["title"])
 
             # 5. Assign Super User group (platform-wide)
-            user.groups.add(Group.objects.get(name="Super User"))
+            super_group = Group.objects.filter(name="Super User").first()
+            if super_group:
+                user.groups.add(super_group)
             AccountsService.assign_all_permissions_to_superuser(user)
 
-        # Optional: groups inside tenant schemas
-        for schema in dict.fromkeys(extra_schemas):
-            self.stdout.write(f"Seeding groups ({schema})...")
+        # Ensure groups and superuser exist within existing tenant schemas
+        target_schemas = extra_schemas if opts["schema"] else list(
+            Tenant_.objects.exclude(schema_name=public).values_list("schema_name", flat=True)
+        )
+        for schema in dict.fromkeys(target_schemas):
+            if opts["all_tenants"] or schema in opts["schema"]:
+                self.stdout.write(f"Seeding groups ({schema})...")
+                with schema_context(schema):
+                    self.seed_roles("tenant")
+
             with schema_context(schema):
-                self.seed_roles("tenant")
+                su = AccountsService.ensure_superuser(user)
+                self.stdout.write(f"  [{schema}] Superuser '{su.email}' ensured in tenant schema.")
 
         self.stdout.write(self.style.SUCCESS(
             f"Platform ready on: {', '.join(hosts)}\n"

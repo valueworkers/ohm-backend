@@ -393,6 +393,8 @@ class SuperUserTenantAccessTestCase(TenantTestCase):
 
     def setUp(self):
         super().setUp()
+        from django.core.cache import cache
+        cache.clear()
         self.client = APIClient()
         self.public_schema = get_public_schema_name()
 

@@ -142,8 +142,8 @@ When a schema is created or synced, `seed_roles` automatically builds `auth.Grou
 
 ```python
 ROLE_SPECS = [
-    # Public Platform Super Admin: unrestricted access
-    {"code": "SUPER_ADMIN", "group": "Super User", "scopes": {"public": [{}], "tenant": [{}]}},
+    # Public Platform Super Admin: unrestricted access (public schema only)
+    {"code": "SUPER_ADMIN", "group": "Super User", "scopes": {"public": [{}]}},
 
     # Tenant Admin: unrestricted access across all tenant product modules
     {"code": "TENANT_ADMIN", "group": "Tenant Admin", "scopes": {
@@ -153,11 +153,9 @@ ROLE_SPECS = [
 
     # Specific built-in role groups:
     {"code": "CUSTOMER", "group": "CUSTOMER", "scopes": {"tenant": []}},
-    {"code": "OPS_MANAGER", "group": "OPS_MANAGER", "scopes": {"public": [], "tenant": []}},
     {"code": "VENUE_ADMIN", "group": "VENUE_ADMIN", "scopes": {"tenant": []}},
     {"code": "SERVICE_ADMIN", "group": "SERVICE_ADMIN", "scopes": {"tenant": []}},
     {"code": "RESOURCE_ADMIN", "group": "RESOURCE_ADMIN", "scopes": {"tenant": []}},
-    {"code": "STAFF", "group": "STAFF", "scopes": {"public": [], "tenant": []}},
 ]
 ```
 
