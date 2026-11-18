@@ -332,7 +332,7 @@
           "item": [
             {
               "name": "Public: review sent quote",
-              "description": "Uses the buyer’s quote accept token. No login required.",
+              "description": "Uses the buyer\u2019s quote accept token. No login required.",
               "event": [],
               "auth": {},
               "request": {
@@ -4671,7 +4671,7 @@
                     },
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package · monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package \u00b7 monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -16487,6 +16487,3914 @@
                         "care",
                         "attendance",
                         "mark-today",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "09 - Wallet (Balance, Auto-pay, Top-up, Refunds)",
+          "description": "Customer and staff digital wallet management, transactional audit log, order auto-pay, combo payment, and instant refunds.",
+          "item": [
+            {
+              "name": "List wallets",
+              "description": "Paginated list of wallets across the workspace (Tenant Admin).",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/?page={{page}}&page_size={{pageSize}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}"
+                    }
+                  ],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Get wallet by ID",
+              "description": "Retrieve wallet details, current balance, and owner profile.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/{{walletId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "{{walletId}}",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Get my wallet",
+              "description": "Retrieve current user's authenticated wallet and balance.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/my-wallet/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "my-wallet",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Wallet transaction history",
+              "description": "Transaction history audit log with optional transaction_type, source_type, and date filters.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/{{walletId}}/history/?page={{page}}&page_size={{pageSize}}&transaction_type=CREDIT",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "{{walletId}}",
+                    "history",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "{{page}}"
+                    },
+                    {
+                      "key": "page_size",
+                      "value": "{{pageSize}}"
+                    },
+                    {
+                      "key": "transaction_type",
+                      "value": "CREDIT"
+                    }
+                  ],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            },
+            {
+              "name": "Credit wallet (Top-up)",
+              "description": "Credit balance to wallet with transaction audit logging.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/{{walletId}}/credit/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "{{walletId}}",
+                    "credit",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": \"500.00\",\n  \"source\": \"TOPUP\",\n  \"description\": \"Customer account balance top-up\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Debit wallet",
+              "description": "Deduct balance from wallet with concurrency safety.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/{{walletId}}/debit/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "{{walletId}}",
+                    "debit",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": \"150.00\",\n  \"source\": \"OTHER\",\n  \"description\": \"Manual service fee deduction\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Process order auto-pay",
+              "description": "Automatically settle invoice or booking order using available wallet balance.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/{{walletId}}/auto-pay/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "{{walletId}}",
+                    "auto-pay",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"order_id\": \"{{primaryOrderId}}\",\n  \"invoice_id\": \"{{billingInvoiceId}}\",\n  \"amount\": \"500.00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Credit excess payment to wallet",
+              "description": "Credit invoice overpayments directly into the customer wallet.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/{{walletId}}/excess-payment/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "{{walletId}}",
+                    "excess-payment",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"invoice_id\": \"{{billingInvoiceId}}\",\n  \"excess_amount\": \"50.00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Split payment (Wallet + Cash combo)",
+              "description": "Split payment between customer wallet balance and collected cash.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/{{walletId}}/wallet-cash-combo/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "{{walletId}}",
+                    "wallet-cash-combo",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"invoice_id\": \"{{billingInvoiceId}}\",\n  \"wallet_amount\": \"200.00\",\n  \"cash_amount\": \"300.00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Refund invoice to wallet",
+              "description": "Refund paid invoice amount directly back to user wallet.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/{{walletId}}/refund/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "{{walletId}}",
+                    "refund",
+                    ""
+                  ],
+                  "query": [],
+                  "variable": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"invoice_id\": \"{{billingInvoiceId}}\",\n  \"amount\": \"150.00\",\n  \"reason\": \"Cancelled clinical session refund\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "Wallet date-range summary",
+              "description": "Aggregates total credits, debits, net balance change, and transaction counts.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/wallet/{{walletId}}/summary/?start_date=2026-01-01&end_date=2026-12-31",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "wallet",
+                    "{{walletId}}",
+                    "summary",
+                    ""
+                  ],
+                  "query": [
+                    {
+                      "key": "start_date",
+                      "value": "2026-01-01"
+                    },
+                    {
+                      "key": "end_date",
+                      "value": "2026-12-31"
+                    }
+                  ],
+                  "variable": []
+                },
+                "body": {}
+              },
+              "response": []
+            }
+          ]
+        },
+        {
+          "name": "10 - Payroll (Attendance, Salary Structures, Reports, Payouts)",
+          "description": "Comprehensive employee attendance, dynamic salary structure configuration, automated payroll calculation, and payout tracking.",
+          "item": [
+            {
+              "name": "01 - Attendance Status Codes",
+              "description": "Configurable attendance statuses (Present, Absent, Half-Day, Paid Leave, etc.).",
+              "item": [
+                {
+                  "name": "List attendance status codes",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/attendance-status/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "attendance-status",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create attendance status code",
+                  "description": "",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"attendanceStatusId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/attendance-status/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "attendance-status",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"code\": \"P\",\n  \"label\": \"Present\",\n  \"is_active\": true\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get attendance status code",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/attendance-status/{{attendanceStatusId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "attendance-status",
+                        "{{attendanceStatusId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update attendance status code",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/attendance-status/{{attendanceStatusId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "attendance-status",
+                        "{{attendanceStatusId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"label\": \"Present (Full Day)\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete attendance status code",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/attendance-status/{{attendanceStatusId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "attendance-status",
+                        "{{attendanceStatusId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "02 - Attendance Records",
+              "description": "Daily staff attendance logging and queries.",
+              "item": [
+                {
+                  "name": "List attendance records",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/attendance/?date=2026-11-18&user_id={{tenantUserId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "attendance",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "date",
+                          "value": "2026-11-18"
+                        },
+                        {
+                          "key": "user_id",
+                          "value": "{{tenantUserId}}"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Log or update staff attendance",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/attendance/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "attendance",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"user\": \"{{tenantUserId}}\",\n  \"date\": \"2026-11-18\",\n  \"status\": \"{{attendanceStatusId}}\",\n  \"duration\": \"08:00:00\",\n  \"reason\": \"Regular duty shift\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "03 - Employee Payroll Overview",
+              "description": "High-level summary of active employees with current compensation rates.",
+              "item": [
+                {
+                  "name": "List employee payroll overview",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/employee-payroll/?page={{page}}&page_size={{pageSize}}&search=nurse",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "employee-payroll",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "page",
+                          "value": "{{page}}"
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}"
+                        },
+                        {
+                          "key": "search",
+                          "value": "nurse"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get employee payroll detail",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/employee-payroll/{{tenantUserId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "employee-payroll",
+                        "{{tenantUserId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "04 - Salary Structures",
+              "description": "Staff base salary definitions, increments, hourly/daily/monthly rates, and PF/ESI deductions.",
+              "item": [
+                {
+                  "name": "List salary structures",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/salary-structures/?user={{tenantUserId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "salary-structures",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "user",
+                          "value": "{{tenantUserId}}"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create salary structure",
+                  "description": "",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"salaryStructureId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/salary-structures/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "salary-structures",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"user\": \"{{tenantUserId}}\",\n  \"salary_type\": \"MONTHLY\",\n  \"change_type\": \"BASE_SALARY\",\n  \"amount\": \"50000.00\",\n  \"pf_amount\": \"1800.00\",\n  \"esi_amount\": \"375.00\",\n  \"salary_mode\": \"BANK_TRANSFER\",\n  \"effective_from\": \"2026-01-01\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get salary structure",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/salary-structures/{{salaryStructureId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "salary-structures",
+                        "{{salaryStructureId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update salary structure",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/salary-structures/{{salaryStructureId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "salary-structures",
+                        "{{salaryStructureId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"amount\": \"55000.00\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete salary structure",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/salary-structures/{{salaryStructureId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "salary-structures",
+                        "{{salaryStructureId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "05 - Salary Reports & Payouts",
+              "description": "Calculated salary reports, monthly finalization, and payout transaction records.",
+              "item": [
+                {
+                  "name": "List salary reports",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/reports/?start_date=2026-11-01&end_date=2026-11-30&is_finalized=false",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "reports",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "start_date",
+                          "value": "2026-11-01"
+                        },
+                        {
+                          "key": "end_date",
+                          "value": "2026-11-30"
+                        },
+                        {
+                          "key": "is_finalized",
+                          "value": "false"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get salary report by ID",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/reports/{{salaryReportId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "reports",
+                        "{{salaryReportId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Refresh salary calculation report",
+                  "description": "Trigger background calculation and recalculation of user payroll.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/reports/refresh/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "reports",
+                        "refresh",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"user_id\": \"{{tenantUserId}}\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Finalize salary report",
+                  "description": "Freeze and lock a monthly salary report for payouts.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/reports/{{salaryReportId}}/finalize/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "reports",
+                        "{{salaryReportId}}",
+                        "finalize",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "List salary transactions",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/salary-transactions/?user={{tenantUserId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "salary-transactions",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "user",
+                          "value": "{{tenantUserId}}"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Record salary payout transaction",
+                  "description": "",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"salaryTransactionId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/salary-transactions/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "salary-transactions",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"salary_report_id\": 1,\n  \"amount_paid\": \"47825.00\",\n  \"payment_method\": \"BANK_TRANSFER\",\n  \"payment_reference\": \"NEFT-20261130-001\",\n  \"note\": \"November 2026 salary payout\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get salary transaction",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/payroll/salary-transactions/{{salaryTransactionId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "payroll",
+                        "salary-transactions",
+                        "{{salaryTransactionId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "11 - Notifications (In-app, Live Broadcasts, Templates, Subscriptions)",
+          "description": "Multi-channel notification engine (In-App, Email, SMS, WhatsApp) with customizable templates, real-time WebSocket broadcasting, and read status tracking.",
+          "item": [
+            {
+              "name": "01 - Notification Messages",
+              "description": "In-app notifications, status updates, read/unread states.",
+              "item": [
+                {
+                  "name": "List notifications",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/?status=UNREAD&category=DUTY&page={{page}}&page_size={{pageSize}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "status",
+                          "value": "UNREAD"
+                        },
+                        {
+                          "key": "category",
+                          "value": "DUTY"
+                        },
+                        {
+                          "key": "page",
+                          "value": "{{page}}"
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create notification",
+                  "description": "",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"notificationId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"recipient\": \"{{tenantUserId}}\",\n  \"channel\": \"IN_APP\",\n  \"category\": \"DUTY\",\n  \"priority\": \"HIGH\",\n  \"title\": \"Clinical Shift Reminder\",\n  \"message\": \"Your duty starts in 1 hour at Main Clinic.\",\n  \"extra_data\": {\n    \"duty_id\": \"D-101\"\n  }\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get notification by ID",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/{{notificationId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "{{notificationId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Mark notification as read",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/{{notificationId}}/mark_read/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "{{notificationId}}",
+                        "mark_read",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Bulk mark notifications as read",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/mark_read_bulk/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "mark_read_bulk",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"ids\": [\n    1\n  ]\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get unread notification count",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/unread_count/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "unread_count",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "02 - Notification Templates",
+              "description": "Preconfigured message templates across In-App, Email, SMS, WhatsApp channels.",
+              "item": [
+                {
+                  "name": "List notification templates",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/templates/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "templates",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create notification template",
+                  "description": "",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"notificationTemplateId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/templates/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "templates",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"name\": \"shift_reminder\",\n  \"channel\": \"IN_APP\",\n  \"category\": \"DUTY\",\n  \"subject\": \"Duty Shift Reminder\",\n  \"body\": \"Hello {{name}}, reminder for your duty scheduled at {{start_time}}.\",\n  \"is_active\": true\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get notification template",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/templates/{{notificationTemplateId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "templates",
+                        "{{notificationTemplateId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update notification template",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/templates/{{notificationTemplateId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "templates",
+                        "{{notificationTemplateId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"body\": \"Hello {{name}}, prompt reminder: your clinical duty starts at {{start_time}}.\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete notification template",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/templates/{{notificationTemplateId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "templates",
+                        "{{notificationTemplateId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "03 - Subscriber Push & Delivery",
+              "description": "Subscriber notification logs and live broadcast dispatching.",
+              "item": [
+                {
+                  "name": "List subscriber notification history",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/subscriber-notifications/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "subscriber-notifications",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Send subscriber notification broadcast",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/notifications/subscriber-notifications/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "notifications",
+                        "subscriber-notifications",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"recipient_id\": 1,\n  \"channel\": \"IN_APP\",\n  \"category\": \"SYSTEM\",\n  \"title\": \"System Announcement\",\n  \"message\": \"Routine server maintenance scheduled tonight at 11 PM UTC.\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "12 - Content (FAQs, Videos, Contacts)",
+          "description": "Publishing and management of FAQs, educational multimedia videos, and customer support contact channels.",
+          "item": [
+            {
+              "name": "01 - FAQs",
+              "description": "FAQ topics and nested Q&A items for customer support and patient education.",
+              "item": [
+                {
+                  "name": "List FAQ topics",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/faq/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "faq",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create FAQ topic with Q&A",
+                  "description": "",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"faqTopicId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/faq/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "faq",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"topic\": \"Home Healthcare & Nursing\",\n  \"qanda\": [\n    {\n      \"question\": \"How do I schedule an in-home nursing visit?\",\n      \"answer\": \"You can book directly via the mobile app or contact our 24/7 care coordination desk.\"\n    },\n    {\n      \"question\": \"What is the cancellation policy for home visits?\",\n      \"answer\": \"Visits can be rescheduled or cancelled with 4 hours prior notice at no additional fee.\"\n    }\n  ]\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get FAQ topic by ID",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/faq/{{faqTopicId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "faq",
+                        "{{faqTopicId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update FAQ topic and Q&A",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/faq/{{faqTopicId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "faq",
+                        "{{faqTopicId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"topic\": \"Home Healthcare, Nursing & Palliative Care\",\n  \"qanda\": [\n    {\n      \"question\": \"How do I schedule an in-home nursing visit?\",\n      \"answer\": \"Book directly through the patient portal or dial our dedicated support desk.\"\n    }\n  ]\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete FAQ topic",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/faq/{{faqTopicId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "faq",
+                        "{{faqTopicId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "02 - Media Videos",
+              "description": "Educational, clinical tutorial, and exercise videos.",
+              "item": [
+                {
+                  "name": "List media videos",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/video/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "video",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create media video entry",
+                  "description": "",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"videoId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/video/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "video",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"title\": \"Post-Operative Physiotherapy Routine\",\n  \"video\": \"https://res.cloudinary.com/demo/video/upload/physio-routine.mp4\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get media video entry",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/video/{{videoId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "video",
+                        "{{videoId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update media video entry",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/video/{{videoId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "video",
+                        "{{videoId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"title\": \"Post-Operative Physiotherapy Routine (Guided Tutorial)\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete media video entry",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/video/{{videoId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "video",
+                        "{{videoId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "03 - Contacts Directory",
+              "description": "Public and customer contact points (Emergency numbers, WhatsApp, Websites).",
+              "item": [
+                {
+                  "name": "List contact directory",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/contacts/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "contacts",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Create contact entry",
+                  "description": "",
+                  "event": [
+                    {
+                      "listen": "test",
+                      "script": {
+                        "type": "text/javascript",
+                        "exec": [
+                          "if(pm.response.code===201) pm.environment.set(\"contactId\", pm.response.json().id);"
+                        ]
+                      }
+                    }
+                  ],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "POST",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/contacts/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "contacts",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"display_name\": \"Emergency Patient Helpdesk\",\n  \"mobile_number\": \"+919876543210\",\n  \"email\": \"emergency@careclinic.com\",\n  \"platform\": \"PHONE\",\n  \"url\": \"tel:+919876543210\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Get contact entry",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/contacts/{{contactId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "contacts",
+                        "{{contactId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Update contact entry",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/contacts/{{contactId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "contacts",
+                        "{{contactId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"mobile_number\": \"+919876543211\",\n  \"url\": \"tel:+919876543211\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Delete contact entry",
+                  "description": "",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "DELETE",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/content/contacts/{{contactId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "content",
+                        "contacts",
+                        "{{contactId}}",
+                        ""
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "13 - Analytics (KPIs, Salary & Attendance Trends, Payment Analytics)",
+          "description": "Executive dashboard KPIs, staff attendance tracking, payroll trends, payment mode analytics, and financial auditing.",
+          "item": [
+            {
+              "name": "01 - KPIs & Operational Trends",
+              "description": "High-level metrics, daily staff attendance tracking, and user salary trends.",
+              "item": [
+                {
+                  "name": "Dashboard KPIs",
+                  "description": "Aggregated key performance indicators across bookings, active patients, and revenue.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/analytics/dashboard-kpis/?date=2026-11-18&range=month",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "analytics",
+                        "dashboard-kpis",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "date",
+                          "value": "2026-11-18"
+                        },
+                        {
+                          "key": "range",
+                          "value": "month"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Staff Attendance Analysis",
+                  "description": "Attendance matrix and duty completion trends for staff members.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/analytics/attendance/?start_date=2026-11-01&end_date=2026-11-30&user_id={{tenantUserId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "analytics",
+                        "attendance",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "start_date",
+                          "value": "2026-11-01"
+                        },
+                        {
+                          "key": "end_date",
+                          "value": "2026-11-30"
+                        },
+                        {
+                          "key": "user_id",
+                          "value": "{{tenantUserId}}"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Salary Compensation Analysis",
+                  "description": "Compensation trends, gross salary, deductions, and payout history.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/analytics/salary/?period=monthly&start_date=2026-01-01&end_date=2026-11-30&user_id={{tenantUserId}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "analytics",
+                        "salary",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "period",
+                          "value": "monthly"
+                        },
+                        {
+                          "key": "start_date",
+                          "value": "2026-01-01"
+                        },
+                        {
+                          "key": "end_date",
+                          "value": "2026-11-30"
+                        },
+                        {
+                          "key": "user_id",
+                          "value": "{{tenantUserId}}"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "02 - Payment Master Analytics",
+              "description": "Collection breakdowns, month-wise performance, and payment mode distribution.",
+              "item": [
+                {
+                  "name": "Daily Collection Analytics",
+                  "description": "Revenue and collections logged on a specific calendar date.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/analytics/payment-master/daily-collection/?date=2026-11-18",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "analytics",
+                        "payment-master",
+                        "daily-collection",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "date",
+                          "value": "2026-11-18"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Month-wise Performance Analytics",
+                  "description": "Month-by-month financial summary and billing revenue trends across the entire year.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/analytics/payment-master/month-wise-performance/?year=2026",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "analytics",
+                        "payment-master",
+                        "month-wise-performance",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "year",
+                          "value": "2026"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Payment Mode Analytics",
+                  "description": "Revenue distribution and percentages across payment modes (Cash, Razorpay/UPI, Bank Transfer, Wallet).",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/analytics/payment-master/payment-mode-analytics/?start_date=2026-11-01&end_date=2026-11-30",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "analytics",
+                        "payment-master",
+                        "payment-mode-analytics",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "start_date",
+                          "value": "2026-11-01"
+                        },
+                        {
+                          "key": "end_date",
+                          "value": "2026-11-30"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                }
+              ]
+            },
+            {
+              "name": "03 - Invoices Analytics",
+              "description": "Deep-filtered invoice lists for accounting and reconciliation.",
+              "item": [
+                {
+                  "name": "List analytics invoices",
+                  "description": "Query invoices using issue_date ranges, patient, and payment status.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/analytics/invoices/?start_date=2026-11-01&end_date=2026-11-30&status=PAID&page={{page}}&page_size={{pageSize}}",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "analytics",
+                        "invoices",
+                        ""
+                      ],
+                      "query": [
+                        {
+                          "key": "start_date",
+                          "value": "2026-11-01"
+                        },
+                        {
+                          "key": "end_date",
+                          "value": "2026-11-30"
+                        },
+                        {
+                          "key": "status",
+                          "value": "PAID"
+                        },
+                        {
+                          "key": "page",
+                          "value": "{{page}}"
+                        },
+                        {
+                          "key": "page_size",
+                          "value": "{{pageSize}}"
+                        }
+                      ],
+                      "variable": []
+                    },
+                    "body": {}
+                  },
+                  "response": []
+                },
+                {
+                  "name": "Retrieve analytics invoice detail",
+                  "description": "Retrieve individual invoice detail view under analytics scope.",
+                  "event": [],
+                  "auth": {},
+                  "request": {
+                    "auth": {
+                      "type": "bearer",
+                      "bearer": [
+                        {
+                          "key": "token",
+                          "value": "{{tenantAccessToken}}",
+                          "type": "string"
+                        }
+                      ]
+                    },
+                    "method": "GET",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "type": "text"
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "type": "text"
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/analytics/invoices/{{billingInvoiceId}}/",
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "path": [
+                        "api",
+                        "analytics",
+                        "invoices",
+                        "{{billingInvoiceId}}",
                         ""
                       ],
                       "query": [],
