@@ -691,3 +691,202 @@ Prospect quotes are available to platform admins in the public schema and to aut
 - `GET /api/platform/quotes/{id}/pdf/` — Download a PDF.
 - `GET/POST /api/platform/public/quotes/{accept_token}/respond/` — Publicly view and accept or reject a sent quote.
 - `GET /api/platform/quotes/stats/` — Quote analytics for the current scope.
+
+---
+
+## 13. Care Product Module APIs (`/api/care/`)
+
+The Care product module provides clinical, booking order, and patient lifecycle management for healthcare and care provider workspaces. All endpoints are routed under `/api/care/` (with `/api/care/` supported as a backward-compatible alias). All endpoints are scoped strictly to the calling tenant's isolated schema and require active plan entitlement.
+
+### Prerequisites & Headers
+- **`X-Tenant: <schema-slug>`** (Required): Routes the request to the tenant workspace.
+- **`Authorization: Bearer <token>`** (Required): Authentication JWT containing matching `schema` claim.
+- **Plan Entitlement**: Tenant must have an active subscription including feature code `"care"` or `"medicare"` (or `Tenant.modules` containing `"care"`). Unentitled requests receive `403 Forbidden` (`"Your subscription plan does not include access to the 'care' module."`).
+
+---
+
+### 13.1 Patients & Clinical Records
+
+#### List / Create Patients
+- **`GET /api/care/patients/`**
+  - **Query Params**: `search` (name, phone, patient_id), `is_deleted` (default: false), `status` (active boolean), `page`, `page_size`.
+  - **Response `200 OK`**: Paginated array of patient records with auto-generated identifiers (`patient_id`: `"PAT-00001"`).
+- **`POST /api/care/patients/`**
+  - **Payload**:
+    ```json
+    {
+      "first_name": "Aarav",
+      "last_name": "Sharma",
+      "phone": "+919876543210",
+      "email": "aarav.sharma@example.com",
+      "dob": "1988-06-15",
+      "gender": "MALE",
+      "blood_group": "B+",
+      "address": {
+        "line1": "Flat 402, Lotus Residency",
+        "line2": "MG Road",
+        "locality": "Indiranagar",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560038"
+      },
+      "medical_history": "Hypertension, mild asthma",
+      "allergies": "Penicillin",
+      "emergency_contact_name": "Priya Sharma",
+      "emergency_contact_phone": "+919876543211",
+      "emergency_contact_relation": "Spouse"
+    }
+    ```
+  - **Response `201 Created`**: Returns created patient object with sequential `patient_id`.
+
+#### Retrieve / Update / Soft-Delete Patient
+- **`GET /api/care/patients/{id}/`**
+- **`PATCH /api/care/patients/{id}/`**
+- **`DELETE /api/care/patients/{id}/`**
+  - Soft-deletes the patient (`is_deleted=true`, `status=false`, `deleted_at` timestamp). Returns `204 No Content`.
+- **`PATCH /api/care/patients/{id}/active-status/`**
+  - **Payload**: `{"status": false}`
+  - Explicitly toggle active status without deleting.
+
+#### Patient Documents
+- **`GET /api/care/patient-documents/?patient={patient_id}`**
+- **`POST /api/care/patient-documents/`** (Multipart form data for document files).
+
+---
+
+### 13.2 Packages & Care Catalog
+
+Packages define pricing structures for healthcare delivery (hourly, daily, weekly, monthly). Each package targets **exactly one** catalog entity (`venue`, `service`, or `resource`), enforced at both serializer and database constraint levels.
+
+#### List / Create Packages
+- **`GET /api/care/packages/`**
+- **`POST /api/care/packages/`**
+  - **Payload**:
+    ```json
+    {
+      "name": "Intensive Post-Op Nursing (Daily)",
+      "package_type": "IN_HOUSE",
+      "period": "DAILY",
+      "price": "2500.00",
+      "registration_fees": "500.00",
+      "service": 12,
+      "description": "Daily 12-hour specialized nursing care."
+    }
+    ```
+  - **Validation**: Supplying multiple targets (e.g. `service` and `venue`) or zero targets returns `400 Bad Request` (`"Package must be linked to exactly one target entity"`).
+
+---
+
+### 13.3 Restructured Booking Orders
+
+OHM decouples overarching patient agreements (`PrimaryOrder`) from specific operational cycles (`SecondaryOrder`) and add-on care items (`TernaryOrder`).
+
+```
+PrimaryOrder (Patient Agreement & Cumulative Bill)
+   ├── SecondaryOrder (Cycle 1: Package, Service, Venue, Dates, Base Amount)
+   │     ├── TernaryOrder (Add-on Service / Rental Resource)
+   │     └── TernaryOrder (Specialized Diagnostic Procedure)
+   └── SecondaryOrder (Cycle 2: Auto-continued next period)
+```
+
+#### Primary Orders
+- **`GET /api/care/primary-orders/`**
+- **`POST /api/care/primary-orders/`**
+  - **Payload**:
+    ```json
+    {
+      "patient": 5,
+      "notes": "Post knee arthroplasty home rehabilitation care plan"
+    }
+    ```
+  - **Response `201 Created`**: Returns order with `order_id` format `#P00005000000`.
+
+#### Secondary Orders
+- **`GET /api/care/secondary-orders/`**
+- **`POST /api/care/secondary-orders/`**
+  - **Payload**:
+    ```json
+    {
+      "primary_order": 1,
+      "package": 3,
+      "service": 12,
+      "booking_type": "CLIENT_SIDE",
+      "client_address": {
+        "line1": "Flat 402, Lotus Residency",
+        "city": "Bengaluru",
+        "pincode": "560038"
+      },
+      "start_datetime": "2026-11-20T09:00:00Z",
+      "end_datetime": "2026-11-27T09:00:00Z",
+      "subtotal": "17500.00",
+      "discount_amount": "1000.00",
+      "auto_continue": true
+    }
+    ```
+  - Automatically updates parent `PrimaryOrder.total_bill` and start/end date ranges.
+
+#### Generate Invoice for Secondary Order
+- **`POST /api/care/secondary-orders/{id}/generate-invoice/`**
+  - Generates or retrieves an itemized `apps.billing.Invoice` (`SINV-YYYY-XXXXX`) calculating CGST, SGST, IGST using the provider's tax settings.
+  - **Response `200 OK`**:
+    ```json
+    {
+      "secondary_order_id": "#P00001S0001",
+      "invoice_id": 42,
+      "invoice_number": "SINV-2026-00001",
+      "status": "DRAFT",
+      "total_amount": "19470.00"
+    }
+    ```
+
+#### Ternary Orders (Add-ons)
+- **`GET /api/care/ternary-orders/`**
+- **`POST /api/care/ternary-orders/`**
+  - Links an add-on `service`, `resource`, or `package` to an existing `SecondaryOrder`. Recomputes parent secondary total amount.
+- **`POST /api/care/ternary-orders/{id}/generate-invoice/`**
+  - Generates an add-on itemized invoice (`TINV-YYYY-XXXXX`).
+
+---
+
+### 13.4 Payments & Per-Tenant Razorpay
+
+#### Tenant Payment Credentials Configuration
+- **`GET /api/care/payment-config/`**
+- **`PATCH /api/care/payment-config/`**
+  - **Payload**:
+    ```json
+    {
+      "razorpay_key_id": "rzp_live_abc123",
+      "razorpay_key_secret": "secret_key_xyz",
+      "razorpay_webhook_secret": "webhook_secret_789",
+      "currency": "INR",
+      "is_active": true
+    }
+    ```
+
+#### Razorpay Order Initiation
+- **`POST /api/care/razorpay/initiate/`**
+  - **Payload**: `{"invoice_id": 42}`
+  - Dynamically initializes Razorpay client using this tenant's stored credentials, creates an order with Razorpay, and returns order metadata.
+
+#### Razorpay Payment Signature Verification
+- **`POST /api/care/razorpay/verify/`**
+  - **Payload**:
+    ```json
+    {
+      "invoice_id": 42,
+      "razorpay_order_id": "order_EKfUsGQqqPt03x",
+      "razorpay_payment_id": "pay_29QQoUBi66xm2f",
+      "razorpay_signature": "9ef4b0de9566e7314f777cb4e7a80280080142a204c0983d2495088ecd517b96"
+    }
+    ```
+  - Verifies HMAC SHA-256 signature, creates verified `billing.Payment` record in the tenant schema, adjusts `paid_amount` and `remaining_amount`, and sets invoice status to `PAID` or `PARTIALLY_PAID`.
+
+---
+
+### 13.5 Staff Attendance
+
+- **`GET /api/care/attendance/`** — Paginated attendance logs. Filter by `date`, `user`, `status`.
+- **`POST /api/care/attendance/`** — Log attendance check-in.
+- **`POST /api/care/attendance/mark-today/`** — Batch-marks active staff present today (used also by Celery beat).
+

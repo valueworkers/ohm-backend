@@ -33,6 +33,8 @@ urlpatterns = [
     path("api/", include("apps.accounts.urls")),
     path("api/billing/", include("apps.billing.urls")),
     path("api/catalog/", include("apps.catalog.urls")),
+    path("api/care/", include("apps.care.urls")),
+    path("api/medicare/", include("apps.care.urls")),  # Backward-compatible alias
 
     # --- Platform admin + onboarding (public schema) ---
     path("api/platform/", include("apps.platform.urls")),

@@ -177,11 +177,29 @@ class Command(BaseCommand):
             self.stdout.write(f"  [{scope}] {spec['group']}: {perms.count()} permissions")
 
     def _seed_plans(self):
+        from apps.platform.models import Feature
+        care_feature, _ = Feature.objects.update_or_create(
+            code="care",
+            defaults={
+                "name": "Care Product Module",
+                "description": "Patient care plans, clinical orders, and staff attendance",
+                "is_active": True,
+            },
+        )
+        medicare_feature, _ = Feature.objects.update_or_create(
+            code="medicare",
+            defaults={
+                "name": "Medicare Product Module (Alias)",
+                "description": "Legacy alias for Care product module",
+                "is_active": True,
+            },
+        )
         for data in TRIAL_PLANS:
             data = dict(data)
             plan, created = Plan.objects.update_or_create(
                 code=data.pop("code"), defaults=data
             )
+            plan.features.add(care_feature, medicare_feature)
             self.stdout.write(f"  Plan '{plan}' {'created' if created else 'updated'}")
 
     # ------------------------------------------------------------------- main

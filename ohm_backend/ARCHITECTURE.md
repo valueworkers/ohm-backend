@@ -249,3 +249,41 @@ When building new operational features (e.g., `booking`, `payroll`, `analysis`):
 Plans and billing records live in the public platform schema. Plans hold the current recurring or one-time price; subscriptions retain a pricing snapshot selected at signup. Quotations and invoices store monetary snapshots so later catalogue changes do not rewrite historical totals.
 
 Manage quotation workflow states and issue invoices through the platform Django Admin. `apps.platform.services` owns line calculations, transaction-locked `DocumentSequence` numbering, quotation-to-invoice copying, payment recording, and subscription activation/extension. Payment integration code must verify provider webhook signatures before calling `record_gateway_payment`; that function enforces gateway payment ID idempotency and updates invoice state. No provider-specific webhook route or quote email delivery is configured yet.
+
+---
+
+## 10. Care Product Module (Product Code: `care`)
+
+The Care product module (`apps.care`) ports the clinical patient management, care packages, booking hierarchy, and staff attendance feature set into OHM as an isolated, plan-gated tenant product module.
+
+### 1. Plan Gating & Entitlements
+- **Feature Code**: `"care"` (with legacy `"medicare"` alias).
+- **Entitlement Checks**: Enforced via `Tenant.has_feature(code: str) -> bool` with 1-hour Redis caching (`tenant:{schema}:feature:{code}`). Checks:
+  1. Active subscription plan features (`subscription.plan.features.filter(code=code)`).
+  2. Direct tenant module enablement (`code in (tenant.modules or [])`).
+  3. Bypass for superadmins and root users.
+- **DRF Permission**: `HasProductAccess` (`product_code = "care"`) checks `request.tenant.has_feature("care")`. If unentitled, it returns `403 Forbidden` (`"Your subscription plan does not include access to the 'care' module."`).
+- **RBAC**: Handled by `CareModelPermissions` extending Django's `DjangoModelPermissions` with strict `view_<model>` check on `GET` requests.
+
+### 2. Schema Boundaries & Data Isolation
+- **Placement**: Registered in `TENANT_APPS` only (`config/settings.py`). Table migrations run exclusively in tenant schemas.
+- **Routing**: Tenant URL router maps endpoints at `/api/care/` (with `/api/medicare/` backward-compatibility alias).
+- **Zero Cross-Tenant Leakage**: All queries are bound to the tenant schema selected by `TenantHeaderMiddleware` via `X-Tenant: <schema>`.
+
+### 3. Entity Models & Architecture
+- **Soft Deletion**: `SoftDeleteModel` abstract base mixin providing `status` (active boolean), `is_deleted` (db indexed boolean), and `deleted_at` timestamp. `soft_delete()` marks `is_deleted=True`, `status=False`, and timestamps `deleted_at`.
+- **Patient Profile**: Full standalone `Patient` model preserving clinical and demographics fields with structured `JSONField` address (`line1`, `line2`, `locality`, `city`, `pincode`) and sequential human-readable identifier (`PAT-00001`).
+- **Target Entity Packages**: `Package` model replaces generic foreign keys with 3 explicit nullable FKs (`venue` -> `catalog.Venue`, `service` -> `catalog.Service`, `resource` -> `catalog.Resource`) backed by a database `CheckConstraint` requiring exactly one non-null target.
+- **Restructured Booking Hierarchy**:
+  - `PrimaryOrder`: The umbrella care agreement for a patient. Carries `patient`, `user` (booking guardian/account owner), dates, cumulative `total_bill`, and booking status.
+  - `SecondaryOrder`: Core operational and billing cycle unit. Carries `package`, `service`, `venue`, `booking_type` (`IN_HOUSE`, `OPD`, `CLIENT_SIDE`), `client_address` (JSON), cycle dates, amounts (`subtotal`, `discount_amount`, `premium_amount`, `total_amount`), `status`, and `auto_continue` flag.
+  - `TernaryOrder`: Add-on services, procedures, or equipment rentals attached to a parent `SecondaryOrder`.
+- **Per-Tenant Razorpay Gateway**: `TenantPaymentConfig` stores encrypted tenant credentials (`razorpay_key_id`, `razorpay_key_secret`, `razorpay_webhook_secret`, `currency`). `RazorpayService` dynamically instantiates the payment client per tenant.
+- **Shared Invoicing & GST Engine**: `CareInvoiceService` reuses `apps.billing.Invoice`, `InvoiceItem`, and `DocumentSequence` (`SINV-YYYY-XXXXX` and `TINV-YYYY-XXXXX`), computing CGST, SGST, IGST using `apps.platform.gst`.
+
+### 4. Tenant-Aware Celery Automations
+- Maintenance beat task runs daily (`run_care_tenant_beat_maintenance`), iterating through all non-public tenants possessing the `care` feature:
+  - `mark_attendance_present`: Auto-generates present attendance records for active staff members.
+  - `update_statuses_by_time`: Transitions unlocked orders between `YET_TO_START`, `IN_PROGRESS`, and `COMPLETED`/`FULFILLED`.
+  - `trigger_auto_continue_secondary_orders`: Auto-extends recurrent care packages where `auto_continue=True`.
+  - `reconcile_invoices`: Syncs unpaid invoice items and recalculates overdue balances.

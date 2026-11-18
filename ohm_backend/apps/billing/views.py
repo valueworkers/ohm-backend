@@ -12,33 +12,17 @@ from rest_framework.response import Response
 from .constants import PAYMENT_METHOD_NORMALIZE
 
 from .models import (
-    ContactBooking,
     Invoice,
-    Location,
-    Package,
-    Patient,
-    PatientDocument,
     Payment,
-    PrimaryOrder,
     Quote,
     QuoteTaxSettings,
-    SecondaryOrder,
-    TernaryOrder,
 )
 from .serializers import (
-    ContactBookingSerializer,
     InvoiceSerializer,
-    LocationSerializer,
-    PackageSerializer,
-    PatientDocumentSerializer,
-    PatientSerializer,
     PaymentSerializer,
-    PrimaryOrderSerializer,
     QuoteSerializer,
     QuoteTaxSettingsSerializer,
-    SecondaryOrderSerializer,
     SendEmailSerializer,
-    TernaryOrderSerializer,
 )
 from .services import (
     create_invoice_from_quote,
@@ -51,70 +35,6 @@ from .services import (
     send_quote,
     void_invoice,
 )
-
-
-# ---------------------------------------------------------------------------
-# Patient & Location ViewSets
-# ---------------------------------------------------------------------------
-
-class LocationViewSet(viewsets.ModelViewSet):
-    queryset = Location.objects.all()
-    serializer_class = LocationSerializer
-
-
-class PackageViewSet(viewsets.ModelViewSet):
-    queryset = Package.objects.all()
-    serializer_class = PackageSerializer
-
-
-class PatientViewSet(viewsets.ModelViewSet):
-    queryset = Patient.objects.filter(is_deleted=False)
-    serializer_class = PatientSerializer
-    search_fields = ("first_name", "last_name", "phone", "email", "patient_id")
-    filterset_fields = ("gender", "is_active", "is_probono")
-
-    @action(detail=True, methods=["post"])
-    def soft_delete(self, request, pk=None):
-        patient = self.get_object()
-        patient.soft_delete()
-        return Response({"status": "deleted"})
-
-
-class PatientDocumentViewSet(viewsets.ModelViewSet):
-    queryset = PatientDocument.objects.all()
-    serializer_class = PatientDocumentSerializer
-
-
-class ContactBookingViewSet(viewsets.ModelViewSet):
-    queryset = ContactBooking.objects.select_related("patient", "booked_by", "service")
-    serializer_class = ContactBookingSerializer
-    filterset_fields = ("patient", "service", "start_date", "end_date")
-    search_fields = ("address", "description", "patient__first_name", "patient__last_name", "patient__phone")
-    ordering_fields = ("start_date", "end_date", "created_at")
-    ordering = ("-start_date",)
-
-
-# ---------------------------------------------------------------------------
-# Order ViewSets
-# ---------------------------------------------------------------------------
-
-class PrimaryOrderViewSet(viewsets.ModelViewSet):
-    queryset = PrimaryOrder.objects.select_related("patient", "package", "user")
-    serializer_class = PrimaryOrderSerializer
-    filterset_fields = ("status", "booking_type", "booking_entity", "patient")
-    search_fields = ("order_id", "patient__first_name", "patient__last_name")
-
-
-class SecondaryOrderViewSet(viewsets.ModelViewSet):
-    queryset = SecondaryOrder.objects.select_related("primary_order")
-    serializer_class = SecondaryOrderSerializer
-    filterset_fields = ("status", "is_registration_fee")
-
-
-class TernaryOrderViewSet(viewsets.ModelViewSet):
-    queryset = TernaryOrder.objects.select_related("secondary_order", "package")
-    serializer_class = TernaryOrderSerializer
-    filterset_fields = ("status", "booking_type")
 
 
 # ---------------------------------------------------------------------------

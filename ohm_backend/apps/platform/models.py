@@ -99,6 +99,39 @@ class Tenant(TenantMixin):
     def __str__(self):
         return f"{self.name} ({self.schema_name})"
 
+    def has_feature(self, code: str) -> bool:
+        """Check whether this tenant has access to a product feature code (cached)."""
+        if not code:
+            return True
+        from django.core.cache import cache
+        cache_key = f"tenant:{self.schema_name}:feature:{code}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return bool(cached)
+
+        codes = [code]
+        if code == "care":
+            codes.append("medicare")
+        elif code == "medicare":
+            codes.append("care")
+
+        if isinstance(self.modules, list) and any(c in self.modules for c in codes):
+            cache.set(cache_key, True, timeout=300)
+            return True
+
+        has_access = (
+            self.subscriptions.filter(
+                status__in=[Subscription.Status.ACTIVE, Subscription.Status.TRIAL]
+            )
+            .filter(
+                Q(plan__features__code__in=codes, plan__features__is_active=True)
+                | Q(features__code__in=codes, features__is_active=True)
+            )
+            .exists()
+        )
+        cache.set(cache_key, has_access, timeout=300)
+        return has_access
+
 class Subscription(models.Model):
     class Status(models.TextChoices):
         TRIAL = "trial", "Trial"

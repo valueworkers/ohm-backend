@@ -53,7 +53,8 @@ class SecondaryOrderInline(admin.TabularInline):
     show_change_link = True
     readonly_fields = ("order_id", "subtotal", "status", "created_at")
     fields = (
-        "order_id", "start_datetime", "end_datetime",
+        "order_id", "package", "service", "venue", "booking_type",
+        "start_datetime", "end_datetime",
         "subtotal", "status", "is_registration_fee", "status_locked",
     )
 
@@ -165,10 +166,10 @@ class PrimaryOrderAdmin(admin.ModelAdmin):
 @admin.register(SecondaryOrder)
 class SecondaryOrderAdmin(admin.ModelAdmin):
     list_display = (
-        "order_id", "primary_order", "status",
+        "order_id", "primary_order", "package", "service", "venue", "booking_type", "status",
         "subtotal", "start_datetime", "end_datetime", "is_registration_fee",
     )
-    list_filter = ("status", "is_registration_fee", "status_locked")
+    list_filter = ("status", "booking_type", "is_registration_fee", "status_locked")
     search_fields = ("order_id", "primary_order__order_id")
     readonly_fields = ("order_id", "subtotal", "created_at", "updated_at")
     inlines = [SecondaryInvoiceInline] + ([TernaryOrderInline] if _HAS_VENUE_MANAGER else [])

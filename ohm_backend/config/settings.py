@@ -86,6 +86,7 @@ TENANT_APPS = [
     # Product modules:
     "apps.catalog",        # Venues, Services, Resources (Facility & Product Catalog)
     "apps.billing",        # Quotations, Invoices, Bookings, Payments
+    "apps.care",           # Plan-gated Care product module (elder/home/clinical care)
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [a for a in TENANT_APPS if a not in SHARED_APPS]
@@ -104,6 +105,9 @@ DATABASES = {
         "PASSWORD": env("POSTGRES_PASSWORD", "ohm"),
         "HOST": env("POSTGRES_HOST", "localhost"),
         "PORT": env("POSTGRES_PORT", "5432"),
+        "TEST": {
+            "NAME": env("POSTGRES_DB", "ohm"),
+        },
     }
 }
 DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
@@ -249,6 +253,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "mark-overdue-invoices-daily": {
         "task": "apps.platform.tasks.mark_overdue_invoices_task",
+        "schedule": 86400,
+    },
+    "medicare-tenant-maintenance-daily": {
+        "task": "apps.medicare.tasks.run_medicare_tenant_beat_maintenance",
         "schedule": 86400,
     },
 }
