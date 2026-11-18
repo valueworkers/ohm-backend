@@ -7,7 +7,7 @@ from .views import (
     CareRazorpayViewSet,
     ContactBookingViewSet,
     LocationViewSet,
-    MedicareRazorpayViewSet,
+    CareRazorpayViewSet,
     PackageViewSet,
     PatientDocumentViewSet,
     PatientViewSet,

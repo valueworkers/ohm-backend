@@ -370,7 +370,3 @@ class CareRazorpayViewSet(viewsets.ViewSet):
                 "remaining_amount": str(invoice.remaining_amount),
             }, status=status.HTTP_200_OK)
         return Response({"status": "failed", "detail": "Invalid signature or verification failure."}, status=status.HTTP_400_BAD_REQUEST)
-
-
-# Backwards-compatible alias
-MedicareRazorpayViewSet = CareRazorpayViewSet
