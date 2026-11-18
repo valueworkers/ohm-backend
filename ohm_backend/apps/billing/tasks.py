@@ -1,0 +1,161 @@
+from __future__ import annotations
+
+import logging
+from datetime import timedelta
+from celery import shared_task
+from django.db import transaction
+from django.utils import timezone
+
+from apps.platform.tasks import TenantTask
+from .constants import BookingStatus
+from .models import (
+    Invoice,
+    Payment,
+    PrimaryOrder,
+    SecondaryOrder,
+    TernaryOrder,
+    bulk_update_status,
+    sync_patient_active_status,
+)
+from .utils import PaymentMappingService
+
+logger = logging.getLogger(__name__)
+
+INVOICE_TRIGGER_STATUSES = [
+    BookingStatus.UNFULFILLED,
+    BookingStatus.PARTIALLY_FULFILLED,
+    BookingStatus.FULFILLED,
+]
+
+
+@shared_task(base=TenantTask, bind=True, max_retries=3, default_retry_delay=60)
+def generate_missing_secondary_invoices(self):
+    """
+    Reconciliation sweep for SecondaryOrders lacking invoices.
+    """
+    qs = (
+        SecondaryOrder.objects
+        .filter(status__in=INVOICE_TRIGGER_STATUSES, invoices__isnull=True)
+        .select_related("primary_order")
+    )
+
+    created, failed = 0, 0
+    for order in qs.iterator():
+        try:
+            with transaction.atomic():
+                Invoice.create_or_update_for_secondary(order)
+            created += 1
+        except Exception:
+            failed += 1
+            logger.exception("Failed generating invoice for SecondaryOrder %s", order.pk)
+
+    return {"created": created, "failed": failed}
+
+
+@shared_task(base=TenantTask, bind=True, max_retries=3, default_retry_delay=60)
+def generate_missing_ternary_invoices(self):
+    qs = (
+        TernaryOrder.objects
+        .filter(status__in=INVOICE_TRIGGER_STATUSES, invoices__isnull=True)
+        .select_related("secondary_order__primary_order")
+    )
+
+    created, failed = 0, 0
+    for order in qs.iterator():
+        try:
+            with transaction.atomic():
+                Invoice.create_or_update_for_ternary(order)
+            created += 1
+        except Exception:
+            failed += 1
+            logger.exception("Failed generating invoice for TernaryOrder %s", order.pk)
+
+    return {"created": created, "failed": failed}
+
+
+@shared_task(base=TenantTask)
+def reconcile_invoices():
+    """Umbrella task — schedule this via beat / fanout."""
+    secondary_result = generate_missing_secondary_invoices()
+    ternary_result = generate_missing_ternary_invoices()
+    logger.info("Invoice reconciliation: secondary=%s ternary=%s", secondary_result, ternary_result)
+    return {"secondary": secondary_result, "ternary": ternary_result}
+
+
+@shared_task(base=TenantTask)
+def update_statuses_by_time():
+    return {
+        "primary_updated": bulk_update_status(PrimaryOrder.objects.all(), PrimaryOrder),
+        "secondary_updated": bulk_update_status(SecondaryOrder.objects.all(), SecondaryOrder),
+        "ternary_updated": bulk_update_status(TernaryOrder.objects.all(), TernaryOrder),
+        "patient_sync": sync_patient_active_status(),
+    }
+
+
+@shared_task(base=TenantTask)
+def trigger_auto_continue_secondary_orders():
+    """
+    Runs nightly. For every active PrimaryOrder whose end_datetime falls
+    within the next 24 hours (or has already passed) and has auto_continue=True,
+    generate the next period's SecondaryOrder via generate_next_period_secondary().
+    """
+    now = timezone.now()
+    soon = now + timedelta(hours=24)
+
+    expiring_orders = (
+        PrimaryOrder.objects
+        .filter(auto_continue=True, end_datetime__lte=soon)
+        .exclude(status=BookingStatus.CANCELLED)
+        .select_related("package")
+    )
+
+    created_count, failed_count = 0, 0
+    for primary in expiring_orders:
+        try:
+            with transaction.atomic():
+                new_secondary = primary.generate_next_period_secondary()
+            if new_secondary:
+                created_count += 1
+        except Exception:
+            failed_count += 1
+            logger.exception("[auto_continue] Failed for PrimaryOrder %s", primary.pk)
+
+    logger.info(
+        "[auto_continue] created=%d failed=%d checked=%d",
+        created_count, failed_count, expiring_orders.count(),
+    )
+    return {"created": created_count, "failed": failed_count}
+
+
+@shared_task(base=TenantTask)
+def auto_map_unmapped_payments():
+    """Run automatic invoice matching for all eligible unmapped payments."""
+    payments = (
+        Payment.objects
+        .filter(invoice__isnull=True, mapping_status__in=["UNMAPPED", "REVIEW"])
+        .order_by("id")
+    )
+    results = {
+        "processed": 0,
+        "auto_mapped": 0,
+        "review": 0,
+        "unmapped": 0,
+        "already_mapped": 0,
+        "errors": 0,
+    }
+
+    for payment in payments.iterator(chunk_size=100):
+        results["processed"] += 1
+        try:
+            result = PaymentMappingService(payment).run()
+            status = result.get("status", "").lower()
+            if status in results:
+                results[status] += 1
+            elif status == "auto_mapped":
+                results["auto_mapped"] += 1
+        except Exception:
+            results["errors"] += 1
+            logger.exception("Auto invoice mapping failed for Payment %s", payment.pk)
+
+    logger.info("Automatic payment mapping completed: %s", results)
+    return results

@@ -87,6 +87,11 @@ TENANT_APPS = [
     "apps.catalog",        # Venues, Services, Resources (Facility & Product Catalog)
     "apps.billing",        # Quotations, Invoices, Bookings, Payments
     "apps.care",           # Plan-gated Care product module (elder/home/clinical care)
+    "apps.wallet",         # Customer wallet & auto-pay
+    "apps.payroll",        # Attendance, salary structures, payroll reports & disbursements
+    "apps.notifications",  # Omnichannel notifications & templates
+    "apps.content",        # Content: FAQs, contacts, videos
+    "apps.analytics",      # Financial, booking, attendance & payroll analytics
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [a for a in TENANT_APPS if a not in SHARED_APPS]
@@ -255,9 +260,29 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.platform.tasks.mark_overdue_invoices_task",
         "schedule": 86400,
     },
-    "medicare-tenant-maintenance-daily": {
-        "task": "apps.medicare.tasks.run_medicare_tenant_beat_maintenance",
+    "care-tenant-maintenance-daily": {
+        "task": "apps.care.tasks.run_care_tenant_beat_maintenance",
         "schedule": 86400,
+    },
+    "mark-attendance-present-daily": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 86400,
+        "args": ["apps.payroll.tasks.mark_attendance_present"],
+    },
+    "notifications-daily-digest": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 86400,
+        "args": ["apps.notifications.tasks.send_daily_digest"],
+    },
+    "billing-reconcile-invoices-daily": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 86400,
+        "args": ["apps.billing.tasks.reconcile_invoices"],
+    },
+    "billing-update-statuses-hourly": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 3600,
+        "args": ["apps.billing.tasks.update_statuses_by_time"],
     },
 }
 
