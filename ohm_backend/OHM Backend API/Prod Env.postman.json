@@ -198,6 +198,66 @@
       "value": "",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "walletId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "attendanceStatusId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "salaryStructureId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "salaryReportId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "salaryTransactionId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "notificationId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "notificationTemplateId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "faqTopicId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "videoId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "contactId",
+      "value": "",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment"

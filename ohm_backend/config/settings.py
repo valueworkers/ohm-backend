@@ -86,6 +86,11 @@ TENANT_APPS = [
     # Product modules:
     "apps.catalog",        # Venues, Services, Resources (Facility & Product Catalog)
     "apps.billing",        # Quotations, Invoices, Bookings, Payments
+    "apps.wallet",         # Customer wallet & auto-pay
+    "apps.payroll",        # Attendance, salary structures, payroll reports & disbursements
+    "apps.notifications",  # Omnichannel notifications & templates
+    "apps.content",        # Content: FAQs, contacts, videos
+    "apps.analytics",      # Financial, booking, attendance & payroll analytics
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [a for a in TENANT_APPS if a not in SHARED_APPS]
@@ -104,6 +109,9 @@ DATABASES = {
         "PASSWORD": env("POSTGRES_PASSWORD", "ohm"),
         "HOST": env("POSTGRES_HOST", "localhost"),
         "PORT": env("POSTGRES_PORT", "5432"),
+        "TEST": {
+            "NAME": env("POSTGRES_DB", "ohm"),
+        },
     }
 }
 DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
@@ -250,6 +258,26 @@ CELERY_BEAT_SCHEDULE = {
     "mark-overdue-invoices-daily": {
         "task": "apps.platform.tasks.mark_overdue_invoices_task",
         "schedule": 86400,
+    },
+    "mark-attendance-present-daily": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 86400,
+        "args": ["apps.payroll.tasks.mark_attendance_present"],
+    },
+    "notifications-daily-digest": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 86400,
+        "args": ["apps.notifications.tasks.send_daily_digest"],
+    },
+    "billing-reconcile-invoices-daily": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 86400,
+        "args": ["apps.billing.tasks.reconcile_invoices"],
+    },
+    "billing-update-statuses-hourly": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 3600,
+        "args": ["apps.billing.tasks.update_statuses_by_time"],
     },
 }
 

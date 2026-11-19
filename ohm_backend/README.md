@@ -163,10 +163,18 @@ Initializes or updates the platform control plane in the public schema. Idempote
 python manage.py bootstrap_platform \
   --email <admin-email> \
   --password <admin-password> \
-  [--full-name "Full Name"] \
-  [--phone "+91..."] \
+  [--first-name "First"] \
+  [--last-name "Last"] \
+  [--mobile-number "+91..."] \
   [--title "Super Admin"] \
   [--reset-password]
+
+# Or only generate/seed groups and roles (no tenants, domains, plans, or users created):
+python manage.py bootstrap_platform --groups-only
+
+# Optionally seed tenant schemas as well:
+python manage.py bootstrap_platform --groups-only --all-tenants
+python manage.py bootstrap_platform --groups-only --schema <tenant_schema>
 ```
 
 ### 2. `create_default_groups` / `assign_tenant_roles`

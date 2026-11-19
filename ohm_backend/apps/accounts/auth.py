@@ -37,8 +37,8 @@ class TenantJWTAuthentication(JWTAuthentication):
                         public_user = super().get_user(validated_token)
                     except Exception:
                         raise AuthenticationFailed("Token is not valid for this tenant.", code="token_tenant_mismatch")
-                    from apps.accounts.permissions import is_superadmin
-                    if not (public_user and (public_user.is_superuser or is_superadmin(public_user))):
+                    from apps.accounts.permissions import is_root_user, is_superadmin
+                    if not (public_user and (public_user.is_superuser or is_superadmin(public_user) or is_root_user(public_user))):
                         raise AuthenticationFailed("Token is not valid for this tenant.", code="token_tenant_mismatch")
                     session = UserSession.objects.filter(
                         pk=session_id, user_id=public_user.pk, revoked_at__isnull=True
@@ -94,9 +94,9 @@ class ScopedTokenRefreshSerializer(TokenRefreshSerializer):
             if token_schema == public_schema:
                 with schema_context(public_schema):
                     from apps.accounts.models import User
-                    from apps.accounts.permissions import is_superadmin
+                    from apps.accounts.permissions import is_root_user, is_superadmin
                     pub_user = User.objects.filter(pk=refresh.get(api_settings.USER_ID_CLAIM)).first()
-                    if pub_user and (pub_user.is_superuser or is_superadmin(pub_user)):
+                    if pub_user and (pub_user.is_superuser or is_superadmin(pub_user) or is_root_user(pub_user)):
                         schema_to_check = public_schema
             if schema_to_check != token_schema:
                 raise InvalidToken("Refresh token does not belong to this workspace.")

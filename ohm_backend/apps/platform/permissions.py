@@ -9,6 +9,9 @@ def ModuleEnabled(code):
         message = f"Module '{code}' is not enabled for this workspace."
 
         def has_permission(self, request, view):
+            from apps.accounts.permissions import is_root_user, is_superadmin
+            if request.user and (is_superadmin(request.user) or is_root_user(request.user)):
+                return True
             tenant = getattr(connection, "tenant", None)
             return code in (getattr(tenant, "modules", None) or [])
 
@@ -19,9 +22,14 @@ class IsPlatformAdmin(BasePermission):
 
     def has_permission(self, request, view):
         user = request.user
+        if not (user and user.is_authenticated):
+            return False
+        from apps.accounts.permissions import is_root_user, is_superadmin
         return bool(
-            user
-            and user.is_authenticated
-            and (user.is_superuser or hasattr(user, "platform_admin_profile") or user.is_staff)
+            user.is_superuser
+            or hasattr(user, "platform_admin_profile")
+            or user.is_staff
+            or is_superadmin(user)
+            or is_root_user(user)
         )
 

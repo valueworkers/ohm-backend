@@ -397,13 +397,13 @@ def _claim(request_id):
 
 
 def _assign_owner_role(tenant, applicant):
-    """Idempotent: mirror the applicant into the tenant schema and give them TENANT_ADMIN."""
+    """Idempotent: mirror the applicant into the tenant schema as superuser/tenant-admin."""
     with schema_context(tenant.schema_name):
-        AccountsService.ensure_tenant_admin(applicant)
+        AccountsService.ensure_superuser(applicant)
 
 
 def _assign_roles_to_tenant_owners(tenant):
-    """Mirror every public-schema tenant owner and grant TENANT_ADMIN in the tenant schema."""
+    """Mirror every public-schema tenant owner and grant superuser/tenant-admin in the tenant schema."""
     with schema_context(get_public_schema_name()):
         owners = list(tenant.owners.all())
         for owner in owners:
@@ -411,7 +411,7 @@ def _assign_roles_to_tenant_owners(tenant):
 
     with schema_context(tenant.schema_name):
         for owner in owners:
-            AccountsService.ensure_tenant_admin(owner)
+            AccountsService.ensure_superuser(owner)
 
 def _get_or_create_tenant(p):
     """Returns (tenant, created). Creating the Tenant also creates and migrates its schema."""
@@ -536,6 +536,14 @@ def provision_tenant(provisioning):
         raise ProvisioningError(str(exc)) from exc
     transaction.on_commit(lambda: send_tenant_welcome_email_task.delay(str(p.pk)))
     return tenant
+
+
+def provision_approved_request(request_id):
+    """Provision a tenant from an approved onboarding request ID."""
+    p = TenantProvisioning.objects.get(pk=request_id)
+    provision_tenant(p)
+    p.refresh_from_db()
+    return p
 
 
 def get_seller_tax_settings(tenant_id):

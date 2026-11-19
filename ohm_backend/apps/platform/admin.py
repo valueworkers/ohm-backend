@@ -3,6 +3,11 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework.exceptions import ValidationError
 from django.utils import timezone
 
+from .admin_base import PlatformModelAdmin
+from .forms import TenantAdminAuthenticationForm
+
+admin.site.login_form = TenantAdminAuthenticationForm
+
 from .models import (
     Domain,
     Feature,
@@ -45,7 +50,7 @@ class SubscriptionInline(admin.TabularInline):
 
 
 @admin.register(Feature)
-class FeatureAdmin(admin.ModelAdmin):
+class FeatureAdmin(PlatformModelAdmin):
     list_display = ("code", "name", "is_active")
     list_filter = ("is_active",)
     search_fields = ("code", "name")
@@ -53,7 +58,7 @@ class FeatureAdmin(admin.ModelAdmin):
 
 
 @admin.register(Plan)
-class PlanAdmin(admin.ModelAdmin):
+class PlanAdmin(PlatformModelAdmin):
     list_display = ("name", "code", "billing_period", "currency", "amount", "is_active")
     list_filter = ("is_active",)
     search_fields = ("code", "name")
@@ -76,7 +81,7 @@ class QuotationItemInline(admin.TabularInline):
 
 
 @admin.register(Quotation)
-class QuotationAdmin(admin.ModelAdmin):
+class QuotationAdmin(PlatformModelAdmin):
     list_display = ("number", "billing_name", "plan", "status", "total", "currency", "valid_until", "created_at")
     list_filter = ("status", "currency", "plan")
     search_fields = ("number", "billing_name", "billing_email")
@@ -166,7 +171,7 @@ class PaymentInline(admin.TabularInline):
 
 
 @admin.register(Invoice)
-class InvoiceAdmin(admin.ModelAdmin):
+class InvoiceAdmin(PlatformModelAdmin):
     list_display = (
         "number",
         "tenant",
@@ -256,14 +261,14 @@ class InvoiceAdmin(admin.ModelAdmin):
             self.message_user(request, error, messages.ERROR)
 
 @admin.register(Booking)
-class BookingAdmin(admin.ModelAdmin):
+class BookingAdmin(PlatformModelAdmin):
     list_display = ("booking_id", "tenant", "title", "booking_type", "status", "start_datetime", "end_datetime", "total_amount")
     list_filter = ("status", "booking_type", "tenant")
     search_fields = ("booking_id", "title", "tenant__name", "contact_name", "contact_email")
 
 
 @admin.register(Payment)
-class PaymentAdmin(admin.ModelAdmin):
+class PaymentAdmin(PlatformModelAdmin):
     list_display = ("tenant", "invoice", "gateway", "gateway_payment_id", "amount", "currency", "method", "status", "paid_at")
     list_filter = ("tenant", "gateway", "method", "status", "currency")
     search_fields = ("invoice__number", "gateway_payment_id", "reference", "tenant__name")
@@ -277,13 +282,13 @@ class PaymentAdmin(admin.ModelAdmin):
 
 
 @admin.register(DocumentSequence)
-class DocumentSequenceAdmin(admin.ModelAdmin):
+class DocumentSequenceAdmin(PlatformModelAdmin):
     list_display = ("prefix", "year", "last_value")
     readonly_fields = ("prefix", "year", "last_value")
 
 
 @admin.register(Tenant)
-class TenantAdmin(admin.ModelAdmin):
+class TenantAdmin(PlatformModelAdmin):
     list_display = ("name", "schema_name", "status", "contact_email", "created_at")
     list_filter = ("status",)
     search_fields = ("name", "schema_name", "contact_email", "domains__domain")
@@ -304,7 +309,7 @@ class TenantAdmin(admin.ModelAdmin):
 
 
 @admin.register(Domain)
-class DomainAdmin(admin.ModelAdmin):
+class DomainAdmin(PlatformModelAdmin):
     list_display = ("domain", "tenant", "is_primary", "verified", "verified_at")
     list_filter = ("verified", "is_primary")
     search_fields = ("domain", "tenant__name", "tenant__schema_name")
@@ -318,7 +323,7 @@ class DomainAdmin(admin.ModelAdmin):
 
 
 @admin.register(Subscription)
-class SubscriptionAdmin(admin.ModelAdmin):
+class SubscriptionAdmin(PlatformModelAdmin):
     list_display = ("tenant", "plan", "price_billing_period", "price_currency", "price_amount", "status", "starts_at", "ends_at", "trial_ends_at")
     list_filter = ("status", "plan")
     search_fields = ("tenant__name", "tenant__schema_name", "billing_email")
@@ -328,7 +333,7 @@ class SubscriptionAdmin(admin.ModelAdmin):
 
 
 @admin.register(TenantProvisioning)
-class TenantProvisioningAdmin(admin.ModelAdmin):
+class TenantProvisioningAdmin(PlatformModelAdmin):
     list_display = (
         "organization_name", "slug", "custom_domain", "status",
         "applicant", "requested_plan", "created_at",
@@ -364,7 +369,7 @@ class TenantProvisioningAdmin(admin.ModelAdmin):
 
 
 @admin.register(PlatformAdmin)
-class PlatformAdminAdmin(admin.ModelAdmin):
+class PlatformAdminAdmin(PlatformModelAdmin):
     list_display = ("user", "title", "created_at")
     search_fields = ("user__email", "title")
     raw_id_fields = ("user",)

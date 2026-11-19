@@ -8,7 +8,7 @@ def is_superadmin(user):
         return False
     return bool(
         user.is_superuser
-        or user.groups.filter(name__in=["Super User", "SUPER_ADMIN"]).exists()
+        or user.groups.filter(name__in=["Super User", "SUPER_ADMIN", "Superadmin", "SUPERADMIN", "Root Admin", "ROOT_ADMIN"]).exists()
     )
 
 
@@ -19,26 +19,39 @@ def is_root_user(user):
     return bool(
         user.is_staff
         or hasattr(user, "platform_admin_profile")
-        or user.groups.filter(name__in=["OPS_MANAGER", "STAFF", "Ops Manager", "Staff Member"]).exists()
+        or user.groups.filter(name__in=[
+            "OPS_MANAGER", "STAFF", "Ops Manager", "Staff Member",
+            "Root Admin", "ROOT_ADMIN", "Platform Admin", "PLATFORM_ADMIN",
+        ]).exists()
     )
+
+
+def is_root_admin(user):
+    """Check if the user is any platform root administrator (superadmin, staff, platform admin profile)."""
+    return is_superadmin(user) or is_root_user(user)
 
 
 def is_tenant_admin(user):
     """Check if the user has Tenant Admin privileges in the current tenant schema."""
     if not (user and user.is_authenticated):
         return False
+    if is_superadmin(user) or is_root_user(user):
+        return True
     if connection.schema_name == get_public_schema_name():
         return False
     return bool(
-        is_superadmin(user)
-        or user.groups.filter(name__in=["TENANT_ADMIN", "Tenant Admin"]).exists()
+        user.groups.filter(name__in=["TENANT_ADMIN", "Tenant Admin"]).exists()
     )
 
 
 class IsTenantAdmin(BasePermission):
-    """Require membership in the built-in Tenant Admin group."""
+    """Require membership in the built-in Tenant Admin group or Root Admin privileges."""
 
     def has_permission(self, request, view):
+        if not (request.user and request.user.is_authenticated):
+            return False
+        if is_superadmin(request.user) or is_root_user(request.user):
+            return True
         return is_tenant_admin(request.user)
 
 

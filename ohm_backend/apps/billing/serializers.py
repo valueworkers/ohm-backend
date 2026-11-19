@@ -103,6 +103,9 @@ class TernaryOrderSerializer(serializers.ModelSerializer):
 
 class SecondaryOrderSerializer(serializers.ModelSerializer):
     ternary_orders = TernaryOrderSerializer(many=True, read_only=True)
+    booking_service = serializers.ReadOnlyField()
+    booking_package = serializers.ReadOnlyField()
+    booking_venue = serializers.ReadOnlyField()
 
     class Meta:
         model = SecondaryOrder

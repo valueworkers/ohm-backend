@@ -12,6 +12,7 @@ from apps.accounts.permissions import (
     CanManageRoles,
     DynamicModelPermissions,
     IsSchemaAdministrator,
+    is_root_admin,
     is_root_user,
     is_superadmin,
     is_tenant_admin,
@@ -98,6 +99,18 @@ class DjangoGroupsAndPermissionsTest(TestCase):
         self.assertTrue(is_root_user(self.root_staff))
         self.assertTrue(is_root_user(self.platform_admin_user))
         self.assertFalse(is_root_user(self.regular_user))
+
+    def test_is_root_admin(self):
+        self.assertTrue(is_root_admin(self.superuser))
+        self.assertTrue(is_root_admin(self.root_staff))
+        self.assertTrue(is_root_admin(self.platform_admin_user))
+        self.assertFalse(is_root_admin(self.regular_user))
+
+    def test_root_admin_has_tenant_admin_privileges(self):
+        self.assertTrue(is_tenant_admin(self.superuser))
+        self.assertTrue(is_tenant_admin(self.root_staff))
+        self.assertTrue(is_tenant_admin(self.platform_admin_user))
+        self.assertFalse(is_tenant_admin(self.regular_user))
 
     def test_can_manage_roles_permission(self):
         perm = CanManageRoles()
@@ -393,6 +406,8 @@ class SuperUserTenantAccessTestCase(TenantTestCase):
 
     def setUp(self):
         super().setUp()
+        from django.core.cache import cache
+        cache.clear()
         self.client = APIClient()
         self.public_schema = get_public_schema_name()
 
@@ -409,6 +424,16 @@ class SuperUserTenantAccessTestCase(TenantTestCase):
             )
             super_group, _ = Group.objects.get_or_create(name="Super User")
             self.superuser.groups.add(super_group)
+
+            self.root_staff = User.objects.create_user(
+                email="rootstaff@example.com",
+                password="StaffPassword123!",
+                first_name="Root",
+                last_name="Staff",
+                is_superuser=False,
+                is_staff=True,
+                is_active=True,
+            )
 
             self.regular_public_user = User.objects.create_user(
                 email="publicguy@example.com",
@@ -512,3 +537,51 @@ class SuperUserTenantAccessTestCase(TenantTestCase):
             HTTP_X_TENANT=self.tenant.schema_name,
         )
         self.assertEqual(res.status_code, 401)
+
+    def test_root_staff_can_login_to_tenant_schema_with_creds(self):
+        res = self.client.post(
+            "/api/auth/login/",
+            {
+                "username": "rootstaff@example.com",
+                "password": "StaffPassword123!",
+                "method": "password",
+            },
+            format="json",
+            HTTP_X_TENANT=self.tenant.schema_name,
+        )
+        self.assertEqual(res.status_code, 200, res.data)
+        self.assertEqual(res.data["schema_name"], self.tenant.schema_name)
+        self.assertIn("tokens", res.data)
+        access_token = res.data["tokens"]["access"]
+
+        tenant_user = User.objects.get(email="rootstaff@example.com")
+        self.assertTrue(tenant_user.is_superuser)
+        self.assertTrue(tenant_user.is_staff)
+
+        group_res = self.client.get(
+            "/api/groups/",
+            HTTP_X_TENANT=self.tenant.schema_name,
+            HTTP_AUTHORIZATION=f"Bearer {access_token}",
+        )
+        self.assertEqual(group_res.status_code, 200, group_res.data)
+
+    def test_root_staff_public_token_can_access_tenant_apis(self):
+        login_res = self.client.post(
+            "/api/auth/login/",
+            {
+                "username": "rootstaff@example.com",
+                "password": "StaffPassword123!",
+                "method": "password",
+            },
+            format="json",
+        )
+        self.assertEqual(login_res.status_code, 200)
+        self.assertEqual(login_res.data["schema_name"], self.public_schema)
+        public_token = login_res.data["tokens"]["access"]
+
+        tenant_api_res = self.client.get(
+            "/api/groups/",
+            HTTP_X_TENANT=self.tenant.schema_name,
+            HTTP_AUTHORIZATION=f"Bearer {public_token}",
+        )
+        self.assertEqual(tenant_api_res.status_code, 200, tenant_api_res.data)

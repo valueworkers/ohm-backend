@@ -561,29 +561,10 @@ class PrimaryOrder(models.Model):
         related_name="primary_orders",
     )
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, db_index=True)
-    venue = models.ForeignKey(
-        "catalog.Venue",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        db_index=True,
-    )
-    service = models.ForeignKey(
-        "catalog.Service",
-        null=True,
-        blank=True,
-        on_delete=models.SET_NULL,
-        db_index=True,
-    )
-    package = models.ForeignKey(
-        Package,
-        on_delete=models.CASCADE,
-        related_name="primary_orders",
-    )
-    client_address = models.TextField(null=True, blank=True)
+    notes = models.TextField(blank=True, default="")
 
-    start_datetime = models.DateTimeField(db_index=True)
-    end_datetime = models.DateTimeField(db_index=True)
+    start_datetime = models.DateTimeField(null=True, blank=True, db_index=True)
+    end_datetime = models.DateTimeField(null=True, blank=True, db_index=True)
     raw_dates = models.JSONField(null=True, blank=True)
 
     total_bill = models.DecimalField(
@@ -600,6 +581,7 @@ class PrimaryOrder(models.Model):
         choices=BookingType.choices,
         default=BookingType.OPD,
         db_index=True,
+        blank=True,
     )
     status = models.CharField(
         max_length=25,
@@ -620,15 +602,21 @@ class PrimaryOrder(models.Model):
         return self.order_id
 
     def save(self, *args, **kwargs):
-        self.booking_type = self.package.package_type
         super().save(*args, **kwargs)
         if not self.order_id:
             self.order_id = generate_order_id(self)
             super().save(update_fields=["order_id"])
         self.recalculate_total()
 
-    def _periods_from_dates(self, dates):
-        period_type = self.package.period
+    def _periods_from_dates(self, dates, package=None):
+        pkg = package or (
+            self.secondary_orders.order_by("-end_datetime").first().package
+            if self.secondary_orders.exists()
+            else None
+        )
+        if not pkg:
+            return []
+        period_type = pkg.period
         adjust = self.premium_amount - self.discount_amount
 
         if period_type == PeriodChoices.DAILY and isinstance(dates, list):
@@ -649,24 +637,33 @@ class PrimaryOrder(models.Model):
         for start, end in bounds:
             start, end = timezone.make_aware(start), timezone.make_aware(end)
             periods.append(
-                (start, end, calculate_amount(start, end, self.package) + adjust)
+                (start, end, calculate_amount(start, end, pkg) + adjust)
             )
         return periods
 
-    def _periods_full_range(self):
+    def _periods_full_range(self, package=None):
+        pkg = package or (
+            self.secondary_orders.order_by("-end_datetime").first().package
+            if self.secondary_orders.exists()
+            else None
+        )
+        if not pkg:
+            return []
         generators = {
             PeriodChoices.MONTHLY: self._get_monthly_periods,
             PeriodChoices.WEEKLY: self._get_weekly_periods,
             PeriodChoices.DAILY: self._get_daily_periods,
             PeriodChoices.HOURLY: self._get_daily_periods,
         }
-        generator = generators.get(self.package.period)
+        generator = generators.get(pkg.period)
         if not generator:
             return []
-        amount = self.package.price + self.premium_amount - self.discount_amount
+        amount = pkg.price + self.premium_amount - self.discount_amount
         return [(s, e, amount) for s, e in generator()]
 
     def _get_monthly_periods(self):
+        if not self.start_datetime or not self.end_datetime:
+            return []
         periods = []
         current = self.start_datetime
         while current < self.end_datetime:
@@ -683,7 +680,7 @@ class PrimaryOrder(models.Model):
         return self._split_into_days()
 
     def _split_into_days(self, chunk_days=None):
-        if self.start_datetime >= self.end_datetime:
+        if not self.start_datetime or not self.end_datetime or self.start_datetime >= self.end_datetime:
             return []
         periods, current = [], self.start_datetime
         while current < self.end_datetime:
@@ -703,7 +700,19 @@ class PrimaryOrder(models.Model):
             current = chunk_end
         return periods
 
-    def _sync_secondary_orders(self, periods, *, status=None, upcoming_only=False, prune=False):
+    def _sync_secondary_orders(
+        self,
+        periods,
+        *,
+        package=None,
+        service=None,
+        venue=None,
+        client_address=None,
+        booking_type=None,
+        status=None,
+        upcoming_only=False,
+        prune=False,
+    ):
         MAX_PERIOD = timedelta(days=30)
         now = timezone.now()
         periods = [(s, min(e, s + MAX_PERIOD), a) for s, e, a in periods]
@@ -778,6 +787,11 @@ class PrimaryOrder(models.Model):
                 to_create.append(
                     SecondaryOrder(
                         primary_order=self,
+                        package=package,
+                        service=service,
+                        venue=venue,
+                        client_address=client_address,
+                        booking_type=booking_type or (package.package_type if package else BookingType.OPD),
                         start_datetime=start,
                         end_datetime=end,
                         subtotal=amount,
@@ -798,22 +812,49 @@ class PrimaryOrder(models.Model):
             self.recalculate_total()
 
     def generate_secondary_from_random_dates(
-        self, dates, upcoming_only=False, secondary_status=None, prune=False
+        self,
+        dates,
+        package=None,
+        service=None,
+        venue=None,
+        client_address=None,
+        booking_type=None,
+        upcoming_only=False,
+        secondary_status=None,
+        prune=False,
     ):
         if not dates:
             return
         self._sync_secondary_orders(
-            self._periods_from_dates(dates),
+            self._periods_from_dates(dates, package=package),
+            package=package,
+            service=service,
+            venue=venue,
+            client_address=client_address,
+            booking_type=booking_type,
             status=secondary_status,
             upcoming_only=upcoming_only,
             prune=prune,
         )
 
     def generate_secondary_full_range_dates(
-        self, upcoming_only=False, secondary_status=None, prune=False
+        self,
+        package=None,
+        service=None,
+        venue=None,
+        client_address=None,
+        booking_type=None,
+        upcoming_only=False,
+        secondary_status=None,
+        prune=False,
     ):
         self._sync_secondary_orders(
-            self._periods_full_range(),
+            self._periods_full_range(package=package),
+            package=package,
+            service=service,
+            venue=venue,
+            client_address=client_address,
+            booking_type=booking_type,
             status=secondary_status,
             upcoming_only=upcoming_only,
             prune=prune,
@@ -822,7 +863,11 @@ class PrimaryOrder(models.Model):
     def generate_next_period_secondary(self):
         if not self.auto_continue:
             return None
-        period_type = self.package.period
+        latest_sec = self.secondary_orders.order_by("-end_datetime").first()
+        pkg = latest_sec.package if latest_sec else None
+        if not pkg:
+            return None
+        period_type = pkg.period
         if period_type == PeriodChoices.MONTHLY:
             new_end = self.end_datetime + relativedelta(months=1)
         elif period_type == PeriodChoices.WEEKLY:
@@ -832,7 +877,14 @@ class PrimaryOrder(models.Model):
         with transaction.atomic():
             self.end_datetime = new_end
             self.save(update_fields=["end_datetime"])
-            self.generate_secondary_full_range_dates(upcoming_only=True)
+            self.generate_secondary_full_range_dates(
+                package=pkg,
+                service=latest_sec.service if latest_sec else None,
+                venue=latest_sec.venue if latest_sec else None,
+                client_address=latest_sec.client_address if latest_sec else None,
+                booking_type=latest_sec.booking_type if latest_sec else None,
+                upcoming_only=True,
+            )
 
     def _derive_status_from_secondaries(self) -> str:
         S = BookingStatus
@@ -896,6 +948,50 @@ class SecondaryOrder(models.Model):
         db_index=True,
     )
     order_id = models.CharField(max_length=50, blank=True)
+    venue = models.ForeignKey(
+        "catalog.Venue",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_index=True,
+    )
+    service = models.ForeignKey(
+        "catalog.Service",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        db_index=True,
+    )
+    package = models.ForeignKey(
+        Package,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="secondary_orders",
+        db_index=True,
+    )
+    client_address = models.JSONField(null=True, blank=True)
+
+    booking_entity = models.CharField(
+        max_length=20,
+        choices=BookingEntity.choices,
+        default=BookingEntity.VENUE,
+        db_index=True,
+    )
+    booking_type = models.CharField(
+        max_length=25,
+        choices=BookingType.choices,
+        default=BookingType.OPD,
+        db_index=True,
+    )
+    discount_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
+    premium_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
+    auto_continue = models.BooleanField(default=False)
+
     start_datetime = models.DateTimeField(db_index=True)
     end_datetime = models.DateTimeField(db_index=True)
     subtotal = models.DecimalField(
@@ -924,15 +1020,33 @@ class SecondaryOrder(models.Model):
     def booking_service(self) -> str | None:
         if self.is_registration_fee:
             return "Registration Fees"
-        return self.primary_order.service.name if self.primary_order and self.primary_order.service else None
+        if self.service:
+            return self.service.name
+        if self.primary_order and hasattr(self.primary_order, "service") and self.primary_order.service:
+            return self.primary_order.service.name
+        return None
 
     @property
     def booking_package(self) -> str | None:
         if self.is_registration_fee:
             return "Registration Fees"
-        return self.primary_order.package.name if self.primary_order else None
+        if self.package:
+            return self.package.name
+        if self.primary_order and hasattr(self.primary_order, "package") and self.primary_order.package:
+            return self.primary_order.package.name
+        return None
+
+    @property
+    def booking_venue(self) -> str | None:
+        if self.venue:
+            return getattr(self.venue, "name", str(self.venue))
+        if self.primary_order and hasattr(self.primary_order, "venue") and self.primary_order.venue:
+            return getattr(self.primary_order.venue, "name", str(self.primary_order.venue))
+        return None
 
     def save(self, *args, **kwargs):
+        if self.package and not self.booking_type:
+            self.booking_type = self.package.package_type
         skip_auto_status = kwargs.pop("skip_auto_status", False)
         kwargs.pop("skip_primary_recalc", None)
         is_targeted_save = kwargs.get("update_fields") is not None
@@ -945,11 +1059,19 @@ class SecondaryOrder(models.Model):
 
     def compute_base_amount(self) -> Decimal:
         po = self.primary_order
-        adjust = po.premium_amount - po.discount_amount
-        if po.raw_dates:
-            base = calculate_amount(self.start_datetime, self.end_datetime, po.package)
+        discount = self.discount_amount if self.discount_amount else (po.discount_amount if po else Decimal("0.00"))
+        premium = self.premium_amount if self.premium_amount else (po.premium_amount if po else Decimal("0.00"))
+        adjust = premium - discount
+
+        pkg = self.package or (getattr(po, "package", None) if po else None)
+        if not pkg:
+            return Decimal("0.00") + adjust
+
+        raw_dates = po.raw_dates if po else None
+        if raw_dates:
+            base = calculate_amount(self.start_datetime, self.end_datetime, pkg)
         else:
-            base = po.package.price
+            base = pkg.price
         return base + adjust
 
     def recalculate_subtotal(self) -> None:
@@ -1629,9 +1751,9 @@ class Invoice(models.Model):
                     "issue_date": (secondary.end_datetime.date() + timedelta(days=1)) if secondary.end_datetime else timezone.localdate(),
                     "status": InvoiceStatus.ISSUED,
                     "invoice_type_tag": InvoiceType.BOOKING_SECONDARY,
-                    "booking_entity": primary.booking_entity,
-                    "venue": primary.venue,
-                    "service": primary.service,
+                    "booking_entity": getattr(secondary, "booking_entity", getattr(primary, "booking_entity", BookingEntity.VENUE)),
+                    "venue": secondary.venue,
+                    "service": secondary.service,
                 },
             )
             if not created:

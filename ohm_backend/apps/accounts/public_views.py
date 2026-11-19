@@ -24,7 +24,7 @@ from apps.accounts.models import (
     EmployeeProfile, ShiftSchedule, StaffForHire,
     PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
 )
-from apps.accounts.permissions import is_superadmin
+from apps.accounts.permissions import is_root_user, is_superadmin
 from apps.accounts.services import AccountsService
 from apps.accounts.serializers import (
     OTPPasswordResetSerializer,
@@ -65,7 +65,7 @@ class UnifiedLoginView(APIView):
         if is_tenant_schema:
             with schema_context(get_public_schema_name()):
                 pub_user = find_user(data["username"])
-                if pub_user and (pub_user.is_superuser or is_superadmin(pub_user)):
+                if pub_user and (pub_user.is_superuser or is_superadmin(pub_user) or is_root_user(pub_user)):
                     public_superuser = pub_user
 
         if public_superuser:
@@ -236,7 +236,7 @@ class OTPRequestView(APIView):
         if not user and connection.schema_name != get_public_schema_name():
             with schema_context(get_public_schema_name()):
                 pub_user = find_user(data["username"])
-                if pub_user and (pub_user.is_superuser or is_superadmin(pub_user)):
+                if pub_user and (pub_user.is_superuser or is_superadmin(pub_user) or is_root_user(pub_user)):
                     user = pub_user
         # Identical response for unknown, inactive and ineligible accounts.
         if user and user.is_active:

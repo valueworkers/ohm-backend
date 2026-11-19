@@ -53,18 +53,26 @@ def _get_or_create_public_user(email):
 
 @receiver(tenant_provisioned)
 def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
-    """Mirror tenant owners into a schema whose roles and groups were bootstrapped."""
+    """Mirror tenant owners and create superuser into a schema whose roles and groups were bootstrapped."""
     # Resolve the applicant while the public schema is active. The applicant
-    # row does not exist in the tenant schema until ensure_tenant_admin mirrors it.
+    # row does not exist in the tenant schema until mirrored.
     public_schema = get_public_schema_name()
     with schema_context(public_schema):
         applicant = User.objects.get(pk=provisioning.applicant_id)
+        from apps.accounts.permissions import is_root_user
+        platform_superusers = list(User.objects.filter(is_superuser=True, is_active=True))
+        platform_root_users = [
+            u for u in User.objects.filter(is_active=True).exclude(is_superuser=True)
+            if is_root_user(u)
+        ]
 
-    # Assign the primary applicant the bootstrapped Tenant Admin role and group.
+    # Create the superuser within the tenant schema using the provided tenant credentials
     with schema_context(tenant.schema_name):
-        AccountsService.ensure_tenant_admin(applicant)
+        AccountsService.ensure_superuser(applicant)
+        for su in platform_superusers + platform_root_users:
+            AccountsService.ensure_superuser(su)
 
-    # Seed co-owners
+    # Seed co-owners as Tenant Admins / superusers
     co_emails = provisioning.co_owner_emails or []
     for email in co_emails:
         email = email.strip().lower()
@@ -74,9 +82,9 @@ def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
         # Add as tenant owner in the public schema
         with schema_context(get_public_schema_name()):
             tenant.owners.add(public_user)
-        # Seed as TENANT_ADMIN in the tenant schema
+        # Seed in the tenant schema
         with schema_context(tenant.schema_name):
-            AccountsService.ensure_tenant_admin(public_user)
+            AccountsService.ensure_superuser(public_user)
 
 
 @receiver(m2m_changed, sender=Tenant.owners.through)
