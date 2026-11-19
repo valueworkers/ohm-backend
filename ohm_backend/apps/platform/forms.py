@@ -17,7 +17,7 @@ class TenantAdminAuthenticationForm(AdminAuthenticationForm):
     """
 
     x_tenant = forms.CharField(
-        label=_("X-Tenant"),
+        label=_("Tenant Slug"),
         required=False,
         widget=forms.TextInput(
             attrs={
