@@ -17,11 +17,11 @@ OTP_TTL_SECONDS = 300
 OTP_MAX_ATTEMPTS = 5
 
 OTP_EMAIL_CONFIG = {
-    "password_reset": ("Your OHM password reset code", "password_reset_otp.html"),
-    "login":          ("Your OHM login code",          "otp-login.html"),
-    "signup":         ("Verify your OHM account",      "otp-login.html"),
+    "password_reset": ("Your OHM password reset code", "accounts/password_reset_otp.html"),
+    "login":          ("Your OHM login code",          "accounts/otp-login.html"),
+    "signup":         ("Verify your OHM account",      "accounts/otp-login.html"),
 }
-DEFAULT_OTP_EMAIL = ("Your OHM verification code", "otp-login.html")
+DEFAULT_OTP_EMAIL = ("Your OHM verification code", "accounts/otp-login.html")
 
 OTP_EXPIRY_MINUTES = OTP_TTL_SECONDS // 60
 
@@ -34,7 +34,7 @@ def find_user(username):
     if "@" in username:
         matches = User.objects.filter(email__iexact=username)
     else:
-        matches = User.objects.filter(phone=username)
+        matches = User.objects.filter(mobile_number=username)
     return matches.first() if matches.count() == 1 else None
 
 
@@ -75,7 +75,7 @@ def _send_otp(user, username, code, purpose):
     if not backend_path:
         raise ImproperlyConfigured("Configure OHM_SMS_OTP_BACKEND to send OTPs to phone numbers.")
     backend = import_string(backend_path)
-    backend(phone=user.phone, code=code, purpose=purpose)
+    backend(phone=user.mobile_number, code=code, purpose=purpose)
 
 def issue_otp(user, username, purpose):
     """Generate, store and send an OTP. Clears the stored challenge if sending fails."""
@@ -106,7 +106,6 @@ def consume_otp(user, purpose, code):
     key = _otp_key(user, purpose)
     if not _challenge_usable(cache.get(key)):
         return False
-    print(f"user:{user}, purpose:{purpose}, code:{code}")
     lock_key = f"{key}:verify-lock"
     if not cache.add(lock_key, "1", timeout=5):
         return False

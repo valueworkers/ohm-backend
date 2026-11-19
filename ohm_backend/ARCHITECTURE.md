@@ -9,7 +9,7 @@ OHM is a multi-tenant aggregator platform for healthcare service providers (hosp
 1. **Strict Data Isolation (Healthcare Compliance)**: Operational healthcare records, patient identities, appointments, and financial records never mix across providers. Every provider workspace is allocated its own database schema.
 2. **Unified API Gateway**: React frontends communicate with a single API hostname (`api.ohm.com`). Schema switching is determined dynamically via the `X-Tenant` header or direct verified domain lookup.
 3. **Single Identity, Contextual Access**: The `accounts.User` model exists across schemas. A user's JWT token contains an explicit `schema` claim, binding authorization tokens strictly to the schema in which they were issued.
-4. **Dual-Layer RBAC Engine**: Combines Django's standard `auth.Permission` and `auth.Group` with product-level `accounts.Role`, `accounts.Permission`, and object-scoped `accounts.RoleAssignment`.
+4. **Django-Native RBAC Engine**: Utilizes Django's standard `auth.Permission` and `auth.Group` models as roles, mirroring the Django Admin permission structure and eliminating separate role/role assignment entities.
 5. **Non-blocking Asynchronous Operations**: Heavy workloads (schema migrations, tenant provisioning, custom domain DNS verification) are offloaded to **Celery** workers backed by **Redis**.
 
 ---
@@ -44,7 +44,7 @@ OHM is a multi-tenant aggregator platform for healthcare service providers (hosp
 | **Platform Staff & Profiles**| OHM Super Admins | `public` | `accounts.User` (`is_staff`/`is_superuser`), `platform.PlatformAdmin` |
 | **Provider Onboarding** | Platform Admin & Applicant | `public` | `platform.TenantProvisioning` |
 | **Workspace Identity & Staff** | Tenant Admin | Tenant Schema | `accounts.User`, `accounts.EmployeeProfile` |
-| **Workspace RBAC & Permissions** | Tenant Admin | Tenant Schema | `accounts.Role`, `accounts.Permission`, `accounts.RoleAssignment` |
+| **Workspace RBAC & Permissions** | Tenant Admin | Tenant Schema | `auth.Group`, `auth.Permission` |
 | **Operational Records** | Healthcare Provider | Tenant Schema | Future modules: `booking`, `analysis`, `payroll`, `venue_manager`, `wallet`, `faq` |
 
 > [!IMPORTANT]
@@ -118,8 +118,9 @@ OHM implements a unified authentication engine via `UnifiedLoginView`:
        raise AuthenticationFailed("Token is not valid for this tenant workspace.")
    ```
    A token obtained from the public schema or a different tenant is rejected immediately.
-3. **Blacklisting & Invalidation**: Logout requests (`POST /api/auth/logout/`) register the refresh token with the SimpleJWT token blacklist.
-4. **OTP Security**: One-Time Passwords are 6-digit numeric codes cached in Redis with a 5-minute time-to-live (TTL). They are bound to specific purposes (`login` or `password_reset`), rate-limited, and deleted upon first verification (single-use).
+3. **Session Revocation**: Login creates a schema-local `UserSession`; access tokens are checked against its active state, and refresh tokens must match the latest session JTI. Logout revokes the current session. Password reset revokes all sessions.
+4. **OTP Security**: One-Time Passwords are 6-digit numeric codes cached in Redis with a 5-minute time-to-live (TTL). They are bound to specific purposes (`login` or `password_reset`), rate-limited by client IP and account identifier, and deleted upon first verification (single-use). OTP values are never written to application logs.
+5. **Short-Lived Access**: Access tokens expire after 15 minutes. Refresh tokens rotate and the prior JTI is rejected by the session record.
 
 ---
 
@@ -129,61 +130,44 @@ The authorization layer bridges Django standard permissions and tenant product p
 
 ```mermaid
 flowchart TD
-    subgraph Django Auth Layer
-        AP[Django auth.Permission] --> AG[Django auth.Group]
+    subgraph Django Auth & RBAC Layer
+        AP[Django auth.Permission] --> AG[Django auth.Group / Role]
         AG --> U[accounts.User]
+        AP -.->|Direct Model Perms| U
     end
-
-    subgraph Product RBAC Layer
-        ACP[accounts.Permission] --> R[accounts.Role]
-        R --> RA[accounts.RoleAssignment]
-        RA --> U
-        CT[ContentType + Scope ID] -.->|Optional Object Scope| RA
-    end
-
-    AP -.->|Synchronized to| ACP
 ```
 
 ### 1. Group Rules & Default Permissions Matrix
-When a schema is created or synced, `seed_roles_and_groups_for_schema` automatically builds `auth.Group` and `accounts.Role` instances based on `GROUP_RULES`:
+When a schema is created or synced, `seed_roles` automatically builds `auth.Group` instances with assigned `auth.Permission` sets based on `ROLE_SPECS`:
 
 ```python
-GROUP_RULES = {
-    # Public Platform Super Admin: unrestricted access
-    Role.Code.SUPER_ADMIN: "__all__",
+ROLE_SPECS = [
+    # Public Platform Super Admin: unrestricted access (public schema only)
+    {"code": "SUPER_ADMIN", "group": "Super User", "scopes": {"public": [{}]}},
 
     # Tenant Admin: unrestricted access across all tenant product modules
-    Role.Code.TENANT_ADMIN: {
-        "apps": ["accounts", "venue_manager", "booking", "payroll", "notification", "analysis", "wallet", "faq"],
-        "actions": "__all__",
-    },
+    {"code": "TENANT_ADMIN", "group": "Tenant Admin", "scopes": {
+        "public": [{"apps": ["platform"], "prefixes": ["view_"]}, {"apps": ["accounts"], "models": ["user"], "prefixes": ["view_", "change_"]}],
+        "tenant": [{"exclude_apps": SYSTEM_APPS + ["platform"]}],
+    }},
 
-    # Ops Manager: view, change, add across all operational modules
-    Role.Code.OPS_MANAGER: {
-        "apps": ["accounts", "venue_manager", "booking", "payroll", "notification", "analysis", "wallet", "faq"],
-        "actions": ["view", "change", "add"],
-    },
-
-    # Specific Admins & Staff: scoped module actions
-    Role.Code.VENUE_ADMIN:    {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view", "change", "add"]},
-    Role.Code.SERVICE_ADMIN:  {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view", "change", "add"]},
-    Role.Code.RESOURCE_ADMIN: {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view", "change", "add"]},
-    Role.Code.STAFF:          {"apps": ["venue_manager", "booking", "payroll", "notification"], "actions": ["view"]},
-
-    # Customer: view & add on end-user features
-    Role.Code.CUSTOMER:       {"apps": ["booking", "wallet", "accounts"], "actions": ["view", "add"]},
-}
+    # Specific built-in role groups:
+    {"code": "CUSTOMER", "group": "CUSTOMER", "scopes": {"tenant": []}},
+    {"code": "VENUE_ADMIN", "group": "VENUE_ADMIN", "scopes": {"tenant": []}},
+    {"code": "SERVICE_ADMIN", "group": "SERVICE_ADMIN", "scopes": {"tenant": []}},
+    {"code": "RESOURCE_ADMIN", "group": "RESOURCE_ADMIN", "scopes": {"tenant": []}},
+]
 ```
 
-### 2. Tenant-Wide vs. Object-Scoped Permissions
-- **Tenant-Wide**: `RoleAssignment.scope_type = None` and `scope_id = None`. The user holds the role across the entire workspace.
-- **Object-Scoped**: `RoleAssignment` connects to a specific Django `ContentType` and model instance ID (e.g. `booking.Venue` ID 4). This allows fine-grained permissions such as assigning a user as `VENUE_ADMIN` for a specific physical branch.
+### 2. Permissions Structure & Group Management
+- **Direct Django Groups as Roles**: Permission groups (`auth.Group`) act as roles. Tenants create and manage them directly via `/api/groups/` with permissions assigned in a single step.
+- **Group Members**: Users are added or removed from groups via `/api/groups/{id}/users/`.
+- **Hierarchical Permission Tree**: `/api/permissions/grouped/` provides all Django permissions grouped by application and model, matching the Django Admin interface.
+- **User Permission Assignment**: Users support `groups` and direct `user_permissions` (with serialized `group_details` and `user_permission_details`), mirroring Django Admin.
 
 ### 3. Protection Invariants
-- Built-in roles (`TENANT_ADMIN`, `CUSTOMER`) cannot have their codes or ranks modified, and cannot be deleted.
-- Custom roles cannot be assigned ranks $\ge 100$ (reserved for administrators).
-- A workspace cannot deactivate or revoke its last active `TENANT_ADMIN`.
-- Deleting a role that has active assignments returns HTTP 409 Conflict.
+- Built-in permission groups (`Super User`, `Tenant Admin`) cannot be deleted.
+- A workspace cannot deactivate or revoke its last active `Tenant Admin`.
 
 ---
 
@@ -259,3 +243,47 @@ When building new operational features (e.g., `booking`, `payroll`, `analysis`):
        ...
    ```
 3. **Module Feature Flags**: Tenants have an `enabled_modules` list (`Tenant.modules`). Platform admins grant access via `PATCH /api/platform/tenants/{id}/permissions/`. Custom views can guard access using DRF permissions.
+
+## 9. Plans, Billing, and Subscription Entitlements
+
+Plans and billing records live in the public platform schema. Plans hold the current recurring or one-time price; subscriptions retain a pricing snapshot selected at signup. Quotations and invoices store monetary snapshots so later catalogue changes do not rewrite historical totals.
+
+Manage quotation workflow states and issue invoices through the platform Django Admin. `apps.platform.services` owns line calculations, transaction-locked `DocumentSequence` numbering, quotation-to-invoice copying, payment recording, and subscription activation/extension. Payment integration code must verify provider webhook signatures before calling `record_gateway_payment`; that function enforces gateway payment ID idempotency and updates invoice state. No provider-specific webhook route or quote email delivery is configured yet.
+
+---
+
+## 10. Care Product Module (Product Code: `care`)
+
+The Care product module (`apps.care`) ports the clinical patient management, care packages, booking hierarchy, and staff attendance feature set into OHM as an isolated, plan-gated tenant product module.
+
+### 1. Plan Gating & Entitlements
+- **Feature Code**: `"care"` (with legacy `"medicare"` alias).
+- **Entitlement Checks**: Enforced via `Tenant.has_feature(code: str) -> bool` with 1-hour Redis caching (`tenant:{schema}:feature:{code}`). Checks:
+  1. Active subscription plan features (`subscription.plan.features.filter(code=code)`).
+  2. Direct tenant module enablement (`code in (tenant.modules or [])`).
+  3. Bypass for superadmins and root users.
+- **DRF Permission**: `HasProductAccess` (`product_code = "care"`) checks `request.tenant.has_feature("care")`. If unentitled, it returns `403 Forbidden` (`"Your subscription plan does not include access to the 'care' module."`).
+- **RBAC**: Handled by `CareModelPermissions` extending Django's `DjangoModelPermissions` with strict `view_<model>` check on `GET` requests.
+
+### 2. Schema Boundaries & Data Isolation
+- **Placement**: Registered in `TENANT_APPS` only (`config/settings.py`). Table migrations run exclusively in tenant schemas.
+- **Routing**: Tenant URL router maps endpoints at `/api/care/` (with `/api/medicare/` backward-compatibility alias).
+- **Zero Cross-Tenant Leakage**: All queries are bound to the tenant schema selected by `TenantHeaderMiddleware` via `X-Tenant: <schema>`.
+
+### 3. Entity Models & Architecture
+- **Soft Deletion**: `SoftDeleteModel` abstract base mixin providing `status` (active boolean), `is_deleted` (db indexed boolean), and `deleted_at` timestamp. `soft_delete()` marks `is_deleted=True`, `status=False`, and timestamps `deleted_at`.
+- **Patient Profile**: Full standalone `Patient` model preserving clinical and demographics fields with structured `JSONField` address (`line1`, `line2`, `locality`, `city`, `pincode`) and sequential human-readable identifier (`PAT-00001`).
+- **Target Entity Packages**: `Package` model replaces generic foreign keys with 3 explicit nullable FKs (`venue` -> `catalog.Venue`, `service` -> `catalog.Service`, `resource` -> `catalog.Resource`) backed by a database `CheckConstraint` requiring exactly one non-null target.
+- **Restructured Booking Hierarchy**:
+  - `PrimaryOrder`: The umbrella care agreement for a patient. Carries `patient`, `user` (booking guardian/account owner), dates, cumulative `total_bill`, and booking status.
+  - `SecondaryOrder`: Core operational and billing cycle unit. Carries `package`, `service`, `venue`, `booking_type` (`IN_HOUSE`, `OPD`, `CLIENT_SIDE`), `client_address` (JSON), cycle dates, amounts (`subtotal`, `discount_amount`, `premium_amount`, `total_amount`), `status`, and `auto_continue` flag.
+  - `TernaryOrder`: Add-on services, procedures, or equipment rentals attached to a parent `SecondaryOrder`.
+- **Per-Tenant Razorpay Gateway**: `TenantPaymentConfig` stores encrypted tenant credentials (`razorpay_key_id`, `razorpay_key_secret`, `razorpay_webhook_secret`, `currency`). `RazorpayService` dynamically instantiates the payment client per tenant.
+- **Shared Invoicing & GST Engine**: `CareInvoiceService` reuses `apps.billing.Invoice`, `InvoiceItem`, and `DocumentSequence` (`SINV-YYYY-XXXXX` and `TINV-YYYY-XXXXX`), computing CGST, SGST, IGST using `apps.platform.gst`.
+
+### 4. Tenant-Aware Celery Automations
+- Maintenance beat task runs daily (`run_care_tenant_beat_maintenance`), iterating through all non-public tenants possessing the `care` feature:
+  - `mark_attendance_present`: Auto-generates present attendance records for active staff members.
+  - `update_statuses_by_time`: Transitions unlocked orders between `YET_TO_START`, `IN_PROGRESS`, and `COMPLETED`/`FULFILLED`.
+  - `trigger_auto_continue_secondary_orders`: Auto-extends recurrent care packages where `auto_continue=True`.
+  - `reconcile_invoices`: Syncs unpaid invoice items and recalculates overdue balances.

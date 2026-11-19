@@ -1,0 +1,49 @@
+<!doctype html>
+<html amp4email>
+<head>
+  <meta charset="utf-8">
+  <script async src="https://cdn.ampproject.org/v0.js"></script>
+  <script async custom-element="amp-mustache" src="https://cdn.ampproject.org/v0/amp-mustache-0.2.js"></script>
+  <style amp4email-boilerplate>body{visibility:hidden}</style>
+  <style amp-custom>
+    body{font-family:Arial,sans-serif;color:#222;padding:24px}
+    .quote{max-width:640px;margin:auto}
+    .muted{color:#777}
+    .line{border-bottom:1px solid #eee;padding:10px 0}
+    .button{border:0;border-radius:5px;padding:12px 20px;color:#fff;font-size:16px;margin-right:8px}
+    .yes{background:#16803c}
+    .no{background:#b42318}
+  </style>
+</head>
+<body>
+  <main class="quote">
+    <h2>O-HM Senior Care · Quotation</h2>
+    <p class="muted">Quote {{ quote_number }} · Revision {{ revision }}<br>
+      Date {{ quote_date }} · Valid until {{ valid_until }}</p>
+    <h3>{{ customer_name }}</h3>
+    <p>{{ customer_region }} · GSTIN {{ gstin }}</p>
+    <h3>Items</h3>
+    {% for item in items %}
+    <div class="line">
+      <strong>{{ item.name }}</strong><br>
+      <span class="muted">{{ item.description }} · Qty {{ item.qty }} · {{ item.amount }}</span>
+    </div>
+    {% endfor %}
+    <p>Subtotal: {{ subtotal }}<br>Freight: {{ freight_value }}<br>GST: {{ gst }}<br>
+      <strong>Total: {{ total }}</strong></p>
+    {% if terms %}<h3>Terms</h3>{% for term in terms %}<p>{{ term }}</p>{% endfor %}{% endif %}
+    <form method="post" action-xhr="{{ accept_url }}">
+      <input type="hidden" name="accepted" value="true">
+      <button class="button yes" type="submit">Accept quote</button>
+      <div submit-success><template type="amp-mustache">Quote accepted. Thank you.</template></div>
+      <div submit-error><template type="amp-mustache">We couldn't record your response. Please contact the sender.</template></div>
+    </form>
+    <form method="post" action-xhr="{{ accept_url }}">
+      <input type="hidden" name="accepted" value="false">
+      <button class="button no" type="submit">Reject quote</button>
+      <div submit-success><template type="amp-mustache">Your response has been recorded.</template></div>
+      <div submit-error><template type="amp-mustache">We couldn't record your response. Please contact the sender.</template></div>
+    </form>
+  </main>
+</body>
+</html>

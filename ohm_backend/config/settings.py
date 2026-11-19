@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from corsheaders.defaults import default_headers
+from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -10,15 +11,37 @@ load_dotenv(BASE_DIR / ".env")
 def env(name, default=None):
     return os.environ.get(name, default)
 
+def env_bool(name, default=False):
+    value = env(name)
+    if value is None:
+        return default
+    normalized = str(value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    raise ImproperlyConfigured(f"{name} must be a boolean value.")
+
+def env_csv(name, default):
+    value = env(name)
+    if value is None:
+        return list(default)
+    return [item.strip() for item in str(value).split(",") if item.strip()]
+
 REDIS_URL = env("REDIS_URL", "redis://localhost:6379/0")
 
 
 SECRET_KEY = env("DJANGO_SECRET_KEY", "dev-insecure-change-me")
-DEBUG = env("DJANGO_DEBUG", True)
+DEBUG = env_bool("DJANGO_DEBUG", False)
+if not DEBUG and SECRET_KEY == "dev-insecure-change-me":
+    raise ImproperlyConfigured("Set a unique DJANGO_SECRET_KEY when DEBUG is disabled.")
 
 # Host validity is enforced by VerifiedDomainTenantMiddleware:
 # only hosts with a *verified* Domain row resolve to a tenant, everything else 404s.
-ALLOWED_HOSTS = ["*"]
+ALLOWED_HOSTS = env_csv(
+    "DJANGO_ALLOWED_HOSTS",
+    ["*"] if DEBUG else [env("OHM_API_HOST", "api.o-hm.com"), env("OHM_BASE_DOMAIN", "o-hm.com"), "." + env("OHM_BASE_DOMAIN", "o-hm.com")],
+)
 
 # --- ohm platform settings -------------------------------------------------
 BASE_DOMAIN   = env("OHM_BASE_DOMAIN", "localhost")
@@ -60,7 +83,14 @@ TENANT_APPS = [
     "django.contrib.messages",
     "django.contrib.admin",
     "apps.accounts",
-    # Product modules go here later, e.g. "apps.patients", "apps.booking", "apps.billing"
+    # Product modules:
+    "apps.catalog",        # Venues, Services, Resources (Facility & Product Catalog)
+    "apps.billing",        # Quotations, Invoices, Bookings, Payments
+    "apps.wallet",         # Customer wallet & auto-pay
+    "apps.payroll",        # Attendance, salary structures, payroll reports & disbursements
+    "apps.notifications",  # Omnichannel notifications & templates
+    "apps.content",        # Content: FAQs, contacts, videos
+    "apps.analytics",      # Financial, booking, attendance & payroll analytics
 ]
 
 INSTALLED_APPS = list(SHARED_APPS) + [a for a in TENANT_APPS if a not in SHARED_APPS]
@@ -79,6 +109,9 @@ DATABASES = {
         "PASSWORD": env("POSTGRES_PASSWORD", "ohm"),
         "HOST": env("POSTGRES_HOST", "localhost"),
         "PORT": env("POSTGRES_PORT", "5432"),
+        "TEST": {
+            "NAME": env("POSTGRES_DB", "ohm"),
+        },
     }
 }
 DATABASE_ROUTERS = ("django_tenants.routers.TenantSyncRouter",)
@@ -130,33 +163,54 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "apps.accounts.permissions.DynamicModelPermissions",
     ],
+
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+
+    "DEFAULT_PAGINATION_CLASS": "config.pagination.StandardResultsSetPagination",
+    
     "DEFAULT_THROTTLE_RATES": {
         "root_login": "20/minute",
+        "login_identity": "10/hour",
+        "refresh_token": "30/hour",
         "otp_request": "5/hour",
+        "otp_identity": "5/hour",
+        "otp_verify": "10/hour",
+        "sensitive_auth": "5/hour",
         "tenant_registration_create": "20/hour",
         "tenant_request": "10/hour",
+        "settings_email": "5/hour",
     },
     "NUM_PROXIES": 1,
 }
 
 SIMPLE_JWT = {
-    'ACCESS_TOKEN_LIFETIME': timedelta(days=24),
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=15),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
     'ROTATE_REFRESH_TOKENS': True,
-    'BLACKLIST_AFTER_ROTATION': True,  # calls our custom blacklist() below
+    'BLACKLIST_AFTER_ROTATION': False,  # revocation is enforced by schema-local UserSession rows
     'UPDATE_LAST_LOGIN': True,
 }
 
-CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_ALL_ORIGINS = env_bool("CORS_ALLOW_ALL_ORIGINS", DEBUG)
+CORS_ALLOWED_ORIGINS = env_csv("CORS_ALLOWED_ORIGINS", [])
 CORS_ALLOW_HEADERS = [*default_headers, "x-tenant"]
-if not DEBUG:
-    AUTH_PASSWORD_VALIDATORS = [
-        {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
-        {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
-        {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
-    ]
+AUTH_PASSWORD_VALIDATORS = [
+    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
+    {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
+]
 
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+if not DEBUG:
+    SECURE_SSL_REDIRECT = env_bool("SECURE_SSL_REDIRECT", True)
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(env("SECURE_HSTS_SECONDS", 31536000))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = env_bool("SECURE_HSTS_INCLUDE_SUBDOMAINS", True)
 
 
 
@@ -175,8 +229,9 @@ EMAIL_HOST = env("EMAIL_HOST", "localhost")
 EMAIL_PORT = int(env("EMAIL_PORT", 587))
 EMAIL_HOST_USER = env("EMAIL_HOST_USER", "")
 EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", "")
-EMAIL_USE_TLS = bool(env("EMAIL_USE_TLS", True))
+EMAIL_USE_TLS = env_bool("EMAIL_USE_TLS", True)
 DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", "noreply@ohm.local")
+QUOTE_AMP_ALLOWED_SENDERS = env_csv("QUOTE_AMP_ALLOWED_SENDERS", [DEFAULT_FROM_EMAIL])
 
 OHM_SMS_OTP_BACKEND = env("OHM_SMS_OTP_BACKEND", "")
 
@@ -196,6 +251,34 @@ CELERY_BEAT_SCHEDULE = {
         "task": "apps.platform.tasks.verify_pending_domains",
         "schedule": 300,
     },
+    "expire-sent-quotes-daily": {
+        "task": "apps.platform.tasks.expire_sent_quotes",
+        "schedule": 86400,
+    },
+    "mark-overdue-invoices-daily": {
+        "task": "apps.platform.tasks.mark_overdue_invoices_task",
+        "schedule": 86400,
+    },
+    "mark-attendance-present-daily": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 86400,
+        "args": ["apps.payroll.tasks.mark_attendance_present"],
+    },
+    "notifications-daily-digest": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 86400,
+        "args": ["apps.notifications.tasks.send_daily_digest"],
+    },
+    "billing-reconcile-invoices-daily": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 86400,
+        "args": ["apps.billing.tasks.reconcile_invoices"],
+    },
+    "billing-update-statuses-hourly": {
+        "task": "apps.platform.tasks.fanout",
+        "schedule": 3600,
+        "args": ["apps.billing.tasks.update_statuses_by_time"],
+    },
 }
 
 LANGUAGE_CODE = "en-us"
@@ -203,3 +286,25 @@ TIME_ZONE = "Asia/Kolkata"
 USE_I18N = True
 USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+INVOICE_DEFAULT_ISSUER = {
+    "logo": "",                          # URL of the uploaded logo (optional)
+    "company_name": "O-HM Senior Care",
+    "company_address": "India",
+    "company_phone": "",
+    "gstin": "",                         # seller GSTIN; if blank, "state" below decides CGST+SGST vs IGST
+    "state": "Karnataka",
+    "contact_name": "O-HM Senior Care",
+    "contact_phone": "",
+    "contact_email": "support@o-hm.com",
+}
+ 
+INVOICE_DEFAULT_TERMS = (
+    "Payment as agreed; advance may be required for custom packages.\n"
+    "Services subject to caregiver availability at the venue.\n"
+    "Prices exclude hospital / pharmacy pass-through unless listed.\n"
+    "Cancellation per organization policy.\n"
+    "Subject to laws of India."
+)
+ 
+INVOICE_DEFAULT_DUE_DAYS = 15

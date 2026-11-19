@@ -1,10 +1,23 @@
 import secrets
 import uuid
+from decimal import Decimal
+from django.core.exceptions import ValidationError
+from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
+from django.db import models
+from django.db.models import Q, Sum
+from django_tenants.models import DomainMixin, TenantMixin
+from django.utils import timezone
+
+import uuid
+from decimal import Decimal
 
 from django.conf import settings
+from django.core.validators import MaxValueValidator, MinValueValidator, RegexValidator
 from django.db import models
-from django_tenants.models import DomainMixin, TenantMixin
-from django.core.validators import RegexValidator
+from django.db.models import Q, Sum
+from django.utils import timezone
+
 
 GSTIN_RE = r"^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"
 
@@ -23,16 +36,24 @@ class Feature(models.Model):
     def __str__(self):
         return self.name
 
-
 class Plan(models.Model):
     """A subscription plan. Limits and bundled features live here, not on Tenant."""
-
+    class BillingPeriod(models.TextChoices):
+        MONTHLY = "monthly", "Monthly"
+        QUARTERLY = "quarterly", "Quarterly"
+        YEARLY = "yearly", "Yearly"
+        ONE_TIME = "one_time", "One time"
     code = models.SlugField(max_length=50, unique=True)  # e.g. basic, professional
     name = models.CharField(max_length=120)
     description = models.TextField(blank=True)
     features = models.ManyToManyField(Feature, blank=True, related_name="plans")
     max_employees = models.PositiveIntegerField(null=True, blank=True)  # null = unlimited
     max_branches = models.PositiveIntegerField(null=True, blank=True)   # null = unlimited
+    billing_period = models.CharField(max_length=20, choices=BillingPeriod.choices, default=BillingPeriod.MONTHLY)
+    currency = models.CharField(max_length=3, default="INR")
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    setup_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)])
+    tax_rate = models.DecimalField(max_digits=5, decimal_places=2, default=Decimal("18.00"), validators=[MinValueValidator(0), MaxValueValidator(100)])
     is_active = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -41,7 +62,6 @@ class Plan(models.Model):
 
     def __str__(self):
         return self.name
-
 
 class Tenant(TenantMixin):
     """A healthcare service provider workspace, managed by OHM in the public schema."""
@@ -79,6 +99,38 @@ class Tenant(TenantMixin):
     def __str__(self):
         return f"{self.name} ({self.schema_name})"
 
+    def has_feature(self, code: str) -> bool:
+        """Check whether this tenant has access to a product feature code (cached)."""
+        if not code:
+            return True
+        from django.core.cache import cache
+        cache_key = f"tenant:{self.schema_name}:feature:{code}"
+        cached = cache.get(cache_key)
+        if cached is not None:
+            return bool(cached)
+
+        codes = [code]
+        if code == "care":
+            codes.append("medicare")
+        elif code == "medicare":
+            codes.append("care")
+
+        if isinstance(self.modules, list) and any(c in self.modules for c in codes):
+            cache.set(cache_key, True, timeout=300)
+            return True
+
+        has_access = (
+            self.subscriptions.filter(
+                status__in=[Subscription.Status.ACTIVE, Subscription.Status.TRIAL]
+            )
+            .filter(
+                Q(plan__features__code__in=codes, plan__features__is_active=True)
+                | Q(features__code__in=codes, features__is_active=True)
+            )
+            .exists()
+        )
+        cache.set(cache_key, has_access, timeout=300)
+        return has_access
 
 class Subscription(models.Model):
     class Status(models.TextChoices):
@@ -89,6 +141,11 @@ class Subscription(models.Model):
 
     tenant = models.ForeignKey(Tenant, on_delete=models.CASCADE, related_name="subscriptions")
     plan = models.ForeignKey(Plan, null=True, blank=True, on_delete=models.PROTECT, related_name="subscriptions")
+    price_billing_period = models.CharField(max_length=20, choices=Plan.BillingPeriod.choices, blank=True)
+    price_currency = models.CharField(max_length=3, blank=True)
+    price_amount = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    price_setup_fee = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    price_tax_rate = models.DecimalField(max_digits=5, decimal_places=2, null=True, blank=True)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.ACTIVE)
     starts_at = models.DateTimeField()
     ends_at = models.DateTimeField(null=True, blank=True)
@@ -104,7 +161,6 @@ class Subscription(models.Model):
     def __str__(self):
         return f"{self.tenant} - {self.plan or 'no plan'} ({self.status})"
 
-
 class Domain(DomainMixin):
     """A provider hostname that routes requests to its tenant schema when verified."""
 
@@ -117,10 +173,9 @@ class Domain(DomainMixin):
         self.domain = self.domain.strip().lower()
         super().save(*args, **kwargs)
 
-
 class TenantProvisioning(models.Model):
     """Provider application stored in public until a root admin approves it."""
-    
+
     class Status(models.TextChoices):
         SUBMITTED = "submitted", "Submitted"
         APPROVED = "approved", "Approved"
@@ -154,10 +209,9 @@ class TenantProvisioning(models.Model):
     gst_number = models.CharField(max_length=15,null=True, blank=True, validators=[
         RegexValidator(GSTIN_RE,"Enter a valid 15-character GSTIN, e.g. 22AAAAA0000A1Z5.")
     ])
-    
+
     co_owner_emails = models.JSONField(
-        default=list, blank=True, null=True,
-        help_text="Up to 3 co-owner emails; only used when needs_co_owners."
+        default=list, blank=True, null=True
     )
 
     # --- Workflow fields (not on the form, needed for the lobby/approval flow) ---
@@ -193,6 +247,87 @@ class TenantProvisioning(models.Model):
         return f"{self.organization_name} ({self.status})"
 
 
+class DocumentSequence(models.Model):
+    """Transactional per-prefix/year counters for quotation and invoice numbers."""
+
+    prefix = models.CharField(max_length=8)
+    year = models.PositiveSmallIntegerField()
+    last_value = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        constraints = [models.UniqueConstraint(fields=["prefix", "year"], name="uniq_document_sequence_prefix_year")]
+
+class Quotation(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SENT = "sent", "Sent"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+        EXPIRED = "expired", "Expired"
+
+    number = models.CharField(max_length=30, unique=True)
+    tenant = models.ForeignKey(Tenant, null=True, blank=True, on_delete=models.SET_NULL, related_name="quotations")
+    provisioning_request = models.ForeignKey(
+        TenantProvisioning, null=True, blank=True, on_delete=models.SET_NULL, related_name="quotations"
+    )
+    plan = models.ForeignKey(Plan, on_delete=models.PROTECT, related_name="quotations")
+    billing_period = models.CharField(max_length=20, choices=Plan.BillingPeriod.choices, default=Plan.BillingPeriod.MONTHLY)
+    plan_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    setup_fee = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+    billing_name = models.CharField(max_length=200)
+    billing_email = models.EmailField()
+    gst_number = models.CharField(max_length=15, null=True, blank=True)
+    billing_address = models.JSONField(default=dict, blank=True)
+    currency = models.CharField(max_length=3, default="INR")
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_rate = models.DecimalField(
+        max_digits=5, decimal_places=2, default=Decimal("18.00"),
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    valid_until = models.DateField(null=True, blank=True)
+    notes = models.TextField(blank=True)
+    terms = models.TextField(blank=True)
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="created_quotations",
+    )
+    sent_at = models.DateTimeField(null=True, blank=True)
+    responded_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(discount__gte=0) & Q(tax_rate__gte=0) & Q(tax_rate__lte=100),
+                name="quotation_discount_and_tax_nonnegative",
+            ),
+        ]
+
+    def clean(self):
+        has_tenant = bool(self.tenant_id)
+        has_request = bool(self.provisioning_request_id)
+        if (self._state.adding and has_tenant == has_request) or (has_tenant and has_request):
+            raise ValidationError("A quotation must target exactly one tenant or provisioning request.")
+
+    def __str__(self):
+        return f"{self.number} ({self.status})"
+
+class QuotationItem(models.Model):
+    quotation = models.ForeignKey(Quotation, on_delete=models.CASCADE, related_name="items")
+    description = models.CharField(max_length=255)
+    quantity = models.PositiveIntegerField(default=1)
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        constraints = [models.CheckConstraint(condition=Q(quantity__gte=1), name="quotation_item_quantity_positive")]
+
 class PlatformAdmin(models.Model):
     """Public-schema platform privileges linked to the shared auth user model."""
 
@@ -202,3 +337,505 @@ class PlatformAdmin(models.Model):
 
     def __str__(self):
         return self.user.email
+
+class QuoteCounter(models.Model):
+    """Monthly sequence for prospect quote numbers."""
+    period = models.CharField(max_length=4, unique=True)
+    last_seq = models.PositiveIntegerField(default=0)
+
+class QuoteTaxSettings(models.Model):
+    """Seller GST identity, configured once for the control plane or once per tenant."""
+    tenant = models.ForeignKey(Tenant, null=True, blank=True, on_delete=models.CASCADE, related_name="quote_tax_settings")
+    gstin = models.CharField(max_length=15, blank=True)
+    state_code = models.CharField(max_length=2, blank=True)
+    state_name = models.CharField(max_length=60, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=["tenant"], condition=Q(tenant__isnull=True), name="uniq_public_quote_tax_settings"),
+            models.UniqueConstraint(fields=["tenant"], condition=Q(tenant__isnull=False), name="uniq_tenant_quote_tax_settings"),
+        ]
+
+    def __str__(self):
+        scope = self.tenant.name if self.tenant_id else "Public"
+        return f"{scope}: {self.state_name} ({self.state_code})"
+
+class Quote(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        SENT = "sent", "Sent"
+        ACCEPTED = "accepted", "Accepted"
+        REJECTED = "rejected", "Rejected"
+        EXPIRED = "expired", "Expired"
+        SUPERSEDED = "superseded", "Superseded"
+
+    class SupplyType(models.TextChoices):
+        UNKNOWN = "unknown", "Unknown"
+        INTRA_STATE = "intra_state", "Intra-state (CGST + SGST)"
+        INTRA_UT = "intra_ut", "Intra-UT (CGST + UTGST)"
+        INTER_STATE = "inter_state", "Inter-state (IGST)"
+
+    number = models.CharField(max_length=30, db_index=True)
+    revision = models.PositiveSmallIntegerField(default=0)
+    status = models.CharField(max_length=12, choices=Status.choices, default=Status.DRAFT)
+
+    # --- Buyer ---
+    company = models.CharField(max_length=200)
+    attention = models.CharField(max_length=200, blank=True)
+    address = models.TextField(blank=True)
+    gstin = models.CharField(max_length=15, blank=True)
+    state = models.CharField(max_length=60)
+    state_code = models.CharField(max_length=2, blank=True)
+    buyer_email = models.EmailField()
+    cc_emails = models.JSONField(default=list, blank=True)
+    bcc_emails = models.JSONField(default=list, blank=True)
+    ship_to = models.TextField(blank=True)
+    your_ref = models.CharField(max_length=100, blank=True)
+
+    # --- Dates / text ---
+    quote_date = models.DateField(default=timezone.localdate)
+    valid_days = models.PositiveSmallIntegerField(default=30, validators=[MinValueValidator(1), MaxValueValidator(365)])
+    notes = models.TextField(blank=True)
+    terms = models.TextField(blank=True)                            # NEW: one term per line
+
+    # --- GST snapshot (written by services.recalculate) ---
+    supply_type = models.CharField(max_length=12, choices=SupplyType.choices, default=SupplyType.UNKNOWN)  # NEW
+    place_of_supply_code = models.CharField(max_length=2, blank=True)   # NEW
+    seller_gstin = models.CharField(max_length=15, blank=True)          # NEW
+    seller_state_code = models.CharField(max_length=2, blank=True)      # NEW
+    seller_state_name = models.CharField(max_length=60, blank=True)     # NEW
+
+    # --- Amounts ---
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)        # gross: sum(qty x price)
+    discount_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # NEW: sum of line discounts
+    freight = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+    packing = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)  # NEW
+    charges_gst_rate = models.DecimalField(max_digits=4, decimal_places=2, default=18,
+                                           validators=[MinValueValidator(0), MaxValueValidator(100)])  # NEW: GST on freight+packing
+    taxable_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # NEW: lines + charges, after discount
+    cgst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sgst = models.DecimalField(max_digits=12, decimal_places=2, default=0)            # holds UTGST when supply_type == intra_ut
+    igst = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    round_off = models.DecimalField(max_digits=5, decimal_places=2, default=0)        # NEW
+    total = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True)
+
+    accept_token = models.CharField(max_length=64, unique=True, default=secrets.token_urlsafe)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    provisioning = models.ForeignKey(TenantProvisioning, null=True, blank=True, on_delete=models.SET_NULL, related_name="prospect_quotes")
+    tenant = models.ForeignKey(Tenant, null=True, blank=True, on_delete=models.CASCADE, related_name="prospect_quotes")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.PROTECT, related_name="prospect_quotes")
+    created_by_email = models.EmailField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-quote_date", "-number", "-revision"]
+        constraints = [models.UniqueConstraint(fields=["number", "revision"], name="uniq_quote_number_revision")]
+        indexes = [                                                  # NEW: back the list filters
+            models.Index(fields=["tenant", "status", "-quote_date"]),
+            models.Index(fields=["gstin"]),
+            models.Index(fields=["company"]),
+        ]
+
+    @property
+    def valid_until(self):
+        from datetime import timedelta
+        return self.quote_date + timedelta(days=self.valid_days)
+
+    @property
+    def state_tax_label(self):
+        return "UTGST" if self.supply_type == self.SupplyType.INTRA_UT else "SGST"
+
+class QuoteLine(models.Model):
+    class Kind(models.TextChoices):
+        CATALOG = "catalog", "Catalog"
+        CUSTOM = "custom", "Custom service"
+        SERVICE_VISIT = "service_visit", "Service visit"
+        MANPOWER = "manpower", "Man power"
+        ON_REQUEST = "on_request", "On request"
+    
+    class Uom(models.TextChoices):
+        # Quantity / Count
+        PCS = "PCS", "Pcs"
+        NOS = "NOS", "Nos"
+        UNT = "UNT", "Unit"
+        SET = "SET", "Set"
+        PR = "PR", "Pair"
+        DOZ = "DOZ", "Dozen"
+
+        # Packaging
+        BOX = "BOX", "Box"
+        PAC = "PAC", "Pack"
+        PKT = "PKT", "Packet"
+        CTN = "CTN", "Carton"
+        BAG = "BAG", "Bag"
+        BDL = "BDL", "Bundle"
+        ROL = "ROL", "Roll"
+        BTL = "BTL", "Bottle"
+        CAN = "CAN", "Can"
+
+        # Weight
+        MG = "MG", "Mg"
+        GMS = "GMS", "Gms"
+        KGS = "KGS", "Kg"
+        QTL = "QTL", "Quintal"
+        TON = "TON", "Ton"
+
+        # Volume
+        ML = "ML", "Ml"
+        LTR = "LTR", "Litre"
+
+        # Length / Distance
+        MM = "MM", "Mm"
+        CM = "CM", "Cm"
+        MTR = "MTR", "Mtr"
+        KM = "KM", "Km"
+        IN = "IN", "Inch"
+        FT = "FT", "Feet"
+        YD = "YD", "Yard"
+        MI = "MI", "Mile"
+
+        # Area
+        SQFT = "SQFT", "Sq.Ft"
+        SQM = "SQM", "Sq.Mtr"
+        SQYD = "SQYD", "Sq.Yard"
+
+        # Time / Services
+        HRS = "HRS", "Hour"
+        DAY = "DAY", "Day"
+        MTH = "MTH", "Month"
+        YR = "YR", "Year"
+        VST = "VST", "Visits"
+
+        # Other
+        OTH = "OTH", "Other"
+        
+    quote = models.ForeignKey(Quote, related_name="lines", on_delete=models.CASCADE)
+    position = models.PositiveSmallIntegerField()
+    kind = models.CharField(max_length=14, choices=Kind.choices)
+    plan = models.ForeignKey(Plan, null=True, blank=True, on_delete=models.SET_NULL, related_name="quote_lines")
+    item = models.CharField(max_length=200)
+    specification = models.CharField(max_length=300, blank=True)
+    hsn_sac = models.CharField(max_length=8, blank=True)
+    uom = models.CharField(max_length=5, choices=Uom.choices, default=Uom.PCS)                       # NEW
+    qty = models.DecimalField(max_digits=8, decimal_places=2, default=1, validators=[MinValueValidator(Decimal("0.01"))])
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, null=True, blank=True, validators=[MinValueValidator(0)])
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                           validators=[MinValueValidator(0), MaxValueValidator(100)])  # NEW
+    lead_time = models.CharField(max_length=50, blank=True)
+    gst_rate = models.DecimalField(max_digits=4, decimal_places=2, default=18, validators=[MinValueValidator(0), MaxValueValidator(100)])
+
+    taxable_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    line_total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+
+    class Meta:
+        ordering = ["position"]
+        constraints = [models.UniqueConstraint(fields=["quote", "position"], name="uniq_quote_line_position")]
+
+class QuoteEvent(models.Model):
+    quote = models.ForeignKey(Quote, related_name="events", on_delete=models.CASCADE)
+    kind = models.CharField(max_length=20)
+    detail = models.CharField(max_length=300, blank=True)
+    actor = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL)
+    at = models.DateTimeField(auto_now_add=True)
+
+
+class Booking(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        CONFIRMED = "confirmed", "Confirmed"
+        IN_PROGRESS = "in_progress", "In Progress"
+        COMPLETED = "completed", "Completed"
+        CANCELLED = "cancelled", "Cancelled"
+
+    class BookingType(models.TextChoices):
+        ONBOARDING = "onboarding", "Onboarding Session"
+        CONSULTATION = "consultation", "Consultation"
+        TRAINING = "training", "Training & Support"
+        SUBSCRIPTION = "subscription", "Subscription Activation"
+        CUSTOM = "custom", "Custom Service"
+
+    booking_id = models.CharField(max_length=50, unique=True, blank=True)
+    tenant = models.ForeignKey(
+        Tenant, on_delete=models.CASCADE, related_name="bookings"
+    )
+    booked_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="platform_bookings",
+    )
+    plan = models.ForeignKey(
+        Plan, null=True, blank=True, on_delete=models.SET_NULL, related_name="bookings"
+    )
+    quote = models.ForeignKey(
+        Quote, null=True, blank=True, on_delete=models.SET_NULL, related_name="bookings"
+    )
+    title = models.CharField(max_length=255)
+    booking_type = models.CharField(
+        max_length=30, choices=BookingType.choices, default=BookingType.ONBOARDING
+    )
+    status = models.CharField(
+        max_length=30, choices=Status.choices, default=Status.CONFIRMED
+    )
+    start_datetime = models.DateTimeField()
+    end_datetime = models.DateTimeField()
+    contact_name = models.CharField(max_length=200, blank=True)
+    contact_email = models.EmailField(blank=True)
+    contact_phone = models.CharField(max_length=20, blank=True)
+    location = models.CharField(max_length=255, blank=True, default="Virtual / Online")
+    total_amount = models.DecimalField(
+        max_digits=12, decimal_places=2, default=Decimal("0.00")
+    )
+    notes = models.TextField(blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-start_datetime", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status"]),
+            models.Index(fields=["start_datetime", "end_datetime"]),
+        ]
+
+    def __str__(self):
+        tenant_name = self.tenant.name if self.tenant_id else "No Tenant"
+        return f"{self.booking_id or 'BKG'} - {tenant_name} - {self.title}"
+
+    def save(self, *args, **kwargs):
+        if not self.booking_id:
+            import random
+            today = timezone.localdate().strftime("%y%m")
+            rand_suffix = random.randint(1000, 9999)
+            self.booking_id = f"BK-{today}-{rand_suffix}"
+        if self.tenant_id:
+            if not self.contact_name:
+                self.contact_name = getattr(self.tenant, "name", "")
+            if not self.contact_email:
+                self.contact_email = getattr(self.tenant, "contact_email", "")
+            if not self.contact_phone:
+                self.contact_phone = getattr(self.tenant, "contact_phone", "")
+        super().save(*args, **kwargs)
+
+
+class InvoiceSequence(models.Model):
+    """Gap-free numbering per year; number is assigned when the invoice is raised."""
+    year = models.PositiveIntegerField(unique=True)
+    last_number = models.PositiveIntegerField(default=0)
+
+class Invoice(models.Model):
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Draft"
+        ISSUED = "issued", "Issued"
+        PARTIALLY_PAID = "partially_paid", "Partially paid"
+        PAID = "paid", "Paid"
+        OVERDUE = "overdue", "Overdue"
+        VOID = "void", "Void"
+
+    # Identity
+    number = models.CharField(max_length=30, unique=True, null=True, blank=True)  # e.g. 459/202626
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.DRAFT)
+
+    # Links (all optional)
+    tenant = models.ForeignKey(
+        Tenant, null=True, blank=True, on_delete=models.PROTECT, related_name="invoices"
+    )
+    subscription = models.ForeignKey(
+        Subscription, null=True, blank=True, on_delete=models.SET_NULL, related_name="invoices"
+    )
+    quotation = models.ForeignKey(
+        Quotation, null=True, blank=True, on_delete=models.SET_NULL, related_name="invoices"
+    )
+    booking = models.ForeignKey(
+        Booking, null=True, blank=True, on_delete=models.SET_NULL, related_name="invoices"
+    )
+
+    # Billed to
+    customer_name = models.CharField(max_length=200)
+    attention = models.TextField(blank=True)
+    address = models.TextField(blank=True)
+    buyer_email = models.EmailField(blank=True)
+    cc_emails = models.JSONField(default=list, blank=True)
+    bcc_emails = models.JSONField(default=list, blank=True)
+    gstin = models.CharField(max_length=15, blank=True, 
+        validators=[RegexValidator(GSTIN_RE, "Enter a valid 15-character GSTIN, e.g. 22AAAAA0000A1Z5.")],
+    )
+    state = models.CharField(max_length=60, default="Karnataka")
+    state_code = models.CharField(max_length=2, blank=True)
+    is_interstate = models.BooleanField(default=False)  # True -> IGST, False -> CGST+SGST
+    ship_to = models.TextField(blank=True, default="Same as above")
+    your_ref = models.CharField(max_length=100, blank=True)  # booking / PO reference
+
+    # Issuer snapshot (company header + contact at the time of raising)
+    issuer = models.JSONField(default=dict, blank=True)
+
+    # Money
+    currency = models.CharField(max_length=3, default="INR")
+    subtotal = models.DecimalField(max_digits=12, decimal_places=2, default=0)   # sum of taxable values
+    discount = models.DecimalField(max_digits=12, decimal_places=2, default=0)   # sum of line discounts
+    cgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    tax_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    total = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount_received = models.DecimalField(  # "Amount already received (₹)"
+        max_digits=12, decimal_places=2, default=0, validators=[MinValueValidator(0)]
+    )
+
+    # Dates & text
+    period_start = models.DateField(null=True, blank=True)
+    period_end = models.DateField(null=True, blank=True)
+    issue_date = models.DateField(default=timezone.localdate)
+    due_days = models.PositiveSmallIntegerField(default=15)
+    due_date = models.DateField(null=True, blank=True)
+    terms = models.TextField(blank=True)  # one term per line
+    notes = models.TextField(blank=True)
+    pdf = models.FileField(upload_to="invoices/", null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-issue_date", "-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status"]),
+            models.Index(fields=["status", "due_date"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["quotation"], condition=Q(quotation__isnull=False),
+                name="uniq_invoice_per_quotation",
+            ),
+            models.CheckConstraint(
+                condition=Q(discount__gte=0) & Q(amount_received__gte=0),
+                name="invoice_discount_and_received_nonnegative",
+            ),
+        ]
+
+    def __str__(self):
+        return f"{self.number or 'DRAFT'} ({self.status})"
+
+    @property
+    def amount_paid(self):
+        online = self.payments.filter(status=Payment.Status.SUCCEEDED).aggregate(t=Sum("amount"))["t"]
+        return self.amount_received + (online or Decimal("0"))
+
+    @property
+    def balance_due(self):
+        return self.total - self.amount_paid
+
+    def refresh_payment_status(self):
+        if self.status in {self.Status.VOID, self.Status.DRAFT}:
+            return
+        paid = self.amount_paid
+        if self.total > 0 and paid >= self.total:
+            self.status = self.Status.PAID
+        elif paid > 0:
+            self.status = self.Status.PARTIALLY_PAID
+        elif self.due_date and self.due_date < timezone.localdate():
+            self.status = self.Status.OVERDUE
+        else:
+            self.status = self.Status.ISSUED
+        self.save(update_fields=["status", "updated_at"])
+
+class InvoiceItem(models.Model):
+    class LineType(models.TextChoices):
+        CATALOG = "catalog", "Catalog"
+        CUSTOM = "custom_service", "Custom service"
+        VISIT = "service_visit", "Service visit"
+        MANPOWER = "man_power", "Man power"
+
+    invoice = models.ForeignKey(Invoice, on_delete=models.CASCADE, related_name="items")
+    position = models.PositiveSmallIntegerField(default=1)
+    line_type = models.CharField(max_length=20, choices=LineType.choices, default=LineType.CUSTOM)
+    description = models.CharField(max_length=255)                     # "Item"
+    hsn_sac = models.CharField(max_length=8)                           # required
+    specification = models.CharField(max_length=255, blank=True)
+    quantity = models.DecimalField(max_digits=10, decimal_places=2, default=1,
+                                   validators=[MinValueValidator(Decimal("0.01"))])
+    uom = models.CharField(max_length=20, default="Pcs")
+    unit_price = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0)])
+    discount_percent = models.DecimalField(max_digits=5, decimal_places=2, default=0,
+                                           validators=[MinValueValidator(0), MaxValueValidator(100)])
+    lead_time = models.CharField(max_length=50, blank=True)
+    gst_rate = models.DecimalField(max_digits=5, decimal_places=2)     # total GST % (e.g. 18 => 9 + 9)
+
+    # Computed
+    discount_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    taxable_value = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    cgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    sgst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    igst_amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)
+    amount = models.DecimalField(max_digits=12, decimal_places=2, default=0)  # line total
+
+    class Meta:
+        ordering = ["position", "id"]
+        constraints = [
+            models.CheckConstraint(condition=Q(quantity__gt=0), name="invoice_item_quantity_positive"),
+        ]
+
+class Payment(models.Model):
+    class Method(models.TextChoices):
+        CARD = "card", "Card"
+        UPI = "upi", "UPI"
+        NETBANKING = "netbanking", "Net banking"
+        BANK_TRANSFER = "bank_transfer", "Bank transfer"
+        CASH = "cash", "Cash"
+        CHEQUE = "cheque", "Cheque"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        SUCCEEDED = "succeeded", "Succeeded"
+        FAILED = "failed", "Failed"
+        REFUNDED = "refunded", "Refunded"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tenant = models.ForeignKey(
+        Tenant, null=True, blank=True, on_delete=models.SET_NULL, related_name="payments"
+    )
+    invoice = models.ForeignKey(
+        Invoice, null=True, blank=True, on_delete=models.SET_NULL, related_name="payments"
+    )
+    amount = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(Decimal("0.01"))])
+    currency = models.CharField(max_length=3, default="INR")
+    method = models.CharField(max_length=20, choices=Method.choices)
+    status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
+    gateway = models.CharField(max_length=30, blank=True)
+    gateway_order_id = models.CharField(max_length=100, blank=True)
+    gateway_payment_id = models.CharField(max_length=100, null=True, blank=True)
+    reference = models.CharField(max_length=100, blank=True)
+    gateway_response = models.JSONField(default=dict, blank=True)
+    failure_reason = models.CharField(max_length=255, blank=True)
+    paid_at = models.DateTimeField(null=True, blank=True)
+    recorded_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="recorded_payments",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["tenant", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gateway", "gateway_payment_id"],
+                condition=Q(gateway_payment_id__isnull=False),
+                name="uniq_gateway_payment_id",
+            ),
+        ]
+
+    def __str__(self):
+        target = self.invoice.number if self.invoice else (self.tenant.name if self.tenant else "Direct")
+        return f"{target} - {self.amount} ({self.status})"
+
+    def save(self, *args, **kwargs):
+        if self.invoice_id and self.invoice and not self.tenant_id:
+            self.tenant = self.invoice.tenant
+        super().save(*args, **kwargs)
+

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invoice {{ invoice_number }}</title>
+</head>
+<body style="margin: 0; padding: 24px; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f4f6f8; color: #1a202c; -webkit-font-smoothing: antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width: 680px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.08);">
+    
+    <!-- Header -->
+    <tr>
+      <td style="padding: 32px 32px 24px; background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%); color: #ffffff;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td valign="top">
+              <h1 style="margin: 0 0 6px; font-size: 24px; font-weight: 700; letter-spacing: -0.5px; color: #ffffff;">{{ seller_name }}</h1>
+              <div style="font-size: 13px; color: #94a3b8; line-height: 1.5;">{{ seller_address }}</div>
+              {% if seller_gstin and seller_gstin != "—" %}
+              <div style="font-size: 12px; color: #cbd5e1; margin-top: 4px;"><strong>GSTIN:</strong> {{ seller_gstin }}</div>
+              {% endif %}
+            </td>
+            <td align="right" valign="top">
+              <span style="display: inline-block; padding: 6px 14px; background-color: #334155; border-radius: 20px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #38bdf8;">
+                {{ status }}
+              </span>
+              <div style="font-size: 18px; font-weight: 700; color: #ffffff; margin-top: 8px;">{{ invoice_number }}</div>
+              {% if target_entity %}
+              <div style="font-size: 12px; color: #94a3b8; margin-top: 4px;">{{ target_entity }}</div>
+              {% endif %}
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- Invoice Details Bar -->
+    <tr>
+      <td style="padding: 20px 32px; background-color: #f8fafc; border-bottom: 1px solid #e2e8f0;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px;">
+          <tr>
+            <td width="33%" valign="top">
+              <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 600;">Issue Date</span><br>
+              <strong style="color: #1e293b;">{{ issue_date }}</strong>
+            </td>
+            <td width="33%" valign="top">
+              <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 600;">Due Date</span><br>
+              <strong style="color: #e11d48;">{{ due_date }}</strong>
+            </td>
+            <td width="34%" align="right" valign="top">
+              <span style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 600;">Reference</span><br>
+              <strong style="color: #1e293b;">{{ your_ref }}</strong>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- Billing Addresses -->
+    <tr>
+      <td style="padding: 24px 32px 16px;">
+        <table width="100%" cellpadding="0" cellspacing="0" style="font-size: 13px; line-height: 1.6;">
+          <tr>
+            <td width="50%" valign="top" style="padding-right: 16px;">
+              <div style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 6px;">Billed To</div>
+              <div style="font-weight: 600; font-size: 14px; color: #0f172a;">{{ customer_name }}</div>
+              {% if customer_attention %}<div style="color: #475569;">Attn: {{ customer_attention }}</div>{% endif %}
+              {% if customer_address %}<div style="color: #64748b; white-space: pre-line;">{{ customer_address }}</div>{% endif %}
+              {% if customer_gstin and customer_gstin != "—" %}<div style="color: #475569; margin-top: 4px;"><strong>GSTIN:</strong> {{ customer_gstin }}</div>{% endif %}
+              <div style="color: #64748b;">State: {{ customer_state }}</div>
+            </td>
+            <td width="50%" valign="top" style="padding-left: 16px;">
+              <div style="color: #64748b; font-size: 11px; text-transform: uppercase; font-weight: 700; margin-bottom: 6px;">Shipping / Service Address</div>
+              <div style="color: #64748b; white-space: pre-line;">{{ ship_to }}</div>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- Line Items Table -->
+    {% if items %}
+    <tr>
+      <td style="padding: 16px 32px;">
+        <table width="100%" cellpadding="8" cellspacing="0" style="border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr style="background-color: #f1f5f9; color: #475569; font-size: 11px; text-transform: uppercase; text-align: left;">
+              <th style="padding: 10px 8px; border-bottom: 2px solid #cbd5e1;">#</th>
+              <th style="padding: 10px 8px; border-bottom: 2px solid #cbd5e1;">Description</th>
+              <th style="padding: 10px 8px; border-bottom: 2px solid #cbd5e1; text-align: center;">HSN/SAC</th>
+              <th style="padding: 10px 8px; border-bottom: 2px solid #cbd5e1; text-align: center;">Qty</th>
+              <th style="padding: 10px 8px; border-bottom: 2px solid #cbd5e1; text-align: right;">Unit Price</th>
+              <th style="padding: 10px 8px; border-bottom: 2px solid #cbd5e1; text-align: right;">Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for item in items %}
+            <tr style="border-bottom: 1px solid #e2e8f0;">
+              <td style="padding: 12px 8px; color: #94a3b8; font-size: 12px;">{{ item.serial }}</td>
+              <td style="padding: 12px 8px;">
+                <strong style="color: #0f172a;">{{ item.description }}</strong>
+                {% if item.specification %}
+                <div style="font-size: 11px; color: #64748b; margin-top: 2px;">{{ item.specification }}</div>
+                {% endif %}
+              </td>
+              <td style="padding: 12px 8px; text-align: center; color: #64748b; font-size: 12px;">{{ item.hsn_sac }}</td>
+              <td style="padding: 12px 8px; text-align: center; color: #0f172a; font-weight: 500;">{{ item.quantity }} {{ item.uom }}</td>
+              <td style="padding: 12px 8px; text-align: right; color: #475569;">{{ item.unit_price }}</td>
+              <td style="padding: 12px 8px; text-align: right; font-weight: 600; color: #0f172a;">{{ item.amount }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </td>
+    </tr>
+    {% endif %}
+
+    <!-- Totals Summary -->
+    <tr>
+      <td style="padding: 16px 32px 24px;">
+        <table width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            <td width="50%" valign="top" style="padding-right: 16px; font-size: 12px; color: #64748b; line-height: 1.6;">
+              {% if terms %}
+              <strong style="color: #334155; text-transform: uppercase; font-size: 11px;">Terms & Conditions</strong>
+              <div style="white-space: pre-line; margin-top: 4px;">{{ terms }}</div>
+              {% endif %}
+              {% if notes %}
+              <div style="margin-top: 12px;">
+                <strong style="color: #334155; text-transform: uppercase; font-size: 11px;">Notes</strong>
+                <div style="white-space: pre-line; margin-top: 4px;">{{ notes }}</div>
+              </div>
+              {% endif %}
+            </td>
+            <td width="50%" valign="top" style="padding-left: 16px;">
+              <table width="100%" cellpadding="6" cellspacing="0" style="font-size: 13px;">
+                <tr>
+                  <td style="color: #64748b;">Subtotal</td>
+                  <td align="right" style="font-weight: 600; color: #0f172a;">{{ subtotal }}</td>
+                </tr>
+                {% if discount_amount and discount_amount != "₹0.00" %}
+                <tr>
+                  <td style="color: #16a34a;">Discount</td>
+                  <td align="right" style="color: #16a34a; font-weight: 600;">-{{ discount_amount }}</td>
+                </tr>
+                {% endif %}
+                {% for tax_label, tax_value in tax_rows %}
+                <tr>
+                  <td style="color: #64748b;">{{ tax_label }}</td>
+                  <td align="right" style="color: #475569;">{{ tax_value }}</td>
+                </tr>
+                {% endfor %}
+                <tr style="border-top: 2px solid #e2e8f0; font-size: 15px;">
+                  <td style="padding-top: 10px; font-weight: 700; color: #0f172a;">Total Amount</td>
+                  <td align="right" style="padding-top: 10px; font-weight: 700; color: #0f172a;">{{ total_amount }}</td>
+                </tr>
+                {% if paid_amount and paid_amount != "₹0.00" %}
+                <tr>
+                  <td style="color: #16a34a;">Amount Paid</td>
+                  <td align="right" style="color: #16a34a; font-weight: 600;">-{{ paid_amount }}</td>
+                </tr>
+                {% endif %}
+                <tr style="background-color: #f0fdf4; border-radius: 6px;">
+                  <td style="padding: 10px 8px; font-size: 14px; font-weight: 700; color: #166534;">Balance Due</td>
+                  <td align="right" style="padding: 10px 8px; font-size: 16px; font-weight: 800; color: #166534;">{{ balance_due }}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+
+    <!-- Footer -->
+    <tr>
+      <td style="padding: 24px 32px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #64748b;">
+        <p style="margin: 0 0 6px;">If you have any questions about this invoice, please contact <a href="mailto:{{ contact_email }}" style="color: #0284c7; text-decoration: none; font-weight: 500;">{{ contact_email }}</a>.</p>
+        <p style="margin: 0; color: #94a3b8; font-size: 11px;">Thank you for your business.</p>
+      </td>
+    </tr>
+
+  </table>
+</body>
+</html>

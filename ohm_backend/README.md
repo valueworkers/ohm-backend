@@ -120,8 +120,8 @@ OHM exposes a unified API host (e.g. `api.ohm.com` in production or `api.ohm.loc
 
 | Persona | Schema | Auth Method | Capabilities |
 | :--- | :--- | :--- | :--- |
-| **Super Admin** | `public` | Email/Phone + Password or OTP (`/api/auth/login/` without `X-Tenant`) | Full platform authority, reviews onboarding requests, manages tenant lifecycles, provisions workspaces, manages subscription plans and features. |
-| **Platform Staff / Root User** | `public` | Email/Phone + Password or OTP | Operational staff managing onboarding applications, reviewing submissions, and viewing platform tenants. Has default permissions across `tenants`, `platform`, and `accounts`. |
+| **Super Admin** | `public` | Email/Phone + Password or OTP (`/api/auth/login/` without `X-Tenant`) | Full platform authority, manages roles and permissions across schemas, reviews onboarding requests, manages tenant lifecycles, provisions workspaces, manages subscription plans and features. |
+| **Platform Staff / Root User** | `public` | Email/Phone + Password or OTP | Operational staff managing roles and permissions, reviewing submissions, managing onboarding applications, and viewing platform tenants. Has default permissions across `tenants`, `platform`, and `accounts`. |
 | **Tenant Admin (Owner/Co-owner)** | Tenant schema (`public` mirror) | Email/Phone + Password or OTP (`/api/auth/login/` with `X-Tenant`) | Workspace administration: manages workspace users, invites co-owners, configures custom roles, manages role assignments, completes organization profile, and activates workspace. |
 | **Operational Staff / Sub-roles** | Tenant schema | Email/Phone + Password or OTP (`/api/auth/login/` with `X-Tenant`) | Healthcare workspace staff assigned to specific operational roles (`OPS_MANAGER`, `VENUE_ADMIN`, `SERVICE_ADMIN`, `RESOURCE_ADMIN`, `STAFF`) with granular or object-scoped access. |
 | **Customer / User** | Tenant schema | Email/Phone + Password or OTP (`/api/auth/login/` with `X-Tenant`) | Healthcare consumer / patient. Self-registers via `POST /api/auth/registrations/`. Has permissions on booking, wallet, and profile. |
@@ -130,9 +130,9 @@ OHM exposes a unified API host (e.g. `api.ohm.com` in production or `api.ohm.loc
 
 ## Automated Permissions & Role System
 
-OHM uses a dual-layer permission architecture:
-1. **Django `auth.Permission` & `auth.Group`**: Django standard authorization primitives utilized by permissions and admin.
-2. **Product RBAC (`accounts.Role`, `accounts.Permission`, `accounts.RoleAssignment`)**: Tenant-configurable roles with ranks and object-level scoping.
+OHM uses Django's native Permissions and Permission Groups as roles:
+1. **Django `auth.Permission` & `auth.Group`**: Django standard authorization primitives utilized by permissions, groups, and admin. Permission groups act directly as roles (mirroring Django Admin permission structure).
+2. **CRUD APIs for Groups**: Tenants create and manage groups directly with permissions, eliminating separate role and role assignment entities.
 
 ### Predefined Roles & Permission Matrix
 Roles automatically receive mapped permissions across modules via `GROUP_RULES`:
@@ -149,8 +149,8 @@ Roles automatically receive mapped permissions across modules via `GROUP_RULES`:
 | `CUSTOMER` | Customer / User | 10 | `view`, `add` on `booking`, `wallet`, `accounts`. |
 
 ### Automated Lifecycle Signals
-- **`post_schema_sync`**: Automatically executes `seed_tenant_default_permissions` upon schema creation or migration.
-- **`tenant_provisioned`**: Automatically seeds tenant roles, assigns full tenant admin permissions, and creates mirrored user profiles for the applicant and all co-owners.
+- **`post_schema_sync`**: Sets up each tenant schema's roles and permission groups using the same canonical definitions as `bootstrap_platform`.
+- **`tenant_provisioned`**: Assigns the Tenant Admin role/group and creates mirrored user profiles for the applicant and all co-owners.
 - **`post_save` on `User` & `PlatformAdmin`**: Automatically ensures public superusers receive all system permissions and public root staff receive default operational permissions.
 
 ---
@@ -163,10 +163,18 @@ Initializes or updates the platform control plane in the public schema. Idempote
 python manage.py bootstrap_platform \
   --email <admin-email> \
   --password <admin-password> \
-  [--full-name "Full Name"] \
-  [--phone "+91..."] \
+  [--first-name "First"] \
+  [--last-name "Last"] \
+  [--mobile-number "+91..."] \
   [--title "Super Admin"] \
   [--reset-password]
+
+# Or only generate/seed groups and roles (no tenants, domains, plans, or users created):
+python manage.py bootstrap_platform --groups-only
+
+# Optionally seed tenant schemas as well:
+python manage.py bootstrap_platform --groups-only --all-tenants
+python manage.py bootstrap_platform --groups-only --schema <tenant_schema>
 ```
 
 ### 2. `create_default_groups` / `assign_tenant_roles`
@@ -216,11 +224,13 @@ All endpoints are hosted on the unified API host (`api.ohm.com`).
 - `GET /api/platform/onboarding/check-slug/?slug=<slug>` — Live subdomain availability check.
 
 ### 2. Unified Authentication
-- `POST /api/auth/login/` — Unified login using email or phone with password or OTP. Omit `X-Tenant` for platform staff; provide `X-Tenant: <slug>` for tenant users. Returns `tokens`, `user`, and `schema_name`.
+- `POST /api/auth/login/` — Unified login using email or phone with password or OTP. Omit `X-Tenant` for platform staff; provide `X-Tenant: <slug>` for tenant users. Super Users can log in directly with `X-Tenant: <slug>` using their credentials to access any workspace with full administrative privileges. Returns `tokens`, `user`, and `schema_name`.
 - `POST /api/auth/otp/` — Request a 6-digit OTP for login or password reset (`username`, `purpose`).
 - `POST /api/auth/password-reset/` — Reset password using OTP (`username`, `otp`, `new_password`).
-- `POST /api/auth/access-tokens/` — Exchange refresh token for a new access token.
-- `POST /api/auth/logout/` — Blacklist refresh token and invalidate session.
+- `POST /api/auth/access-tokens/` — Exchange the current session refresh token for a new access token (15-minute access-token lifetime).
+- `POST /api/auth/logout/` — Revoke the authenticated session immediately.
+- `GET /api/settings/security/sessions/` — List the authenticated user's sessions.
+- `POST /api/settings/security/sessions/revoke-all/` — Revoke other sessions after password or OTP confirmation.
 
 ### 3. Tenant Customer Registration
 - `POST /api/auth/registrations/` — Self-registration for healthcare consumers (requires `X-Tenant`). Automatically assigns `CUSTOMER` role.
@@ -273,20 +283,21 @@ All endpoints are hosted on the unified API host (`api.ohm.com`).
 - `GET /api/owner/` — List workspace co-owners.
 - `POST /api/owner/` — Add a co-owner (seeded with `TENANT_ADMIN` role).
 - `GET /api/owner/me/` — Retrieve authenticated user's owner profile.
-- `PATCH /api/owner/me/` — Update authenticated user's owner profile.
+- `PATCH /api/owner/me/` — Update authenticated user's owner profile. Changes to name, phone, active status, or password are synchronized with the public-schema owner account and the user's other tenant-owner mirrors.
 - `GET/PUT/PATCH /api/owner/{id}/` — Inspect or update owner account.
 - `DELETE /api/owner/{id}/` — Soft-deactivate co-owner (protected: cannot remove self or last active owner).
 
-### 10. Tenant Roles & Role Assignments
-*Requires `IsTenantAdmin` and `X-Tenant` header.*
-- `GET /api/roles/` — List workspace roles with permission breakdown.
-- `POST /api/roles/` — Create custom workspace role (`code`, `name`, `rank`, `permissions`).
-- `GET/PUT/PATCH /api/roles/{id}/` — Retrieve or modify custom role.
-- `DELETE /api/roles/{id}/` — Delete custom role (protected: built-in roles and assigned roles cannot be deleted).
-- `GET /api/roles/permissions/` — List all assignable permission codes.
-- `GET /api/role-assignments/` — List role assignments (`?user_id=`, `?role_id=`).
-- `POST /api/role-assignments/` — Assign role tenant-wide or scoped to an object (`object_type`, `object_id`).
-- `DELETE /api/role-assignments/{id}/` — Revoke role assignment.
+### 10. Permission Groups (Roles) & Django Permissions
+*Requires `CanManageRoles` (`IsAuthenticated` with Superadmin, Root user across all schemas, or Tenant Admin in tenant workspaces).*
+- `GET /api/groups/` — List permission groups with assigned permissions, details, and user count.
+- `POST /api/groups/` — Create permission group (role) with permissions list (`name`, `permissions`).
+- `GET/PUT/PATCH /api/groups/{id}/` — Retrieve or update permission group.
+- `DELETE /api/groups/{id}/` — Delete permission group (built-in groups `Super User`, `Tenant Admin` protected).
+- `GET /api/groups/{id}/users/` — List users belonging to permission group.
+- `POST /api/groups/{id}/users/` — Add user(s) to group (`{"user_ids": [1, 2]}`).
+- `DELETE /api/groups/{id}/users/` — Remove user from group (`{"user_id": 1}`).
+- `GET /api/permissions/` — List available Django permissions with filtering by app_label/model.
+- `GET /api/permissions/grouped/` — List permissions grouped by application and model (mirroring Django Admin dashboard structure).
 
 *See [API_DOCUMENTATION.md](API_DOCUMENTATION.md) for complete payload and response schemas.*
 
@@ -327,6 +338,7 @@ All endpoints are hosted on the unified API host (`api.ohm.com`).
 | `EMAIL_HOST_USER` | `""` | SMTP username. |
 | `EMAIL_HOST_PASSWORD`| `""` | SMTP password. |
 | `DEFAULT_FROM_EMAIL`| `noreply@ohm.local` | Outgoing email sender address. |
+| `QUOTE_AMP_ALLOWED_SENDERS` | `DEFAULT_FROM_EMAIL` | Comma-separated sender addresses allowed to submit in-email quote actions. Register the production sender for AMP for Email and ensure it passes SPF, DKIM, and DMARC. |
 | `OHM_SMS_OTP_BACKEND`| `""` | Dotted Python path to custom SMS OTP sender callable. |
 
 ---
@@ -345,3 +357,6 @@ To introduce a new operational feature (e.g. `booking`, `invoices`, `records`):
    python manage.py migrate_schemas --tenant
    python manage.py create_default_groups
    ```
+
+### Prospect Quotes
+Platform admins manage public-schema quotes at `/api/platform/quotes/`. Authenticated tenant users use the same endpoints with `X-Tenant: <slug>`; quotes, revisions, and analytics are scoped to that tenant. Both support draft editing, catalog lines backed by subscription Plans, custom/service/on-request lines, monthly quote numbering, tax snapshots, test and regular email sends, revisions, PDF downloads, and public accept/reject responses. Quote emails render `templates/platform/quotation-email.html` and include in-email Accept and Reject actions for AMP-compatible clients, backed by `POST /api/platform/public/quotes/<accept_token>/respond/`. AMP display requires registering the production sender with supported email clients and valid SPF/DKIM/DMARC; standard email clients receive the HTML/text fallback. Analytics are available at `/api/platform/quotes/stats/`; filter quote lists with `?status=sent&range=30` and stats with `?from=YYYY-MM-DD&to=YYYY-MM-DD`. Seller GST state is stored in the database and managed at `/api/platform/quotes/tax-settings/` for the current scope. The public scope is seeded with Karnataka (GST state code `29`); each tenant can set its own state code or name. Daily expiry is handled by the configured Celery beat task. PDF rendering requires the `reportlab` package from `requirements.txt`.

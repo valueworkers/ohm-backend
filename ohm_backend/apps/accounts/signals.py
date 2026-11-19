@@ -2,8 +2,7 @@
 Signal receivers for the accounts app.
 
 Listens for:
-- `tenant_provisioned` and `post_schema_sync` to seed default permissions,
-  roles, groups, and Tenant Admin users inside newly-created tenant schemas.
+- `tenant_provisioned` to mirror Tenant Admin users into configured tenant schemas.
 - `post_save` on `User` to assign all permissions to public superusers
   and default permissions to public root users (staff/platform admins).
 - `post_save` on `PlatformAdmin` to ensure platform admins have proper permissions.
@@ -14,21 +13,25 @@ from django.contrib.auth import get_user_model
 from django.db import IntegrityError, connection, transaction
 from django.db.models.signals import m2m_changed, post_save
 from django.dispatch import receiver
+from django.utils import timezone
 from django_tenants.signals import post_schema_sync
 from django_tenants.utils import get_public_schema_name, schema_context
 
-from apps.accounts.models import User
-from apps.accounts.services import (
-    assign_all_permissions_to_superuser,
-    assign_default_permissions_to_public_root_user,
-    assign_public_tenant_owner_role,
-    ensure_tenant_admin,
-    seed_tenant_default_permissions,
-)
+from apps.accounts.models import User, UserSession
+from apps.accounts.services import AccountsService
 from apps.platform.models import PlatformAdmin, Tenant
 from apps.platform.services import tenant_provisioned
 
 logger = logging.getLogger(__name__)
+
+
+@receiver(post_schema_sync)
+def bootstrap_new_tenant_schema(sender, tenant, **kwargs):
+    """Set up a tenant schema using the bootstrap command's canonical roles."""
+    schema_name = tenant.get("schema_name") if isinstance(tenant, dict) else getattr(tenant, "schema_name", None)
+    if schema_name and schema_name != get_public_schema_name():
+        with schema_context(schema_name):
+            AccountsService.bootstrap_roles_for_schema("tenant")
 
 
 def _get_or_create_public_user(email):
@@ -48,31 +51,28 @@ def _get_or_create_public_user(email):
         return user
 
 
-@receiver(post_schema_sync)
-def on_tenant_schema_synced(sender, tenant, **kwargs):
-    """Whenever a tenant schema is synced/migrated, seed its default permissions and roles."""
-    schema_name = tenant.get("schema_name") if isinstance(tenant, dict) else getattr(tenant, "schema_name", None)
-    if schema_name and schema_name != get_public_schema_name():
-        seed_tenant_default_permissions(schema_name)
-
-
 @receiver(tenant_provisioned)
 def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
-    """Create default permissions and the Tenant Admin user inside the new tenant schema."""
-    # Seed default permissions, roles, and groups for this tenant
-    seed_tenant_default_permissions(tenant.schema_name)
-
+    """Mirror tenant owners and create superuser into a schema whose roles and groups were bootstrapped."""
     # Resolve the applicant while the public schema is active. The applicant
-    # row does not exist in the tenant schema until ensure_tenant_admin mirrors it.
+    # row does not exist in the tenant schema until mirrored.
     public_schema = get_public_schema_name()
     with schema_context(public_schema):
         applicant = User.objects.get(pk=provisioning.applicant_id)
+        from apps.accounts.permissions import is_root_user
+        platform_superusers = list(User.objects.filter(is_superuser=True, is_active=True))
+        platform_root_users = [
+            u for u in User.objects.filter(is_active=True).exclude(is_superuser=True)
+            if is_root_user(u)
+        ]
 
-    # Seed primary applicant with the tenant admin role and group
+    # Create the superuser within the tenant schema using the provided tenant credentials
     with schema_context(tenant.schema_name):
-        ensure_tenant_admin(applicant)
+        AccountsService.ensure_superuser(applicant)
+        for su in platform_superusers + platform_root_users:
+            AccountsService.ensure_superuser(su)
 
-    # Seed co-owners
+    # Seed co-owners as Tenant Admins / superusers
     co_emails = provisioning.co_owner_emails or []
     for email in co_emails:
         email = email.strip().lower()
@@ -82,34 +82,59 @@ def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
         # Add as tenant owner in the public schema
         with schema_context(get_public_schema_name()):
             tenant.owners.add(public_user)
-        # Seed as TENANT_ADMIN in the tenant schema
+        # Seed in the tenant schema
         with schema_context(tenant.schema_name):
-            ensure_tenant_admin(public_user)
+            AccountsService.ensure_superuser(public_user)
 
 
 @receiver(m2m_changed, sender=Tenant.owners.through)
+@transaction.atomic
 def on_tenant_owners_changed(sender, instance, action, pk_set, **kwargs):
-    """Automatically mirror newly-added owners into the tenant schema as TENANT_ADMIN."""
-    if action == "post_add" and pk_set:
+    """Mirror owner grants and revoke tenant-admin access when ownership is removed."""
+    if action == "pre_clear":
+        with schema_context(get_public_schema_name()):
+            instance._owners_cleared_ids = list(instance.owners.values_list("pk", flat=True))
+        return
+    if action == "post_clear":
+        pk_set = set(getattr(instance, "_owners_cleared_ids", []))
+        instance._owners_cleared_ids = []
+        action = "post_remove"
+    if action in {"post_remove", "post_add"} and pk_set:
         tenant = instance
         public_schema = get_public_schema_name()
         if tenant.schema_name == public_schema:
             return
+        if action == "post_add":
+            with schema_context(public_schema):
+                users = list(User.objects.filter(pk__in=pk_set))
+                for public_user in users:
+                    AccountsService.assign_public_tenant_owner_role(tenant, public_user)
+            with schema_context(tenant.schema_name):
+                for public_user in users:
+                    AccountsService.ensure_tenant_admin(public_user)
+            return
 
-        # Materialize public users before switching schemas; evaluating this
-        # queryset in the tenant schema would look up unrelated tenant users.
         with schema_context(public_schema):
             users = list(User.objects.filter(pk__in=pk_set))
-            for public_user in users:
-                assign_public_tenant_owner_role(tenant, public_user)
         with schema_context(tenant.schema_name):
             for public_user in users:
-                ensure_tenant_admin(public_user)
+                mirror = User.objects.filter(email__iexact=public_user.email).first()
+                if not mirror:
+                    continue
+                tenant_admin_groups = mirror.groups.filter(name__in=["Tenant Admin", "TENANT_ADMIN"])
+                if tenant_admin_groups.exists():
+                    mirror.groups.remove(*tenant_admin_groups)
+                if not mirror.groups.exists() and not mirror.is_superuser:
+                    mirror.is_active = False
+                    mirror.save(update_fields=["is_active"])
+                    UserSession.objects.filter(user=mirror, revoked_at__isnull=True).update(
+                        revoked_at=timezone.now()
+                    )
 
 
 @receiver(post_save, sender=User)
 def on_user_saved(sender, instance, created, **kwargs):
-    """Ensure superusers of public schema have ALL permissions, and public root users have default permissions."""
+    """Maintain platform permissions and synchronize tenant-owner identity."""
     if kwargs.get("raw", False):
         return
 
@@ -120,10 +145,15 @@ def on_user_saved(sender, instance, created, **kwargs):
     if current_schema == public_schema:
         if instance.is_superuser:
             # For super user of public schema provide all permissions
-            assign_all_permissions_to_superuser(instance)
+            AccountsService.assign_all_permissions_to_superuser(instance)
         elif instance.is_staff or hasattr(instance, "platform_admin_profile"):
             # When creating public root user provide some default permissions
-            assign_default_permissions_to_public_root_user(instance)
+            AccountsService.assign_default_permissions_to_public_root_user(instance)
+
+    # Mirror only shared identity fields for registered tenant owners. The
+    # service uses queryset updates in the other schemas, avoiding recursive
+    # post_save signals and leaving tenant-specific roles untouched.
+    AccountsService.sync_owner_profile(instance, update_fields=kwargs.get("update_fields"))
 
 
 @receiver(post_save, sender=PlatformAdmin)
@@ -134,6 +164,6 @@ def on_platform_admin_saved(sender, instance, created, **kwargs):
 
     user = instance.user
     if user.is_superuser:
-        assign_all_permissions_to_superuser(user)
+        AccountsService.assign_all_permissions_to_superuser(user)
     else:
-        assign_default_permissions_to_public_root_user(user)
+        AccountsService.assign_default_permissions_to_public_root_user(user)

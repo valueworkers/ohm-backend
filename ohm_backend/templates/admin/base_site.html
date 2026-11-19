@@ -1,0 +1,31 @@
+{% extends "admin/base.html" %}
+{% load i18n static %}
+
+{% block title %}{% if subtitle %}{{ subtitle }} | {% endif %}{{ title }} | {{ site_title|default:_('Django site admin') }}{% endblock %}
+
+{% block branding %}
+<div id="site-name">
+  <a href="{% url 'admin:index' %}">{{ site_header|default:_('Django administration') }}</a>
+  {% if request.tenant and request.tenant.schema_name != "public" %}
+    <span style="display: inline-block; margin-left: 10px; font-size: 11px; vertical-align: middle; padding: 2px 8px; border-radius: 4px; background: #0284c7; color: #ffffff; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;">
+      Tenant: {{ request.tenant.schema_name }}
+    </span>
+  {% else %}
+    <span style="display: inline-block; margin-left: 10px; font-size: 11px; vertical-align: middle; padding: 2px 8px; border-radius: 4px; background: #475569; color: #ffffff; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase;">
+      Platform / Root
+    </span>
+  {% endif %}
+</div>
+{% if user.is_anonymous %}
+  {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block userlinks %}
+  {% if request.tenant and request.tenant.schema_name != "public" %}
+    <a href="{% url 'admin:logout' %}" style="color: #fde047; font-weight: 600;" title="Log out and switch workspace">Switch Workspace</a> /
+  {% endif %}
+  {{ block.super }}
+{% endblock %}
+
+{% block nav-global %}{% endblock %}

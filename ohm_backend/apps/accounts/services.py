@@ -1,338 +1,438 @@
 import logging
-from django.contrib.auth.models import Group
 from django.db import connection
+from django.utils import timezone
 from django_tenants.utils import get_public_schema_name, schema_context
 
 from .access import TenantAccessManager
-from .models import Role, RoleAssignment, User
+from .models import User, UserSession
 
 logger = logging.getLogger(__name__)
 
 MANAGED_ROLES = ("TENANT_ADMIN", "CUSTOMER")
 
-ROLE_METADATA = {
-    Role.Code.SUPER_ADMIN: {"name": "Super Admin", "rank": 100},
-    Role.Code.TENANT_ADMIN: {"name": "Tenant Admin", "rank": 100},
-    Role.Code.OPS_MANAGER: {"name": "Ops Manager", "rank": 80},
-    Role.Code.VENUE_ADMIN: {"name": "Venue Admin", "rank": 70},
-    Role.Code.SERVICE_ADMIN: {"name": "Service Admin", "rank": 70},
-    Role.Code.RESOURCE_ADMIN: {"name": "Resource Admin", "rank": 70},
-    Role.Code.STAFF: {"name": "Staff Member", "rank": 50},
-    Role.Code.CUSTOMER: {"name": "Customer / User", "rank": 10},
+ROLE_GROUP_NAMES = {
+    "SUPER_ADMIN": "Super User",
+    "TENANT_ADMIN": "Tenant Admin",
+    "OPS_MANAGER": "Ops Manager",
+    "STAFF": "Staff Member",
 }
 
 
-def seed_roles_and_groups_for_schema(is_public=False):
-    """Ensure the built-in role groups exist without overwriting their permissions."""
+class AccountsService:
+    """Account role, permission, and cross-schema user operations."""
 
-    roles_to_seed = (
-        [Role.Code.SUPER_ADMIN, Role.Code.OPS_MANAGER, Role.Code.STAFF]
-        if is_public
-        else list(Role.Code.values)
-    )
+    @classmethod
+    def _group_name(cls, role_code):
+        """Use the canonical group names created by bootstrap_platform."""
+        return ROLE_GROUP_NAMES.get(role_code, role_code)
 
-    for role_code in roles_to_seed:
-        meta = ROLE_METADATA.get(role_code, {"name": role_code.replace("_", " ").title(), "rank": 50})
-        Group.objects.get_or_create(name=role_code)
+    @classmethod
+    def bootstrap_roles_for_schema(cls, scope):
+        """Run the bootstrap command's canonical role/group setup for a schema."""
+        from apps.platform.management.commands.bootstrap_platform import Command
 
-        # Configure accounts.Role
-        role, _ = Role.objects.get_or_create(
-            code=role_code,
-            defaults={"name": meta["name"], "rank": meta["rank"]},
-        )
+        Command().seed_roles(scope)
 
+    @classmethod
+    def assign_all_permissions_to_superuser(cls, user):
+        """Assign the Super User group in the public schema if it exists."""
+        from django.contrib.auth.models import Group
 
-def assign_all_permissions_to_superuser(user):
-    """Provide ALL permissions to a super user of the public schema."""
-    public_schema = get_public_schema_name()
-    with schema_context(public_schema):
-        seed_roles_and_groups_for_schema(is_public=True)
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            super_group = Group.objects.filter(name=cls._group_name("SUPER_ADMIN")).first()
+            if super_group:
+                user.groups.add(super_group)
 
-        TenantAccessManager(public_schema).assign_group(user, Role.Code.SUPER_ADMIN)
+            updated_fields = []
+            if not user.is_superuser:
+                user.is_superuser = True
+                updated_fields.append("is_superuser")
+            if not user.is_staff:
+                user.is_staff = True
+                updated_fields.append("is_staff")
+            if updated_fields:
+                user.save(update_fields=updated_fields)
 
-        super_role = Role.objects.filter(code=Role.Code.SUPER_ADMIN).first()
-        if super_role:
-            RoleAssignment.objects.get_or_create(
-                user=user,
-                role=super_role,
-                scope_type=None,
-                scope_id=None,
+            logger.info("Assigned all permissions to superuser %s in public schema.", user.email)
+
+    @classmethod
+    def assign_default_permissions_to_public_root_user(cls, user):
+        """Provide default permissions to a non-superuser public root user (staff/platform admin)."""
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            TenantAccessManager(public_schema).assign_group(user, cls._group_name("OPS_MANAGER"))
+
+            if not user.is_staff:
+                user.is_staff = True
+                user.save(update_fields=["is_staff"])
+
+            logger.info("Assigned default root permissions to %s in public schema.", user.email)
+
+    @classmethod
+    def assign_tenant_admin_permissions(cls, user, role=None, *, create_role_assignment=True):
+        """Assign the bootstrapped Tenant Admin group."""
+        access = TenantAccessManager(connection.schema_name)
+        group_name = cls._group_name("TENANT_ADMIN")
+        access.assign_group(user, group_name)
+        logger.info("Assigned Tenant Admin group to %s in current schema.", user.email)
+
+    @classmethod
+    def assign_public_tenant_owner_role(cls, tenant, public_user):
+        """Grant the public owner Tenant Admin group access."""
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            owner = User.objects.get(email__iexact=public_user.email)
+            access = TenantAccessManager(public_schema)
+            group_name = cls._group_name("TENANT_ADMIN")
+            access.assign_group(owner, group_name)
+            logger.info(
+                "Assigned public TENANT_ADMIN access to %s for tenant %s.",
+                owner.email,
+                tenant.schema_name,
             )
+            return None
 
+    @classmethod
+    def assign_role_default_permissions(cls, user, role_code):
+        """Assign the Django group created by bootstrap for this role."""
+        TenantAccessManager(connection.schema_name).assign_group(user, cls._group_name(role_code))
+
+    @classmethod
+    def set_role(cls, user, code, assigned_by=None):
+        """Give the user exactly one managed tenant-wide group."""
+        managed_group_names = [cls._group_name(role_code) for role_code in MANAGED_ROLES] + list(MANAGED_ROLES)
+        user.groups.remove(*user.groups.filter(name__in=managed_group_names))
+        cls.assign_role_default_permissions(user, code)
+
+    @classmethod
+    def ensure_tenant_admin(cls, public_user, *, as_superuser=True):
+        """Mirror an OHM user into the current tenant schema as its tenant admin (and superuser)."""
+        if as_superuser:
+            return cls.ensure_superuser(public_user)
+
+        user, _ = User.objects.get_or_create(
+            email=public_user.email.lower(),
+            defaults={
+                "first_name": public_user.first_name,
+                "middle_name": getattr(public_user, "middle_name", ""),
+                "last_name": public_user.last_name,
+                "mobile_number": public_user.mobile_number,
+                "is_active": public_user.is_active,
+                "password": public_user.password,
+            },
+        )
+        # The public owner record is the source when provisioning or reconciling a
+        # tenant. Keep every mirrored profile field current, including values that
+        # were previously populated in the tenant schema.
         updated_fields = []
-        if not user.is_superuser:
-            user.is_superuser = True
-            updated_fields.append("is_superuser")
-        if not user.is_staff:
-            user.is_staff = True
-            updated_fields.append("is_staff")
+        for field in ("first_name", "middle_name", "last_name", "mobile_number", "is_active", "password"):
+            value = getattr(public_user, field, None)
+            if value is not None and getattr(user, field, None) != value:
+                setattr(user, field, value)
+                updated_fields.append(field)
         if updated_fields:
             user.save(update_fields=updated_fields)
 
-        logger.info("Assigned all permissions to superuser %s in public schema.", user.email)
+        cls.assign_tenant_admin_permissions(user)
+        return user
 
+    @classmethod
+    def ensure_superuser(cls, public_user_or_credentials, schema_name=None):
+        """Create or mirror a superuser into the specified or current tenant schema.
 
-def assign_default_permissions_to_public_root_user(user):
-    """Provide default permissions to a non-superuser public root user (staff/platform admin)."""
-    public_schema = get_public_schema_name()
-    with schema_context(public_schema):
-        seed_roles_and_groups_for_schema(is_public=True)
+        Handles user creation using the provided tenant user or credentials,
+        maintaining schema context and ensuring idempotency with full superuser
+        and tenant admin access.
+        """
+        if schema_name and connection.schema_name != schema_name:
+            with schema_context(schema_name):
+                return cls.ensure_superuser(public_user_or_credentials)
 
-        TenantAccessManager(public_schema).assign_group(user, Role.Code.OPS_MANAGER)
+        from django.contrib.auth.models import Group
 
-        staff_role = (
-            Role.objects.filter(code=Role.Code.OPS_MANAGER).first()
-            or Role.objects.filter(code=Role.Code.STAFF).first()
-        )
-        if staff_role:
-            RoleAssignment.objects.get_or_create(
-                user=user,
-                role=staff_role,
-                scope_type=None,
-                scope_id=None,
-            )
-
-        if not user.is_staff:
-            user.is_staff = True
-            user.save(update_fields=["is_staff"])
-
-        logger.info("Assigned default root permissions to %s in public schema.", user.email)
-
-
-def seed_tenant_default_permissions(schema_name):
-    """Seed default permissions, groups, and roles for a tenant schema."""
-    with schema_context(schema_name):
-        seed_roles_and_groups_for_schema(is_public=False)
-        logger.info("Default permissions, roles, and groups seeded for schema %s.", schema_name)
-
-
-def assign_tenant_admin_permissions(user):
-    """Assign the tenant-admin group; its permissions are managed through Django."""
-    role, _ = Role.objects.get_or_create(
-        code=Role.Code.TENANT_ADMIN,
-        defaults={"name": "Tenant Admin", "rank": 100},
-    )
-    RoleAssignment.objects.get_or_create(
-        user=user,
-        role=role,
-        scope_type=None,
-        scope_id=None,
-    )
-    access = TenantAccessManager(connection.schema_name)
-    access.assign_group(user, Role.Code.TENANT_ADMIN)
-    access.grant_all_permissions(Role.Code.TENANT_ADMIN)
-    logger.info("Assigned Tenant Admin group to %s in current schema.", user.email)
-
-
-def assign_public_tenant_owner_role(tenant, public_user):
-    """Grant the public owner tenant-scoped role access and Django permissions."""
-    from django.contrib.contenttypes.models import ContentType
-
-    public_schema = get_public_schema_name()
-    with schema_context(public_schema):
-        owner = User.objects.get(email__iexact=public_user.email)
-        role, _ = Role.objects.get_or_create(
-            code=Role.Code.TENANT_ADMIN,
-            defaults={"name": "Tenant Admin", "rank": 100},
-        )
-        access = TenantAccessManager(public_schema)
-        access.assign_group(owner, Role.Code.TENANT_ADMIN)
-        access.grant_all_permissions(Role.Code.TENANT_ADMIN)
-        tenant_type = ContentType.objects.get_for_model(tenant, for_concrete_model=False)
-        assignment, _ = RoleAssignment.objects.get_or_create(
-            user=owner,
-            role=role,
-            scope_type=tenant_type,
-            scope_id=tenant.pk,
-        )
-        logger.info(
-            "Assigned public TENANT_ADMIN access to %s for tenant %s.",
-            owner.email,
-            tenant.schema_name,
-        )
-        return assignment
-
-
-def assign_role_default_permissions(user, role_code):
-    """Assign the same-named built-in Django group to a user."""
-    TenantAccessManager(connection.schema_name).assign_group(user, role_code)
-
-
-def set_role(user, code, assigned_by=None):
-    """Give the user exactly one managed tenant-wide role and its Django group."""
-    RoleAssignment.objects.filter(user=user, scope_type__isnull=True, role__code__in=MANAGED_ROLES).delete()
-    user.groups.remove(*user.groups.filter(name__in=MANAGED_ROLES))
-    role = Role.objects.get(code=code)
-    RoleAssignment.objects.create(user=user, role=role, assigned_by=assigned_by)
-    assign_role_default_permissions(user, code)
-
-
-def ensure_tenant_admin(public_user):
-    """Mirror an OHM user into the current tenant schema as its tenant-wide admin with default permissions."""
-    seed_roles_and_groups_for_schema(is_public=False)
-
-    role, _ = Role.objects.get_or_create(
-        code=Role.Code.TENANT_ADMIN,
-        defaults={"name": "Tenant Admin", "rank": 100},
-    )
-    user, created = User.objects.get_or_create(
-        email=public_user.email.lower(),
-        defaults={
-            "full_name": public_user.full_name,
-            "phone": public_user.phone,
-            "is_active": True,
-        },
-    )
-    if created:
-        user.password = public_user.password
-        user.save(update_fields=["password"])
-    else:
-        updated_fields = []
-        if not user.is_active:
-            user.is_active = True
-            updated_fields.append("is_active")
-        if public_user.password and user.password != public_user.password:
-            user.password = public_user.password
-            updated_fields.append("password")
-        if not user.full_name and public_user.full_name:
-            user.full_name = public_user.full_name
-            updated_fields.append("full_name")
-        if not user.phone and public_user.phone:
-            user.phone = public_user.phone
-            updated_fields.append("phone")
-        if updated_fields:
-            user.save(update_fields=updated_fields)
-
-    assign_tenant_admin_permissions(user)
-    return user
-
-
-def sync_tenant_roles_and_permissions(tenant):
-    """
-    For a given Tenant instance:
-    1. Seeds default roles, groups, and permissions in its schema.
-    2. Mirrors every owner in tenant.owners into the tenant schema as TENANT_ADMIN.
-    3. Assigns TENANT_ADMIN role, group, and default permissions to each owner.
-    4. Synchronizes groups and permissions for any other existing users in the tenant schema
-       who have role assignments.
-    Returns dict with summary details: {
-        'tenant': tenant.schema_name,
-        'assigned_owners': [emails],
-        'synced_users': [emails]
-    }
-    """
-    from apps.platform.models import TenantProvisioning
-
-    public_schema = get_public_schema_name()
-    with schema_context(public_schema):
-        owners = list(tenant.owners.all())
-        if not owners:
-            provisioning = (
-                tenant.provisioning_requests.filter(status="provisioned").first()
-                or tenant.provisioning_requests.first()
-            )
-            if provisioning and provisioning.applicant:
-                tenant.owners.add(provisioning.applicant)
-                owners.append(provisioning.applicant)
-                for email in (provisioning.co_owner_emails or []):
-                    email = email.strip().lower()
-                    if email and email != provisioning.applicant.email.lower():
-                        from apps.accounts.signals import _get_or_create_public_user
-                        co_user = _get_or_create_public_user(email)
-                        tenant.owners.add(co_user)
-                        owners.append(co_user)
-
-        for owner in owners:
-            assign_public_tenant_owner_role(tenant, owner)
-
-    assigned_owners = []
-    synced_users = []
-
-    with schema_context(tenant.schema_name):
-        seed_roles_and_groups_for_schema(is_public=False)
-
-        for owner in owners:
-            admin_user = ensure_tenant_admin(owner)
-            assigned_owners.append(admin_user.email)
-
-        for user in User.objects.all():
-            assignments = user.role_assignments.select_related("role").all()
-            if not assignments.exists():
-                continue
-            for ra in assignments:
-                role_code = ra.role.code
-                if role_code == Role.Code.TENANT_ADMIN:
-                    assign_tenant_admin_permissions(user)
-                else:
-                    assign_role_default_permissions(user, role_code)
-            synced_users.append(user.email)
-
-    return {
-        "tenant": tenant.schema_name,
-        "assigned_owners": assigned_owners,
-        "synced_users": list(set(synced_users)),
-    }
-
-
-def sync_public_schema_roles_and_permissions():
-    """
-    Seeds roles/groups in public schema, and assigns all permissions to superusers
-    and default permissions to staff/platform admin users.
-    Returns dict with summary details: {
-        'schema': public_schema,
-        'superusers': [emails],
-        'staff_users': [emails]
-    }
-    """
-    from apps.platform.models import PlatformAdmin
-
-    public_schema = get_public_schema_name()
-    superusers = []
-    staff_users = []
-
-    with schema_context(public_schema):
-        seed_roles_and_groups_for_schema(is_public=True)
-
-        for superuser in User.objects.filter(is_superuser=True):
-            assign_all_permissions_to_superuser(superuser)
-            superusers.append(superuser.email)
-
-        for staff_user in User.objects.filter(is_staff=True, is_superuser=False):
-            assign_default_permissions_to_public_root_user(staff_user)
-            staff_users.append(staff_user.email)
-
-        for pa in PlatformAdmin.objects.select_related("user"):
-            if not pa.user.is_superuser and pa.user.email not in staff_users:
-                assign_default_permissions_to_public_root_user(pa.user)
-                staff_users.append(pa.user.email)
-
-    return {
-        "schema": public_schema,
-        "superusers": superusers,
-        "staff_users": staff_users,
-    }
-
-
-def assign_roles_and_permissions_to_existing_tenants_and_owners(target_schema=None):
-    """
-    Coordinates seeding and assigning roles/permissions across public and tenant schemas.
-    """
-    from apps.platform.models import Tenant
-
-    public_schema = get_public_schema_name()
-    results = {}
-
-    if not target_schema or target_schema == public_schema:
-        results[public_schema] = sync_public_schema_roles_and_permissions()
-
-    with schema_context(public_schema):
-        if target_schema and target_schema != public_schema:
-            tenants = list(Tenant.objects.filter(schema_name=target_schema))
+        if isinstance(public_user_or_credentials, dict):
+            email = public_user_or_credentials.get("email", "").strip().lower()
+            if not email:
+                raise ValueError("Email is required to create a superuser.")
+            raw_password = public_user_or_credentials.get("password")
+            first_name = public_user_or_credentials.get("first_name", "")
+            middle_name = public_user_or_credentials.get("middle_name", "")
+            last_name = public_user_or_credentials.get("last_name", "")
+            mobile_number = public_user_or_credentials.get("mobile_number")
+            is_active = public_user_or_credentials.get("is_active", True)
+            is_raw_password = bool(raw_password and not raw_password.startswith(("pbkdf2_", "argon2", "bcrypt", "!")))
         else:
-            tenants = list(Tenant.objects.exclude(schema_name=public_schema))
+            public_user = public_user_or_credentials
+            email = public_user.email.lower()
+            raw_password = getattr(public_user, "password", None)
+            first_name = getattr(public_user, "first_name", "")
+            middle_name = getattr(public_user, "middle_name", "")
+            last_name = getattr(public_user, "last_name", "")
+            mobile_number = getattr(public_user, "mobile_number", None)
+            is_active = getattr(public_user, "is_active", True)
+            is_raw_password = False
 
-    for tenant in tenants:
-        results[tenant.schema_name] = sync_tenant_roles_and_permissions(tenant)
+        user, created = User.objects.get_or_create(
+            email=email,
+            defaults={
+                "first_name": first_name,
+                "middle_name": middle_name,
+                "last_name": last_name,
+                "mobile_number": mobile_number,
+                "is_active": is_active,
+                "is_staff": True,
+                "is_superuser": True,
+                "password": raw_password or "",
+            },
+        )
+        if created and is_raw_password:
+            user.set_password(raw_password)
+            user.save(update_fields=["password"])
 
-    return results
+        updated_fields = []
+        for field, val in (
+            ("first_name", first_name),
+            ("middle_name", middle_name),
+            ("last_name", last_name),
+            ("mobile_number", mobile_number),
+        ):
+            if val is not None and getattr(user, field, None) != val:
+                setattr(user, field, val)
+                updated_fields.append(field)
+
+        if raw_password:
+            if is_raw_password:
+                if not user.check_password(raw_password):
+                    user.set_password(raw_password)
+                    updated_fields.append("password")
+            elif getattr(user, "password", None) != raw_password:
+                user.password = raw_password
+                updated_fields.append("password")
+
+        for flag in ("is_active", "is_staff", "is_superuser"):
+            if not getattr(user, flag, False):
+                setattr(user, flag, True)
+                updated_fields.append(flag)
+
+        if updated_fields:
+            user.save(update_fields=list(set(updated_fields)))
+
+        admin_group, _ = Group.objects.get_or_create(name="Tenant Admin")
+        user.groups.add(admin_group)
+        super_group = Group.objects.filter(name="Super User").first()
+        if super_group:
+            user.groups.add(super_group)
+        return user
+
+    @classmethod
+    def create_tenant_superuser(cls, tenant_or_schema, user_or_credentials):
+        """Create or ensure a superuser within the specified tenant schema using provided credentials."""
+        schema_name = getattr(tenant_or_schema, "schema_name", tenant_or_schema)
+        return cls.ensure_superuser(user_or_credentials, schema_name=schema_name)
+
+    @classmethod
+    def sync_owner_profile(cls, user, update_fields=None):
+        """Copy shared identity fields between an owner and their schema mirrors.
+
+        The User table is schema-local, so synchronization is deliberately limited
+        to users linked to a Tenant as an owner. Tenant-specific users with the
+        same email are not affected.
+        """
+        from apps.platform.models import Tenant
+
+        public_schema = get_public_schema_name()
+        current_schema = connection.schema_name
+        fields = ("first_name", "middle_name", "last_name", "mobile_number", "is_active", "password")
+        if update_fields is not None:
+            fields = tuple(field for field in fields if field in update_fields)
+        if not fields:
+            return
+        if current_schema == public_schema:
+            source_email = user.email
+            with schema_context(public_schema):
+                public_user = User.objects.filter(email__iexact=source_email).first()
+                if not public_user:
+                    return
+                tenants = list(Tenant.objects.filter(owners__pk=public_user.pk).exclude(schema_name=public_schema))
+        else:
+            source_email = user.email
+            with schema_context(public_schema):
+                public_user = User.objects.filter(email__iexact=source_email).first()
+                if not public_user:
+                    return
+                is_owner = Tenant.objects.filter(schema_name=current_schema, owners__pk=public_user.pk).exists()
+                if not is_owner:
+                    return
+                tenants = list(Tenant.objects.filter(owners__pk=public_user.pk).exclude(schema_name=public_schema))
+
+        values = {field: getattr(user, field) for field in fields}
+        with schema_context(public_schema):
+            User.objects.filter(pk=public_user.pk).update(**values)
+            if "password" in values:
+                UserSession.objects.filter(user_id=public_user.pk, revoked_at__isnull=True).update(
+                    revoked_at=timezone.now()
+                )
+        for tenant in tenants:
+            with schema_context(tenant.schema_name):
+                mirror = User.objects.filter(email__iexact=source_email).first()
+                if mirror:
+                    User.objects.filter(pk=mirror.pk).update(**values)
+                    if "password" in values:
+                        UserSession.objects.filter(user=mirror, revoked_at__isnull=True).update(
+                            revoked_at=timezone.now()
+                        )
+
+    @classmethod
+    def sync_owner_email(cls, user, old_email, new_email, verified_at):
+        """Apply a verified owner email change to the public identity and its tenant mirrors."""
+        from apps.platform.models import Tenant
+
+        public_schema = get_public_schema_name()
+        current_schema = connection.schema_name
+        with schema_context(public_schema):
+            if current_schema == public_schema:
+                public_user = User.objects.filter(pk=user.pk).first()
+            else:
+                public_user = User.objects.filter(email__iexact=old_email).first()
+            if not public_user:
+                return
+            tenants = list(Tenant.objects.filter(owners__pk=public_user.pk).exclude(schema_name=public_schema))
+            if current_schema != public_schema and not any(t.schema_name == current_schema for t in tenants):
+                return
+            if User.objects.filter(email__iexact=new_email).exclude(pk=public_user.pk).exists():
+                raise ValueError("The verified email is already assigned to a public account.")
+            User.objects.filter(pk=public_user.pk).update(email=new_email, email_verified_at=verified_at)
+            UserSession.objects.filter(user=public_user, revoked_at__isnull=True).update(
+                revoked_at=timezone.now()
+            )
+
+        for tenant in tenants:
+            with schema_context(tenant.schema_name):
+                if tenant.schema_name == current_schema:
+                    mirror = User.objects.filter(pk=user.pk).first()
+                else:
+                    mirror = User.objects.filter(email__iexact=old_email).first()
+                if not mirror:
+                    continue
+                if User.objects.filter(email__iexact=new_email).exclude(pk=mirror.pk).exists():
+                    raise ValueError(f"The verified email is already assigned in workspace {tenant.schema_name}.")
+                User.objects.filter(pk=mirror.pk).update(email=new_email, email_verified_at=verified_at)
+                UserSession.objects.filter(user=mirror, revoked_at__isnull=True).update(
+                    revoked_at=timezone.now()
+                )
+
+    @classmethod
+    def sync_tenant_roles_and_permissions(cls, tenant):
+        """
+        For a given Tenant instance:
+        1. Mirrors every owner in tenant.owners into the tenant schema as TENANT_ADMIN.
+        2. Assigns TENANT_ADMIN role, group, and default permissions to each owner.
+        3. Synchronizes groups and permissions for any other existing users in the tenant schema
+           who have role assignments.
+        Returns dict with summary details: {
+            'tenant': tenant.schema_name,
+            'assigned_owners': [emails],
+            'synced_users': [emails]
+        }
+        """
+        public_schema = get_public_schema_name()
+        with schema_context(public_schema):
+            owners = list(tenant.owners.all())
+            if not owners:
+                provisioning = (
+                    tenant.provisioning_requests.filter(status="provisioned").first()
+                    or tenant.provisioning_requests.first()
+                )
+                if provisioning and provisioning.applicant:
+                    tenant.owners.add(provisioning.applicant)
+                    owners.append(provisioning.applicant)
+                    for email in (provisioning.co_owner_emails or []):
+                        email = email.strip().lower()
+                        if email and email != provisioning.applicant.email.lower():
+                            from apps.accounts.signals import _get_or_create_public_user
+                            co_user = _get_or_create_public_user(email)
+                            tenant.owners.add(co_user)
+                            owners.append(co_user)
+
+            for owner in owners:
+                cls.assign_public_tenant_owner_role(tenant, owner)
+
+        assigned_owners = []
+        synced_users = []
+
+        with schema_context(tenant.schema_name):
+            for owner in owners:
+                admin_user = cls.ensure_tenant_admin(owner)
+                assigned_owners.append(admin_user.email)
+
+            for user in User.objects.all():
+                if user.groups.exists():
+                    synced_users.append(user.email)
+
+        return {
+            "tenant": tenant.schema_name,
+            "assigned_owners": assigned_owners,
+            "synced_users": list(set(synced_users)),
+        }
+
+    @classmethod
+    def sync_public_schema_roles_and_permissions(cls):
+        """
+        Assigns bootstrapped groups to superusers and staff/platform admin users.
+        Returns dict with summary details: {
+            'schema': public_schema,
+            'superusers': [emails],
+            'staff_users': [emails]
+        }
+        """
+        from apps.platform.models import PlatformAdmin
+
+        public_schema = get_public_schema_name()
+        superusers = []
+        staff_users = []
+
+        with schema_context(public_schema):
+            for superuser in User.objects.filter(is_superuser=True):
+                cls.assign_all_permissions_to_superuser(superuser)
+                superusers.append(superuser.email)
+
+            for staff_user in User.objects.filter(is_staff=True, is_superuser=False):
+                cls.assign_default_permissions_to_public_root_user(staff_user)
+                staff_users.append(staff_user.email)
+
+            for pa in PlatformAdmin.objects.select_related("user"):
+                if not pa.user.is_superuser and pa.user.email not in staff_users:
+                    cls.assign_default_permissions_to_public_root_user(pa.user)
+                    staff_users.append(pa.user.email)
+
+        return {
+            "schema": public_schema,
+            "superusers": superusers,
+            "staff_users": staff_users,
+        }
+
+    @classmethod
+    def assign_roles_and_permissions_to_existing_tenants_and_owners(cls, target_schema=None):
+        """
+        Coordinates seeding and assigning roles/permissions across public and tenant schemas.
+        """
+        from apps.platform.models import Tenant
+
+        public_schema = get_public_schema_name()
+        results = {}
+
+        if not target_schema or target_schema == public_schema:
+            results[public_schema] = cls.sync_public_schema_roles_and_permissions()
+
+        with schema_context(public_schema):
+            if target_schema and target_schema != public_schema:
+                tenants = list(Tenant.objects.filter(schema_name=target_schema))
+            else:
+                tenants = list(Tenant.objects.exclude(schema_name=public_schema))
+
+        for tenant in tenants:
+            results[tenant.schema_name] = cls.sync_tenant_roles_and_permissions(tenant)
+
+        return results
 

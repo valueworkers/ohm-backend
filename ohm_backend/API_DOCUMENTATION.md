@@ -159,6 +159,11 @@ If unavailable or reserved:
 }
 ```
 
+> [!NOTE]
+> **Super User Tenant Access**: Platform Super Users can access any tenant schema using their public credentials:
+> 1. **Direct Workspace Login**: Call `POST /api/auth/login/` with `X-Tenant: <slug>` and Super User credentials. The system authenticates against the canonical public account, automatically mirrors the user into the tenant schema with full `Super User` and `Tenant Admin` privileges, and issues a tenant-scoped session and tokens.
+> 2. **Cross-Schema Token Access**: Present a public-schema Super User JWT access token (`Authorization: Bearer <public_token>`) alongside `X-Tenant: <slug>` on any tenant API endpoint. The authentication backend verifies the active public session, provisions/synchronizes the superuser in the tenant schema, and grants full administrative access.
+
 ### 2.2 Request Login or Password-Reset OTP
 - **Endpoint**: `POST /api/auth/otp/`
 - **Authentication**: None (Public)
@@ -212,16 +217,16 @@ If unavailable or reserved:
   "access": "<new_jwt_access_token>"
 }
 ```
+- Refresh tokens rotate per session. Replaying an older refresh token or using it in a different schema is rejected. Access tokens expire after 15 minutes; existing tokens without a session identifier require a fresh login after deployment.
 
 ### 2.5 Unified Logout
 - **Endpoint**: `POST /api/auth/logout/`
 - **Authentication**: `Bearer <token>`
 - **Request Body**:
 ```json
-{
-  "refresh_token": "<jwt_refresh_token>"
-}
+{ "refresh_token": "<current_session_refresh_token>" }
 ```
+- The `refresh_token` is optional when the request uses a valid session-bound access token. If supplied, it must match that same active session. Logout revokes the server-side session, invalidating its access and refresh tokens.
 - **Response `200 OK`**:
 ```json
 {
@@ -330,11 +335,11 @@ If unavailable or reserved:
   "slug": "city-hospital",
   "custom_domain": "portal.cityhospital.com",
   "requested_plan": 1,
-  "requested_modules": ["booking", "payroll", "notification"],
   "co_owner_emails": ["partner@cityhospital.com"],
   "password": "InitialAdminPassword123!"
 }
 ```
+- `requested_plan` may be omitted; plan ID `1` (the default Trial plan) is used. Provisioning subscribes the tenant to the chosen plan and copies its active features to the tenant's enabled modules. The default Trial plan creates a trial subscription with a 14-day trial period.
 - **Response `201 Created`**:
 ```json
 {
@@ -364,10 +369,12 @@ If unavailable or reserved:
 - **Request Body**:
 ```json
 {
+  "requested_plan": 1,
   "review_notes": "All compliance documents verified. Approved for launch."
 }
 ```
-- **Response `202 Accepted`**: Enqueues asynchronous Celery task `provision_tenant_task`.
+- `requested_plan` is optional; the platform admin may provide it to select or change the plan. Otherwise, the application's plan is used, falling back to plan ID `1` (the default Trial plan). Provisioning creates the subscription and enables that plan's active features. Plan ID `1` creates a trial subscription with a 14-day trial period.
+- **Response `202 Accepted`**: Enqueues asynchronous Celery task `provision_tenant_task`; the subscription is created by that provisioning task.
 
 ### 5.6 Reject Request
 - **Endpoint**: `POST /api/platform/onboarding/requests/{id}/reject/`
@@ -405,11 +412,12 @@ If unavailable or reserved:
   "schema_name": "apex_clinic",
   "contact_email": "admin@apexclinic.com",
   "contact_phone": "+919999900000",
-  "modules": ["booking", "wallet"],
+  "plan": 1,
   "owners": [1]
 }
 ```
 - **Response `201 Created`**: Automatically seeds default permissions and groups.
+- `plan` may be omitted; plan ID `1` (the default Trial plan) is used. If supplied, it must reference an active plan. The tenant is subscribed to the plan during creation; its active features set enabled modules. Plan ID `1` creates a trial subscription with a 14-day trial period.
 
 ### 6.3 Suspend / Re-activate Tenant
 - **Endpoint**: `POST /api/platform/tenants/{id}/suspend/`
@@ -499,6 +507,7 @@ If unavailable or reserved:
 - `POST /api/platform/plans/` — Create plan (admin).
 - `GET/PUT/PATCH /api/platform/plans/{id}/` — Inspect or update plan.
 - `DELETE /api/platform/plans/{id}/` — Delete plan (in-use plans cannot be deleted; soft-deactivate instead).
+- Plan responses include the current billing period, currency, amount, setup fee, and tax rate. Platform admins edit these fields on the plan in Django Admin.
 
 ### 8.2 Subscription Management
 - `GET /api/platform/subscriptions/` — List subscriptions (supports `?tenant=<id>&status=active`).
@@ -508,10 +517,16 @@ If unavailable or reserved:
   "tenant": 2,
   "plan": 1,
   "status": "active",
-  "start_date": "2026-10-21T00:00:00Z"
+  "starts_at": "2026-10-21T00:00:00Z"
 }
 ```
 - `GET/PUT/PATCH/DELETE /api/platform/subscriptions/{id}/` — Manage subscriptions.
+- Subscription responses include `price_details`, a snapshot of the plan pricing selected when the subscription was created or invoiced.
+
+### 8.3 Billing records and workflow
+- `Quotation`, `Invoice`, and `Payment` are managed in the platform Django Admin. Quotation admin actions mark quotes sent or accepted and create invoices; invoice actions issue draft invoices. Sending a quote changes its workflow status; email delivery is not wired into this action.
+- Billing calculations, concurrent-safe `QT-YYYY-NNNN` / `INV-YYYY-NNNN` numbering, invoice payment-status updates, and subscription activation/extension are implemented in `apps.platform.services`.
+- A provider-specific payment webhook endpoint is not configured. A gateway integration must verify the provider signature before calling `record_gateway_payment`; the service uses the gateway/payment ID as an idempotency key.
 
 ---
 
@@ -552,92 +567,326 @@ If unavailable or reserved:
 
 ---
 
-## 10. Tenant Roles & Role Assignments
+## 10. Permission Groups (Roles) & Django Permissions
 
-*Requires `IsTenantAdmin` and `X-Tenant: <slug>` header.*
+*The RBAC system utilizes Django's native Permissions (`auth.Permission`) and Permission Groups (`auth.Group`) as roles, mirroring the Django Admin dashboard's permission structure. This eliminates the need to manage roles and role assignments as separate entities. Managed by Superadmin and Root user in the Public Schema, and Tenant Admin in tenant workspaces.*
 
-### 10.1 List Roles
-- **Endpoint**: `GET /api/roles/`
+### 10.1 List Permission Groups (Roles)
+- **Endpoint**: `GET /api/groups/`
+- **Query Parameters**: `?search=nurse`, `?ordering=name`
 - **Response `200 OK`**:
 ```json
 [
   {
     "id": 1,
-    "code": "TENANT_ADMIN",
-    "name": "Tenant Admin",
-    "rank": 100,
+    "name": "Head Nurse",
+    "permissions": [12, 13, 14],
     "permission_details": [
       {
-        "id": 10,
-        "code": "accounts.view_user",
-        "name": "Can view user",
-        "description": "Can view user for accounts.user"
+        "id": 12,
+        "name": "Can view venue",
+        "codename": "view_venue",
+        "app_label": "catalog",
+        "model": "venue"
       }
-    ]
+    ],
+    "user_count": 5
   }
 ]
 ```
 
-### 10.2 Create Custom Role
-- **Endpoint**: `POST /api/roles/`
+### 10.2 Create Permission Group (Role)
+- **Endpoint**: `POST /api/groups/`
 - **Request Body**:
 ```json
 {
-  "code": "HEAD_NURSE",
-  "name": "Head Nurse",
-  "rank": 60,
-  "permissions": [10, 11, 14]
+  "name": "Booking Coordinators",
+  "permissions": [12, 13, 14]
 }
 ```
-- **Response `201 Created`**: Returns created role.
+- **Response `201 Created`**: Returns created group with assigned permissions.
 
-### 10.3 Delete Custom Role
-- **Endpoint**: `DELETE /api/roles/{id}/`
-- **Response `204 No Content`**: Deletes custom role. Built-in roles (`TENANT_ADMIN`, `CUSTOMER`) or roles assigned to active users cannot be deleted (returns HTTP 409).
+### 10.3 Retrieve Permission Group
+- **Endpoint**: `GET /api/groups/{id}/`
+- **Response `200 OK`**: Returns group details, permissions array, permission details, and user count.
 
-### 10.4 List Available Permissions
-- **Endpoint**: `GET /api/roles/permissions/`
-- **Response `200 OK`**: Array of all available permission codes for role configuration.
+### 10.4 Update Permission Group
+- **Endpoint**: `PUT /api/groups/{id}/` / `PATCH /api/groups/{id}/`
+- **Request Body**:
+```json
+{
+  "name": "Lead Booking Coordinators",
+  "permissions": [12, 13, 14, 15]
+}
+```
+- **Response `200 OK`**: Returns updated group.
 
-### 10.5 List Role Assignments
-- **Endpoint**: `GET /api/role-assignments/`
-- **Query Parameters**: `?user_id=5`, `?role_id=2`
+### 10.5 Delete Permission Group
+- **Endpoint**: `DELETE /api/groups/{id}/`
+- **Response `204 No Content`**: Deletes group. Built-in groups (`Super User`, `Tenant Admin`) cannot be deleted.
+
+### 10.6 Manage Group Members (Assign / Remove Role)
+- **List members**: `GET /api/groups/{id}/users/`
+- **Add members**: `POST /api/groups/{id}/users/`
+```json
+{
+  "user_ids": [5, 6]
+}
+```
+- **Remove member**: `DELETE /api/groups/{id}/users/` with body `{"user_id": 5}` or query parameter `?user_id=5`.
+
+### 10.7 List Django Permissions
+- **Endpoint**: `GET /api/permissions/`
+- **Query Parameters**: `?search=booking`, `?content_type__app_label=catalog`
+- **Response `200 OK`**: Array of installed Django permissions with `id`, `name`, `codename`, `app_label`, and `model`.
+
+### 10.8 List Django Permissions Grouped (Django Admin Dashboard Structure)
+- **Endpoint**: `GET /api/permissions/grouped/`
 - **Response `200 OK`**:
 ```json
-[
-  {
-    "id": 7,
-    "user_id": 5,
-    "user_email": "nurse@cityhospital.com",
-    "role_id": 3,
-    "role_code": "HEAD_NURSE",
-    "role_name": "Head Nurse",
-    "scope": null,
-    "created_at": "2026-10-21T14:30:00Z"
+{
+  "accounts": {
+    "user": [
+      {"id": 1, "name": "Can add user", "codename": "add_user"},
+      {"id": 2, "name": "Can change user", "codename": "change_user"},
+      {"id": 3, "name": "Can delete user", "codename": "delete_user"},
+      {"id": 4, "name": "Can view user", "codename": "view_user"}
+    ]
+  },
+  "catalog": {
+    "venue": [
+      {"id": 12, "name": "Can view venue", "codename": "view_venue"}
+    ]
   }
-]
-```
-
-### 10.6 Assign Role Tenant-Wide or Object-Scoped
-- **Endpoint**: `POST /api/role-assignments/`
-- **Request Body (Tenant-Wide)**:
-```json
-{
-  "user_id": 5,
-  "role_id": 3
 }
 ```
-- **Request Body (Object-Scoped)**:
-```json
-{
-  "user_id": 5,
-  "role_id": 3,
-  "object_type": "venue_manager.venue",
-  "object_id": 2
-}
-```
-- **Response `201 Created`**: Role assignment record.
 
-### 10.7 Revoke Role Assignment
-- **Endpoint**: `DELETE /api/role-assignments/{id}/`
-- **Response `204 No Content`**: Revokes the assignment. Safeguard prevents deleting the last active workspace Tenant Admin assignment.
+### 10.9 User Permissions & Group Assignment (Django Admin User Model)
+Tenants assign permission groups and direct model permissions directly on the User (`/api/users/`), mirroring Django Admin's user management interface:
+- **`groups`**: Array of group IDs assigned to the user (acts as roles).
+- **`user_permissions`**: Array of direct Django permission IDs granted specifically to this user.
+- **`group_details`**: Summary array of assigned groups with `id` and `name`.
+- **`user_permission_details`**: Summary array of direct permissions with `id`, `name`, `codename`, `app_label`, and `model`.
+
+## 12. User Settings
+
+The settings panel has three scopes. Platform Super Users use the personal settings routes below in the public schema and manage any workspace with `/api/platform/tenants/{id}/` (platform admin only). A tenant owner manages their organization profile and branding through `/api/platform/my/tenants/{id}/` (owner only; public schema). Each tenant user manages their own profile and personal preferences through the same `/api/settings/*` routes while authenticated in that tenant schema. Personal preference records are isolated per schema and per user; organization profile changes do not modify individual user preferences.
+
+All personal settings routes require `Authorization: Bearer <token>` and operate on the authenticated user in the active schema. `GET/PATCH /api/settings/profile/` reads or updates trimmed `first_name` and `last_name` (30 characters maximum); email is read-only here. `POST /api/settings/email/change/` accepts `{ "email": "new@example.com" }` and emails a one-time token. `POST /api/settings/email/verify/` accepts `{ "token": "..." }`; only successful verification changes the address and marks it verified. Tokens expire after 30 minutes and cannot be reused. `POST /api/settings/email/resend-verification/` resends for the current pending address. These mail endpoints are limited to five requests per hour per authenticated user.
+
+`GET/PATCH /api/settings/appearance/` stores `theme` (`light`, `dark`, `system`), `font_size` (`small`, `medium`, `large`), and `font_family` (`system`, `inter`, `roboto`, `open_sans`, `lato`). `GET/PATCH /api/settings/notifications/` accepts partial `channels` and `categories` maps of booleans. Supported channels are `email`, `in_app`, `browser_push`, `mobile_push`, and `sms`; supported categories are `product_updates`, `marketing_emails`, `security_alerts`, and `billing_alerts`. Security and billing alerts are always enabled. Marketing preference updates record or clear `marketing_consent_at`.
+
+Password reset tokens from `POST /api/verify-otp/` expire after 10 minutes and are single-use. Password changes and resets revoke all active sessions, so users must sign in again. `PUT /api/profile/` does not accept password changes.
+
+The existing `POST /api/change-password/` endpoint handles password changes with current-password verification and Django's configured password validators. `GET /api/settings/security/sessions/` returns the authenticated user's paginated session inventory. `POST /api/settings/security/sessions/revoke-all/` revokes all other sessions and requires the current password or a fresh login OTP. Billing-provider operations, 2FA, recovery codes, backups, and import/export jobs are not implemented by this backend and are not exposed as nonfunctional settings endpoints. Email verification delivery uses the configured Django email backend.
+
+## Prospect Quotes
+
+Prospect quotes are available to platform admins in the public schema and to authenticated tenant users with `X-Tenant: <slug>`. Tenant quote and analytics queries are scoped to the active tenant.
+
+- `GET/PATCH /api/platform/quotes/tax-settings/` — Read or update the seller GST state for the current scope. Public settings are seeded as Karnataka (`29`); each tenant has its own record, initialized from its GSTIN when available.
+- `GET/POST /api/platform/quotes/` — List quotes or create a draft.
+- `GET/PATCH /api/platform/quotes/{id}/` — Retrieve or update a draft.
+- `POST /api/platform/quotes/{id}/send/`, `/send-test/`, `/revise/` — Send, test-send, or create a revision.
+- `GET /api/platform/quotes/{id}/pdf/` — Download a PDF.
+- `GET/POST /api/platform/public/quotes/{accept_token}/respond/` — Publicly view and accept or reject a sent quote.
+- `GET /api/platform/quotes/stats/` — Quote analytics for the current scope.
+
+---
+
+## 13. Care Product Module APIs (`/api/care/`)
+
+The Care product module provides clinical, booking order, and patient lifecycle management for healthcare and care provider workspaces. All endpoints are routed under `/api/care/` (with `/api/care/` supported as a backward-compatible alias). All endpoints are scoped strictly to the calling tenant's isolated schema and require active plan entitlement.
+
+### Prerequisites & Headers
+- **`X-Tenant: <schema-slug>`** (Required): Routes the request to the tenant workspace.
+- **`Authorization: Bearer <token>`** (Required): Authentication JWT containing matching `schema` claim.
+- **Plan Entitlement**: Tenant must have an active subscription including feature code `"care"` or `"medicare"` (or `Tenant.modules` containing `"care"`). Unentitled requests receive `403 Forbidden` (`"Your subscription plan does not include access to the 'care' module."`).
+
+---
+
+### 13.1 Patients & Clinical Records
+
+#### List / Create Patients
+- **`GET /api/care/patients/`**
+  - **Query Params**: `search` (name, phone, patient_id), `is_deleted` (default: false), `status` (active boolean), `page`, `page_size`.
+  - **Response `200 OK`**: Paginated array of patient records with auto-generated identifiers (`patient_id`: `"PAT-00001"`).
+- **`POST /api/care/patients/`**
+  - **Payload**:
+    ```json
+    {
+      "first_name": "Aarav",
+      "last_name": "Sharma",
+      "phone": "+919876543210",
+      "email": "aarav.sharma@example.com",
+      "dob": "1988-06-15",
+      "gender": "MALE",
+      "blood_group": "B+",
+      "address": {
+        "line1": "Flat 402, Lotus Residency",
+        "line2": "MG Road",
+        "locality": "Indiranagar",
+        "city": "Bengaluru",
+        "state": "Karnataka",
+        "pincode": "560038"
+      },
+      "medical_history": "Hypertension, mild asthma",
+      "allergies": "Penicillin",
+      "emergency_contact_name": "Priya Sharma",
+      "emergency_contact_phone": "+919876543211",
+      "emergency_contact_relation": "Spouse"
+    }
+    ```
+  - **Response `201 Created`**: Returns created patient object with sequential `patient_id`.
+
+#### Retrieve / Update / Soft-Delete Patient
+- **`GET /api/care/patients/{id}/`**
+- **`PATCH /api/care/patients/{id}/`**
+- **`DELETE /api/care/patients/{id}/`**
+  - Soft-deletes the patient (`is_deleted=true`, `status=false`, `deleted_at` timestamp). Returns `204 No Content`.
+- **`PATCH /api/care/patients/{id}/active-status/`**
+  - **Payload**: `{"status": false}`
+  - Explicitly toggle active status without deleting.
+
+#### Patient Documents
+- **`GET /api/care/patient-documents/?patient={patient_id}`**
+- **`POST /api/care/patient-documents/`** (Multipart form data for document files).
+
+---
+
+### 13.2 Packages & Care Catalog
+
+Packages define pricing structures for healthcare delivery (hourly, daily, weekly, monthly). Each package targets **exactly one** catalog entity (`venue`, `service`, or `resource`), enforced at both serializer and database constraint levels.
+
+#### List / Create Packages
+- **`GET /api/care/packages/`**
+- **`POST /api/care/packages/`**
+  - **Payload**:
+    ```json
+    {
+      "name": "Intensive Post-Op Nursing (Daily)",
+      "package_type": "IN_HOUSE",
+      "period": "DAILY",
+      "price": "2500.00",
+      "registration_fees": "500.00",
+      "service": 12,
+      "description": "Daily 12-hour specialized nursing care."
+    }
+    ```
+  - **Validation**: Supplying multiple targets (e.g. `service` and `venue`) or zero targets returns `400 Bad Request` (`"Package must be linked to exactly one target entity"`).
+
+---
+
+### 13.3 Restructured Booking Orders
+
+OHM decouples overarching patient agreements (`PrimaryOrder`) from specific operational cycles (`SecondaryOrder`) and add-on care items (`TernaryOrder`).
+
+```
+PrimaryOrder (Patient Agreement & Cumulative Bill)
+   ├── SecondaryOrder (Cycle 1: Package, Service, Venue, Dates, Base Amount)
+   │     ├── TernaryOrder (Add-on Service / Rental Resource)
+   │     └── TernaryOrder (Specialized Diagnostic Procedure)
+   └── SecondaryOrder (Cycle 2: Auto-continued next period)
+```
+
+#### Primary Orders
+- **`GET /api/care/primary-orders/`**
+- **`POST /api/care/primary-orders/`**
+  - **Payload**:
+    ```json
+    {
+      "patient": 5,
+      "notes": "Post knee arthroplasty home rehabilitation care plan"
+    }
+    ```
+  - **Response `201 Created`**: Returns order with `order_id` format `#P00005000000`.
+
+#### Secondary Orders
+- **`GET /api/care/secondary-orders/`**
+- **`POST /api/care/secondary-orders/`**
+  - **Payload**:
+    ```json
+    {
+      "primary_order": 1,
+      "package": 3,
+      "service": 12,
+      "booking_type": "CLIENT_SIDE",
+      "client_address": {
+        "line1": "Flat 402, Lotus Residency",
+        "city": "Bengaluru",
+        "pincode": "560038"
+      },
+      "start_datetime": "2026-11-20T09:00:00Z",
+      "end_datetime": "2026-11-27T09:00:00Z",
+      "subtotal": "17500.00",
+      "discount_amount": "1000.00",
+      "auto_continue": true
+    }
+    ```
+  - Automatically updates parent `PrimaryOrder.total_bill` and start/end date ranges.
+
+#### Generate Invoice for Secondary Order
+- **`POST /api/care/secondary-orders/{id}/generate-invoice/`**
+  - Generates or retrieves an itemized `apps.billing.Invoice` (`SINV-YYYY-XXXXX`) calculating CGST, SGST, IGST using the provider's tax settings.
+  - **Response `200 OK`**:
+    ```json
+    {
+      "secondary_order_id": "#P00001S0001",
+      "invoice_id": 42,
+      "invoice_number": "SINV-2026-00001",
+      "status": "DRAFT",
+      "total_amount": "19470.00"
+    }
+    ```
+
+#### Ternary Orders (Add-ons)
+- **`GET /api/care/ternary-orders/`**
+- **`POST /api/care/ternary-orders/`**
+  - Links an add-on `service`, `resource`, or `package` to an existing `SecondaryOrder`. Recomputes parent secondary total amount.
+- **`POST /api/care/ternary-orders/{id}/generate-invoice/`**
+  - Generates an add-on itemized invoice (`TINV-YYYY-XXXXX`).
+
+---
+
+### 13.4 Payments & Per-Tenant Razorpay
+
+#### Tenant Payment Credentials Configuration
+- **`GET /api/care/payment-config/`**
+- **`PATCH /api/care/payment-config/`**
+  - **Payload**:
+    ```json
+    {
+      "razorpay_key_id": "rzp_live_abc123",
+      "razorpay_key_secret": "secret_key_xyz",
+      "razorpay_webhook_secret": "webhook_secret_789",
+      "currency": "INR",
+      "is_active": true
+    }
+    ```
+
+#### Razorpay Order Initiation
+- **`POST /api/care/razorpay/initiate/`**
+  - **Payload**: `{"invoice_id": 42}`
+  - Dynamically initializes Razorpay client using this tenant's stored credentials, creates an order with Razorpay, and returns order metadata.
+
+#### Razorpay Payment Signature Verification
+- **`POST /api/care/razorpay/verify/`**
+  - **Payload**:
+    ```json
+    {
+      "invoice_id": 42,
+      "razorpay_order_id": "order_EKfUsGQqqPt03x",
+      "razorpay_payment_id": "pay_29QQoUBi66xm2f",
+      "razorpay_signature": "9ef4b0de9566e7314f777cb4e7a80280080142a204c0983d2495088ecd517b96"
+    }
+    ```
+  - Verifies HMAC SHA-256 signature, creates verified `billing.Payment` record in the tenant schema, adjusts `paid_amount` and `remaining_amount`, and sets invoice status to `PAID` or `PARTIALLY_PAID`.
+
+---
+
+### 13.5 Staff Attendance
+
+- **`GET /api/care/attendance/`** — Paginated attendance logs. Filter by `date`, `user`, `status`.
+- **`POST /api/care/attendance/`** — Log attendance check-in.
+- **`POST /api/care/attendance/mark-today/`** — Batch-marks active staff present today (used also by Celery beat).
+

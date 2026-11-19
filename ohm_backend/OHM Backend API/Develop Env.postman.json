@@ -60,6 +60,222 @@
       "value": "",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "emailVerificationToken",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "page",
+      "value": "1",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "pageSize",
+      "value": "20",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "quoteId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "invoiceId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "venueId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "serviceId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "resourceId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "photoId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "locationId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "packageId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "patientId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "patientDocumentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "contactBookingId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "primaryOrderId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "secondaryOrderId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "ternaryOrderId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "quoteTaxSettingId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "billingQuoteId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "billingInvoiceId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "platformBookingId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "platformPaymentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "roleId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "assignmentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "groupId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "walletId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "attendanceStatusId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "salaryStructureId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "salaryReportId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "salaryTransactionId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "notificationId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "notificationTemplateId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "faqTopicId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "videoId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "contactId",
+      "value": "",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment"
