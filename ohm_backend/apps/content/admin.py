@@ -1,5 +1,6 @@
 from django.contrib import admin
 
+from apps.platform.admin_base import TenantModelAdmin
 from .models import Contact, FAQItem, FAQTopic, Video
 
 
@@ -11,7 +12,7 @@ class FAQItemInline(admin.TabularInline):
 
 
 @admin.register(FAQTopic)
-class FAQTopicAdmin(admin.ModelAdmin):
+class FAQTopicAdmin(TenantModelAdmin):
     list_display = ("id", "topic", "created_at", "updated_at")
     search_fields = ("topic",)
     list_filter = ("created_at",)
@@ -20,7 +21,7 @@ class FAQTopicAdmin(admin.ModelAdmin):
 
 
 @admin.register(FAQItem)
-class FAQItemAdmin(admin.ModelAdmin):
+class FAQItemAdmin(TenantModelAdmin):
     list_display = ("id", "short_question", "topic", "created_at")
     search_fields = ("question", "answer", "topic__topic")
     list_filter = ("topic", "created_at")
@@ -34,13 +35,13 @@ class FAQItemAdmin(admin.ModelAdmin):
 
 
 @admin.register(Contact)
-class ContactAdmin(admin.ModelAdmin):
+class ContactAdmin(TenantModelAdmin):
     list_display = ("display_name", "platform", "mobile_number", "email", "url", "created_at")
     list_filter = ("platform", "created_at")
     search_fields = ("display_name", "email", "mobile_number")
 
 
 @admin.register(Video)
-class VideoAdmin(admin.ModelAdmin):
+class VideoAdmin(TenantModelAdmin):
     list_display = ("video_name", "video_url", "created_at")
     search_fields = ("video_name",)

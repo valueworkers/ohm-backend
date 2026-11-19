@@ -4,6 +4,9 @@ from django.db import connection
 from django.http import JsonResponse
 from django.urls import include, path
 from apps.accounts.auth import ScopedTokenRefreshView
+from apps.platform.forms import TenantAdminAuthenticationForm
+
+admin.site.login_form = TenantAdminAuthenticationForm
 
 from apps.accounts.public_views import (
     OTPPasswordResetView,
@@ -16,6 +19,9 @@ from apps.accounts.tenant_views import TenantRegistrationCreateView
 def health(request):
     return JsonResponse({"status": "ok", "schema": connection.schema_name})
 
+admin.site.site_header = "O-hm admin"   # top bar on every admin page
+admin.site.site_title = "O-hm admin"    # browser tab title suffix
+admin.site.index_title = "O-hm admin"   # heading on the admin home page
 
 urlpatterns = [
     path("health/", health),

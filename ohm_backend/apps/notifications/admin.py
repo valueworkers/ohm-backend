@@ -1,10 +1,11 @@
 from django.contrib import admin
 
+from apps.platform.admin_base import TenantModelAdmin
 from .models import Notification, NotificationTemplate
 
 
 @admin.register(NotificationTemplate)
-class NotificationTemplateAdmin(admin.ModelAdmin):
+class NotificationTemplateAdmin(TenantModelAdmin):
     list_display = ("name", "channel", "category", "owner", "is_active", "created_at")
     list_filter = ("channel", "category", "is_active")
     search_fields = ("name", "subject", "body")
@@ -12,7 +13,7 @@ class NotificationTemplateAdmin(admin.ModelAdmin):
 
 
 @admin.register(Notification)
-class NotificationAdmin(admin.ModelAdmin):
+class NotificationAdmin(TenantModelAdmin):
     list_display = (
         "title",
         "channel",

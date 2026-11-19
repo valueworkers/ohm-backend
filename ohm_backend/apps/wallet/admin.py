@@ -1,11 +1,12 @@
 from django.contrib import admin
 from django.db.models import Sum
 
+from apps.platform.admin_base import TenantModelAdmin
 from .models import Wallet, WalletTransaction
 
 
 @admin.register(Wallet)
-class WalletAdmin(admin.ModelAdmin):
+class WalletAdmin(TenantModelAdmin):
     list_display = (
         "id",
         "user",
@@ -55,7 +56,7 @@ class WalletAdmin(admin.ModelAdmin):
 
 
 @admin.register(WalletTransaction)
-class WalletTransactionAdmin(admin.ModelAdmin):
+class WalletTransactionAdmin(TenantModelAdmin):
     list_display = (
         "transaction_id",
         "wallet",
