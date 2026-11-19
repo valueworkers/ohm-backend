@@ -405,3 +405,7 @@ class AttendanceService:
 
         logger.info("Auto-marked %s staff members present for %s", created_count, today)
         return {"date": str(today), "attendances_marked": created_count}
+
+
+# Backwards-compatible alias
+MedicareInvoiceService = CareInvoiceService

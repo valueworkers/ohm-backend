@@ -59,12 +59,17 @@ def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
     public_schema = get_public_schema_name()
     with schema_context(public_schema):
         applicant = User.objects.get(pk=provisioning.applicant_id)
+        from apps.accounts.permissions import is_root_user
         platform_superusers = list(User.objects.filter(is_superuser=True, is_active=True))
+        platform_root_users = [
+            u for u in User.objects.filter(is_active=True).exclude(is_superuser=True)
+            if is_root_user(u)
+        ]
 
     # Create the superuser within the tenant schema using the provided tenant credentials
     with schema_context(tenant.schema_name):
         AccountsService.ensure_superuser(applicant)
-        for su in platform_superusers:
+        for su in platform_superusers + platform_root_users:
             AccountsService.ensure_superuser(su)
 
     # Seed co-owners as Tenant Admins / superusers

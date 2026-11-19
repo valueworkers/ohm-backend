@@ -24,11 +24,15 @@ class EntityAccessPermission(BasePermission):
     """
 
     def has_permission(self, request, view):
+        if request.user and (is_superadmin(request.user) or is_root_user(request.user)):
+            return True
         if request.method in SAFE_METHODS:
             return True
         return bool(request.user and request.user.is_authenticated)
 
     def has_object_permission(self, request, view, obj):
+        if request.user and (is_superadmin(request.user) or is_root_user(request.user)):
+            return True
         if request.method in SAFE_METHODS:
             return True
         return can_manage_entity(request.user, obj)
@@ -36,7 +40,7 @@ class EntityAccessPermission(BasePermission):
 
 class CanAssignUsers(BasePermission):
     """
-    Permission allowing owners, managers, tenant admins, and superadmins
+    Permission allowing owners, managers, tenant admins, root users, and superadmins
     to assign or unassign staff/managers to entities.
     """
 
@@ -47,6 +51,7 @@ class CanAssignUsers(BasePermission):
         return bool(
             user.is_superuser
             or is_superadmin(user)
+            or is_root_user(user)
             or is_tenant_admin(user)
             or getattr(user, "is_owner", False)
             or getattr(user, "is_manager", False)

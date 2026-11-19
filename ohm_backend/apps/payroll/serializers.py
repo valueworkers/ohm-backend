@@ -84,7 +84,14 @@ class SalaryStructureSerializer(serializers.ModelSerializer):
 
         if request is not None and target_user is not None:
             requester = request.user
-            is_admin = requester.is_superuser or requester.is_staff or requester.groups.filter(name__in=["Tenant Admin", "Super User"]).exists()
+            from apps.accounts.permissions import is_root_user, is_superadmin
+            is_admin = (
+                requester.is_superuser
+                or requester.is_staff
+                or is_superadmin(requester)
+                or is_root_user(requester)
+                or requester.groups.filter(name__in=["Tenant Admin", "Super User"]).exists()
+            )
             if not is_admin:
                 raise serializers.ValidationError({
                     "user": "You do not have permission to modify salary structures for this user."

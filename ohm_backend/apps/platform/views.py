@@ -77,7 +77,18 @@ class PlanViewSet(viewsets.ModelViewSet):
 
     def _is_admin(self):
         u = self.request.user
-        return bool(u and u.is_authenticated and u.is_superuser)  # keep in sync with IsPlatformAdmin
+        from apps.accounts.permissions import is_root_user, is_superadmin
+        return bool(
+            u
+            and u.is_authenticated
+            and (
+                u.is_superuser
+                or is_superadmin(u)
+                or is_root_user(u)
+                or hasattr(u, "platform_admin_profile")
+                or u.is_staff
+            )
+        )
 
     def get_queryset(self):
         qs = Plan.objects.prefetch_related("features")
@@ -401,8 +412,16 @@ class MyTenantViewSet(
     pagination_class = None
 
     def get_queryset(self):
+        user = self.request.user
+        from apps.accounts.permissions import is_root_user, is_superadmin
+        if is_superadmin(user) or is_root_user(user):
+            return (
+                Tenant.objects.exclude(schema_name="public")
+                .prefetch_related("domains")
+                .order_by("-created_at")
+            )
         return (
-            Tenant.objects.filter(owners=self.request.user)
+            Tenant.objects.filter(owners=user)
             .prefetch_related("domains")
             .order_by("-created_at")
         )

@@ -18,13 +18,14 @@ from .serializers import (
     WalletSerializer,
     WalletTransactionSerializer,
 )
+from apps.accounts.permissions import is_root_user, is_superadmin
 from .services import WalletPaymentService
 
 
 def is_admin_or_manager(user) -> bool:
     if not user or not user.is_authenticated:
         return False
-    if user.is_superuser or user.is_staff:
+    if user.is_superuser or user.is_staff or is_superadmin(user) or is_root_user(user):
         return True
     return user.groups.filter(name__in=["Tenant Admin", "Super User", "Branch Manager"]).exists()
 

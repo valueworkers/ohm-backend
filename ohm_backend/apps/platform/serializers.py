@@ -196,7 +196,17 @@ class TenantProvisioningSerializer(serializers.ModelSerializer):
         data = super().to_representation(instance)
         request = self.context.get("request")
         user = getattr(request, "user", None)
-        is_admin = bool(user and (user.is_superuser or hasattr(user, "platform_admin_profile")))
+        from apps.accounts.permissions import is_root_user, is_superadmin
+        is_admin = bool(
+            user
+            and (
+                user.is_superuser
+                or is_superadmin(user)
+                or is_root_user(user)
+                or hasattr(user, "platform_admin_profile")
+                or user.is_staff
+            )
+        )
         if not is_admin:
             data.pop("provision_error", None)
         return data
