@@ -1,1 +1,1 @@
-# apps/billing/migrations/__init__.py
+# apps/venue_manager/migrations/__init__.py

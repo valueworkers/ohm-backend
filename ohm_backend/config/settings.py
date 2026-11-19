@@ -86,7 +86,6 @@ TENANT_APPS = [
     # Product modules:
     "apps.catalog",        # Venues, Services, Resources (Facility & Product Catalog)
     "apps.billing",        # Quotations, Invoices, Bookings, Payments
-    "apps.care",           # Plan-gated Care product module (elder/home/clinical care)
     "apps.wallet",         # Customer wallet & auto-pay
     "apps.payroll",        # Attendance, salary structures, payroll reports & disbursements
     "apps.notifications",  # Omnichannel notifications & templates
@@ -258,10 +257,6 @@ CELERY_BEAT_SCHEDULE = {
     },
     "mark-overdue-invoices-daily": {
         "task": "apps.platform.tasks.mark_overdue_invoices_task",
-        "schedule": 86400,
-    },
-    "care-tenant-maintenance-daily": {
-        "task": "apps.care.tasks.run_care_tenant_beat_maintenance",
         "schedule": 86400,
     },
     "mark-attendance-present-daily": {

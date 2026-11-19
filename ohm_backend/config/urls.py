@@ -33,8 +33,6 @@ urlpatterns = [
     path("api/", include("apps.accounts.urls")),
     path("api/billing/", include("apps.billing.urls")),
     path("api/catalog/", include("apps.catalog.urls")),
-    path("api/care/", include("apps.care.urls")),
-    path("api/medicare/", include("apps.care.urls")),  # Backward-compatible alias
     path("api/wallet/", include("apps.wallet.urls")),
     path("api/payroll/", include("apps.payroll.urls")),
     path("api/notifications/", include("apps.notifications.urls")),
