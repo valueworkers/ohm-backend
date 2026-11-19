@@ -71,10 +71,6 @@
 </p>
 {% endif %}
 
-<div class="tenant-info-box">
-  <strong>Multi-Tenant Admin:</strong>
-  Enter your <strong>X-Tenant</strong> workspace slug (e.g. <code>acme-clinic</code>) to log into your tenant schema. Leave it blank to log into <strong>Platform / Root Admin</strong>.
-</div>
 
 <form action="{{ app_path }}" method="post" id="login-form">{% csrf_token %}
   <div class="form-row">
