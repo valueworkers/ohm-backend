@@ -19,7 +19,13 @@ from .models import (
     SalaryStructure,
     SalaryTransaction,
 )
-from .permissions import CanViewSalaryReport, IsOwnerOrReadOnly, is_admin_or_manager
+from .permissions import (
+    CanViewSalaryReport,
+    IsOwnerOrReadOnly,
+    IsPayrollAdminOrSelfReadOnly,
+    RootAdminThrottleExemptMixin,
+    is_admin_or_manager,
+)
 from .serializers import (
     AttendanceSerializer,
     AttendanceStatusSerializer,
@@ -40,7 +46,7 @@ class AttendanceCursorPagination(CursorPagination):
     cursor_query_param = "cursor"
 
 
-class EmployeePayrollViewSet(viewsets.ReadOnlyModelViewSet):
+class EmployeePayrollViewSet(RootAdminThrottleExemptMixin, viewsets.ReadOnlyModelViewSet):
     """
     Read-only payroll summary list of employees.
     """
@@ -53,7 +59,7 @@ class EmployeePayrollViewSet(viewsets.ReadOnlyModelViewSet):
         "last_name",
         "employee_profile__employee_id",
         "email",
-        "phone_number",
+        "mobile_number",
         "employee_profile__category",
         "employee_profile__vendor_name",
     ]
@@ -64,7 +70,7 @@ class EmployeePayrollViewSet(viewsets.ReadOnlyModelViewSet):
         "employee_profile__employee_id",
         "employee_profile__vendor_name",
         "=email",
-        "=phone_number",
+        "=mobile_number",
     ]
 
     ordering_fields = [
@@ -110,12 +116,12 @@ class EmployeePayrollViewSet(viewsets.ReadOnlyModelViewSet):
         return base_qs.filter(id=user.id)
 
 
-class SalaryStructureViewSet(viewsets.ModelViewSet):
+class SalaryStructureViewSet(RootAdminThrottleExemptMixin, viewsets.ModelViewSet):
     """
     ViewSet for managing salary structures
     """
     serializer_class = SalaryStructureSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsPayrollAdminOrSelfReadOnly]
 
     filterset_fields = [
         "user_id",
@@ -127,7 +133,7 @@ class SalaryStructureViewSet(viewsets.ModelViewSet):
         "user__first_name",
         "user__last_name",
         "=user__email",
-        "=user__phone_number",
+        "=user__mobile_number",
     ]
 
     def get_queryset(self):
@@ -139,7 +145,7 @@ class SalaryStructureViewSet(viewsets.ModelViewSet):
         return queryset.select_related("user").order_by("-effective_from")
 
 
-class AttendanceStatusViewSet(viewsets.ModelViewSet):
+class AttendanceStatusViewSet(RootAdminThrottleExemptMixin, viewsets.ModelViewSet):
     serializer_class = AttendanceStatusSerializer
     permission_classes = [IsOwnerOrReadOnly]
 
@@ -150,7 +156,7 @@ class AttendanceStatusViewSet(viewsets.ModelViewSet):
         serializer.save(owner=self.request.user)
 
 
-class AttendanceView(APIView):
+class AttendanceView(RootAdminThrottleExemptMixin, APIView):
     """
     GET: List all attendance records with filters
     POST: Create or Update attendance
@@ -192,6 +198,11 @@ class AttendanceView(APIView):
         }, status=status.HTTP_200_OK)
 
     def post(self, request):
+        if not is_admin_or_manager(request.user):
+            return Response(
+                {"detail": "Only payroll administrators can record attendance."},
+                status=status.HTTP_403_FORBIDDEN,
+            )
         user_id = request.data.get("user")
         date_val = request.data.get("date")
 
@@ -225,7 +236,12 @@ class AttendanceView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-class SalaryReportViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, viewsets.GenericViewSet):
+class SalaryReportViewSet(
+    RootAdminThrottleExemptMixin,
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    viewsets.GenericViewSet,
+):
     """
     Read-only access to the persisted SalaryReport table.
     """
@@ -262,7 +278,15 @@ class SalaryReportViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         if not (is_admin_or_manager(request.user) or str(request.user.id) == str(user_id)):
             return Response({"detail": "You do not have permission to refresh this user's reports."}, status=403)
 
-        queue_salary_report_refresh(int(user_id), countdown=0)
+        try:
+            user_id = int(user_id)
+        except (TypeError, ValueError):
+            return Response({"error": "user_id must be an integer"}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not User.objects.filter(pk=user_id).exists():
+            return Response({"error": "User not found"}, status=status.HTTP_404_NOT_FOUND)
+
+        queue_salary_report_refresh(user_id, countdown=0)
         return Response({"detail": f"Refresh queued for user {user_id}."})
 
     @action(detail=True, methods=["post"])
@@ -279,14 +303,14 @@ class SalaryReportViewSet(mixins.ListModelMixin, mixins.RetrieveModelMixin, view
         return Response(SalaryReportSerializer(report).data)
 
 
-class SalaryTransactionViewSet(viewsets.ModelViewSet):
+class SalaryTransactionViewSet(RootAdminThrottleExemptMixin, viewsets.ModelViewSet):
     search_fields = [
         "user__first_name",
         "user__last_name",
         "user__employee_profile__employee_id",
         "user__employee_profile__vendor_name",
         "=user__email",
-        "=user__phone_number",
+        "=user__mobile_number",
     ]
 
     filterset_fields = {
@@ -324,6 +348,7 @@ class SalaryTransactionViewSet(viewsets.ModelViewSet):
         "structure_final",
     ]
     serializer_class = SalaryTransactionSerializer
+    permission_classes = [IsPayrollAdminOrSelfReadOnly]
 
     def get_queryset(self):
         user = self.request.user

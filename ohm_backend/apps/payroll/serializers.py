@@ -40,6 +40,10 @@ class EmployeePayrollListSerializer(serializers.ModelSerializer):
     employee_id = serializers.CharField(source="employee_profile.employee_id", read_only=True, allow_null=True)
     vendor_name = serializers.CharField(source="employee_profile.vendor_name", read_only=True, allow_null=True)
     employee_category = serializers.CharField(source="employee_profile.category", read_only=True, allow_null=True)
+    # Preserve the payroll API contract while using the account model's actual
+    # field name.  A bare ModelSerializer field named ``phone_number`` raises
+    # at serialization time because User stores this as ``mobile_number``.
+    phone_number = serializers.CharField(source="mobile_number", read_only=True, allow_null=True)
 
     basic_salary = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, allow_null=True)
     pf_amount = serializers.DecimalField(max_digits=10, decimal_places=2, read_only=True, allow_null=True)
@@ -139,7 +143,7 @@ class SalaryReportSerializer(serializers.ModelSerializer):
 class SalaryTransactionSerializer(serializers.ModelSerializer):
     employee_name = serializers.CharField(source="user.get_full_name", read_only=True)
     employee_id = serializers.CharField(source="user.employee_profile.employee_id", read_only=True, allow_null=True)
-    phone_number = serializers.CharField(source="user.phone_number", read_only=True)
+    phone_number = serializers.CharField(source="user.mobile_number", read_only=True, allow_null=True)
     start_date = serializers.DateField(source="salary_report.start_date", read_only=True)
     end_date = serializers.DateField(source="salary_report.end_date", read_only=True)
     split = serializers.SerializerMethodField()

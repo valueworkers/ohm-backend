@@ -512,6 +512,33 @@ class SuperUserTenantAccessTestCase(TenantTestCase):
         )
         self.assertEqual(tenant_api_res.status_code, 200, tenant_api_res.data)
 
+    def test_root_staff_public_token_has_unrestricted_payroll_read_access(self):
+        """A public root token must work across every tenant payroll screen."""
+        login_res = self.client.post(
+            "/api/auth/login/",
+            {
+                "username": "rootstaff@example.com",
+                "password": "StaffPassword123!",
+                "method": "password",
+            },
+            format="json",
+        )
+        self.assertEqual(login_res.status_code, 200, login_res.data)
+        public_token = login_res.data["tokens"]["access"]
+
+        for url in (
+            "/api/payroll/employee-payroll/",
+            "/api/payroll/salary-structures/",
+            "/api/payroll/reports/",
+            "/api/payroll/salary-transactions/",
+        ):
+            response = self.client.get(
+                url,
+                HTTP_X_TENANT=self.tenant.schema_name,
+                HTTP_AUTHORIZATION=f"Bearer {public_token}",
+            )
+            self.assertEqual(response.status_code, 200, {"url": url, "data": response.data})
+
     def test_superuser_wrong_password_rejected_on_tenant(self):
         res = self.client.post(
             "/api/auth/login/",

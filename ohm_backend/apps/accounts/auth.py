@@ -2,6 +2,7 @@ import uuid
 
 from django.db import connection
 from django.db import transaction
+from django.core.cache import cache
 from django.utils import timezone
 from rest_framework.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.authentication import JWTAuthentication
@@ -45,8 +46,7 @@ class TenantJWTAuthentication(JWTAuthentication):
                     ).first()
                     if not session:
                         raise AuthenticationFailed("Session has been revoked.", code="session_revoked")
-                    session.last_seen_at = timezone.now()
-                    session.save(update_fields=["last_seen_at"])
+                    self._touch_session(session)
 
                 from apps.accounts.services import AccountsService
                 return AccountsService.ensure_superuser(public_user)
@@ -59,9 +59,23 @@ class TenantJWTAuthentication(JWTAuthentication):
         ).first()
         if not session:
             raise AuthenticationFailed("Session has been revoked.", code="session_revoked")
-        session.last_seen_at = timezone.now()
-        session.save(update_fields=["last_seen_at"])
+        self._touch_session(session)
         return user
+
+    @staticmethod
+    def _touch_session(session):
+        """Record activity at most once per minute per session.
+
+        Payroll dashboards issue several independent read requests at once.  A
+        write on every authenticated request made those screens unnecessarily
+        database-write bound, which can surface as upstream 429/overload
+        responses under load.  Session revocation is still checked on every
+        request; only this non-security activity timestamp is coalesced.
+        """
+        key = f"accounts:session-last-seen:{session.pk}"
+        if cache.add(key, "1", timeout=60):
+            session.last_seen_at = timezone.now()
+            session.save(update_fields=["last_seen_at"])
 
 
 # Avoid module-level import of TokenRefreshView here to prevent circular import

@@ -197,6 +197,12 @@ class SalaryReport(models.Model):
     class Meta:
         ordering = ["-start_date"]
         unique_together = ("user", "start_date", "end_date")
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(end_date__gte=models.F("start_date")),
+                name="salary_report_end_not_before_start",
+            ),
+        ]
         verbose_name = "Salary Report"
         verbose_name_plural = "Salary Reports"
 
