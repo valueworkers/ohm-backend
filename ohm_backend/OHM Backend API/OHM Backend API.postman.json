@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "OHM Backend API - Root and Tenant",
-    "description": "Requests are grouped by schema. Public / Shared needs no account. Root / Super Admin uses a public-schema token and omits X-Tenant. Tenant Workspace uses a tenant token and X-Tenant: {{tenantSlug}}. Tenant Owner Portal uses a platform-schema tenant-owner token and omits X-Tenant. List endpoints use page=1 and page_size=20 by default; page_size accepts values up to 100. Authentication uses 15-minute access tokens, rotating refresh tokens, and revocable server-side sessions. The Settings folders cover profile, email verification, appearance, notifications, and sessions. Quote requests include GSTIN lookup, form metadata, line discounts/UOM, freight and packing GST, seller tax settings, and filter/search/order examples.",
+    "description": "Requests are grouped by schema. Public / Shared needs no account. Root / Super Admin uses a public-schema token and omits X-Tenant for platform APIs; to administer a tenant workspace (including Payroll), use the same rootAccessToken with X-Tenant: {{tenantSlug}}. Tenant Workspace uses a tenant token and X-Tenant: {{tenantSlug}}. Tenant Owner Portal uses a platform-schema tenant-owner token and omits X-Tenant. List endpoints use page=1 and page_size=20 by default; page_size accepts values up to 100. Authentication uses 15-minute access tokens, rotating refresh tokens, and revocable server-side sessions. The Settings folders cover profile, email verification, appearance, notifications, and sessions. Quote requests include GSTIN lookup, form metadata, line discounts/UOM, freight and packing GST, seller tax settings, and filter/search/order examples.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
@@ -521,7 +521,7 @@
     },
     {
       "name": "01 - ROOT / SUPER ADMIN (public schema)",
-      "description": "Platform control-plane APIs. Use the root/platform login and do not send X-Tenant.",
+      "description": "Platform control-plane APIs. Use the root/platform login and do not send X-Tenant here. A rootAccessToken may also administer any tenant-scoped API by adding X-Tenant: {{tenantSlug}} (for example, the Payroll folder).",
       "item": [
         {
           "name": "00 - Root / platform schema authentication",
@@ -17141,7 +17141,7 @@
         },
         {
           "name": "10 - Payroll (Attendance, Salary Structures, Reports, Payouts)",
-          "description": "Comprehensive employee attendance, dynamic salary structure configuration, automated payroll calculation, and payout tracking.",
+          "description": "Comprehensive employee attendance, dynamic salary structure configuration, automated payroll calculation, and payout tracking. Use tenantAccessToken with X-Tenant for workspace use, or rootAccessToken with X-Tenant for unrestricted root administration. Payroll mutations require a payroll administrator; employees have read-only access to their own records.",
           "item": [
             {
               "name": "01 - Attendance Status Codes",
@@ -17547,7 +17547,7 @@
             },
             {
               "name": "03 - Employee Payroll Overview",
-              "description": "High-level summary of active employees with current compensation rates.",
+              "description": "High-level summary of active employees with current compensation rates. The response retains phone_number for compatibility, sourced from the user's mobile_number. Search/filter by mobile_number.",
               "item": [
                 {
                   "name": "List employee payroll overview",
@@ -17661,7 +17661,7 @@
             },
             {
               "name": "04 - Salary Structures",
-              "description": "Staff base salary definitions, increments, hourly/daily/monthly rates, and PF/ESI deductions.",
+              "description": "Staff base salary definitions, increments, hourly/daily/monthly rates, and PF/ESI deductions. Only payroll administrators may create, update, or delete structures.",
               "item": [
                 {
                   "name": "List salary structures",
@@ -17693,7 +17693,7 @@
                       }
                     ],
                     "url": {
-                      "raw": "{{baseUrl}}/api/payroll/salary-structures/?user={{tenantUserId}}",
+                      "raw": "{{baseUrl}}/api/payroll/salary-structures/?user_id={{tenantUserId}}",
                       "host": [
                         "{{baseUrl}}"
                       ],
@@ -17705,7 +17705,7 @@
                       ],
                       "query": [
                         {
-                          "key": "user",
+                          "key": "user_id",
                           "value": "{{tenantUserId}}"
                         }
                       ],
@@ -17946,7 +17946,7 @@
             },
             {
               "name": "05 - Salary Reports & Payouts",
-              "description": "Calculated salary reports, monthly finalization, and payout transaction records.",
+              "description": "Calculated salary reports, monthly finalization, and payout transaction records. Only payroll administrators may record, update, or delete payouts; a refresh user_id must be an existing integer user ID.",
               "item": [
                 {
                   "name": "List salary reports",

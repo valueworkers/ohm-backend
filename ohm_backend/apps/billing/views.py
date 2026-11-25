@@ -7,18 +7,26 @@ API views for the billing, quotation, order, and invoice domain.
 from decimal import Decimal
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
+from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
 from .constants import PAYMENT_METHOD_NORMALIZE
 
 from .models import (
     Invoice,
+    Location,
+    Package,
+    PatientDocument,
+    PatientDocumentFile,
     Payment,
     Quote,
     QuoteTaxSettings,
 )
 from .serializers import (
     InvoiceSerializer,
+    LocationSerializer,
+    PackageSerializer,
+    PatientDocumentSerializer,
     PaymentSerializer,
     QuoteSerializer,
     QuoteTaxSettingsSerializer,
@@ -40,6 +48,48 @@ from .services import (
 # ---------------------------------------------------------------------------
 # Quotation ViewSets
 # ---------------------------------------------------------------------------
+
+class LocationViewSet(viewsets.ModelViewSet):
+    """Manage care locations inside the active tenant schema."""
+
+    queryset = Location.objects.select_related("user").all()
+    serializer_class = LocationSerializer
+    filterset_fields = ("user", "location_type", "city", "state")
+    search_fields = ("building_name", "address_line1", "locality", "city", "state", "postal_code")
+
+
+class PackageViewSet(viewsets.ModelViewSet):
+    """Manage care packages inside the active tenant schema."""
+
+    queryset = Package.objects.select_related("owner", "content_type").all()
+    serializer_class = PackageSerializer
+    filterset_fields = ("owner", "content_type", "object_id", "package_type", "period", "is_active")
+    search_fields = ("name", "description")
+
+
+class PatientDocumentViewSet(viewsets.ModelViewSet):
+    """Manage patient documents and uploaded files inside the active tenant schema."""
+
+    serializer_class = PatientDocumentSerializer
+    queryset = PatientDocument.objects.select_related("patient", "uploaded_by").prefetch_related("files")
+    parser_classes = (MultiPartParser, FormParser)
+    filterset_fields = ("patient",)
+    search_fields = ("title", "remarks", "patient__first_name", "patient__last_name", "patient__patient_id")
+
+    def perform_create(self, serializer):
+        document = serializer.save(uploaded_by=self.request.user)
+        files = self.request.FILES.getlist("files")
+        PatientDocumentFile.objects.bulk_create(
+            [PatientDocumentFile(document=document, file=file) for file in files]
+        )
+
+    def perform_update(self, serializer):
+        document = serializer.save()
+        files = self.request.FILES.getlist("files")
+        PatientDocumentFile.objects.bulk_create(
+            [PatientDocumentFile(document=document, file=file) for file in files]
+        )
+
 
 class QuoteTaxSettingsViewSet(viewsets.ModelViewSet):
     queryset = QuoteTaxSettings.objects.all()
