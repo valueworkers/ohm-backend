@@ -332,7 +332,7 @@
           "item": [
             {
               "name": "Public: review sent quote",
-              "description": "Uses the buyer\u2019s quote accept token. No login required.",
+              "description": "Uses the buyer’s quote accept token. No login required.",
               "event": [],
               "auth": {},
               "request": {
@@ -4671,7 +4671,7 @@
                     },
                     "body": {
                       "mode": "raw",
-                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package \u00b7 monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                      "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package · monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
                       "options": {
                         "raw": {
                           "language": "json"
@@ -6289,6 +6289,937 @@
                 }
               },
               "response": []
+            }
+          ]
+        },
+        {
+          "name": "99 - Additional current API methods",
+          "description": "Current routes and HTTP methods not present in the original request examples.",
+          "item": [
+            {
+              "name": "DELETE /api/platform/quotes/<recordId>/",
+              "description": "Current API route: DELETE /api/platform/quotes/{{recordId}}/",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /api/platform/",
+              "event": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: GET /api/platform/"
+            },
+            {
+              "name": "GET /api/platform/plans/<recordId>/",
+              "description": "Plan deletion when in use returns 409; deactivate it instead.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/plans/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "plans",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": [
+                {
+                  "name": "Success",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/plans/{{planId}}/",
+                      "path": [
+                        "api",
+                        "platform",
+                        "plans",
+                        "{{planId}}"
+                      ],
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"name\": \"Standard Plus\",\n  \"description\": \"Updated plan\",\n  \"feature_ids\": [],\n  \"max_employees\": 50,\n  \"max_branches\": 5,\n  \"is_active\": true\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "cookie": []
+                }
+              ],
+              "protocolProfileBehavior": {
+                "strictSSL": false,
+                "followRedirects": true
+              }
+            },
+            {
+              "name": "PUT /api/platform/bookings/<recordId>/",
+              "description": "Update a platform booking status or notes.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/bookings/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "bookings",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"in_progress\",\n  \"notes\": \"Session in progress with healthcare provider staff.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/platform/invoices/<recordId>/",
+              "description": "Edit fields or lines on a draft invoice. Editing non-draft invoices is rejected with HTTP 400.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/invoices/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "invoices",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"attention\": \"Chief Medical Officer\",\n  \"notes\": \"Updated instructions.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/platform/my/tenants/<recordId>/",
+              "description": "Update tenant profile fields (supports application/json or multipart/form-data for logo file uploads).",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Example Health\",\n  \"contact_email\": \"owner@example.com\",\n  \"contact_phone\": \"+15551234567\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"tags\": [\n    \"clinic\"\n  ],\n  \"default_currency\": \"INR\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/my/tenants/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "my",
+                    "tenants",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": [
+                {
+                  "name": "Success",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "description": "",
+                        "disabled": false
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/my/tenants/{{tenantId}}/",
+                      "path": [
+                        "api",
+                        "platform",
+                        "my",
+                        "tenants",
+                        "{{tenantId}}"
+                      ],
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"name\": \"Example Health\",\n  \"contact_email\": \"owner@example.com\",\n  \"contact_phone\": \"+15551234567\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"tags\": [\n    \"clinic\"\n  ],\n  \"default_currency\": \"INR\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "cookie": []
+                }
+              ],
+              "protocolProfileBehavior": {
+                "strictSSL": false,
+                "followRedirects": true
+              }
+            },
+            {
+              "name": "PUT /api/platform/onboarding/requests/<recordId>/",
+              "description": "Platform admin only; only submitted requests may be edited.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"organization_name\": \"Example Health Group\",\n  \"address\": \"456 Updated Street\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/onboarding/requests/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "onboarding",
+                    "requests",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": [
+                {
+                  "name": "Success",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/onboarding/requests/{{onboardingId}}/",
+                      "path": [
+                        "api",
+                        "platform",
+                        "onboarding",
+                        "requests",
+                        "{{onboardingId}}"
+                      ],
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"organization_name\": \"Example Health Group\",\n  \"address\": \"456 Updated Street\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "cookie": []
+                }
+              ],
+              "protocolProfileBehavior": {
+                "strictSSL": false,
+                "followRedirects": true
+              }
+            },
+            {
+              "name": "PUT /api/platform/payments/<recordId>/",
+              "description": "Update payment reference or status.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/payments/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "payments",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"reference\": \"UTR123456789-CONFIRMED\",\n  \"status\": \"succeeded\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/platform/plans/<recordId>/",
+              "description": "Plan deletion when in use returns 409; deactivate it instead.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Standard Plus\",\n  \"description\": \"Updated plan\",\n  \"feature_ids\": [],\n  \"max_employees\": 50,\n  \"max_branches\": 5,\n  \"is_active\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/plans/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "plans",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": [
+                {
+                  "name": "Success",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/plans/{{planId}}/",
+                      "path": [
+                        "api",
+                        "platform",
+                        "plans",
+                        "{{planId}}"
+                      ],
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"name\": \"Standard Plus\",\n  \"description\": \"Updated plan\",\n  \"feature_ids\": [],\n  \"max_employees\": 50,\n  \"max_branches\": 5,\n  \"is_active\": true\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "cookie": []
+                }
+              ],
+              "protocolProfileBehavior": {
+                "strictSSL": false,
+                "followRedirects": true
+              }
+            },
+            {
+              "name": "PUT /api/platform/quotes/<recordId>/",
+              "description": "Drafts only can be edited.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/quotes/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "quotes",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"terms\": \"Payment due within 30 days.\",\n  \"freight\": \"250.00\",\n  \"packing\": \"0.00\",\n  \"lines\": [\n    {\n      \"kind\": \"custom\",\n      \"item\": \"Day-care package · monthly\",\n      \"specification\": \"Standard package\",\n      \"hsn_sac\": \"999311\",\n      \"uom\": \"MTH\",\n      \"qty\": \"1.00\",\n      \"unit_price\": \"5000.00\",\n      \"discount_percent\": \"5.00\",\n      \"gst_rate\": \"18.00\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/platform/subscriptions/<recordId>/",
+              "description": "Partial update of subscription fields.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"status\": \"active\",\n  \"billing_email\": \"billing@example.com\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/subscriptions/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "subscriptions",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": [
+                {
+                  "name": "Success",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/subscriptions/{{subscriptionId}}/",
+                      "path": [
+                        "api",
+                        "platform",
+                        "subscriptions",
+                        "{{subscriptionId}}"
+                      ],
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"status\": \"active\",\n  \"billing_email\": \"billing@example.com\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "cookie": []
+                }
+              ],
+              "protocolProfileBehavior": {
+                "strictSSL": false,
+                "followRedirects": true
+              }
+            },
+            {
+              "name": "PUT /api/platform/tenants/<recordId>/",
+              "description": "Writable fields: name, owner, modules, logo, contact_email, contact_phone, timezone, tags, default_currency.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{rootAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Direct Tenant Updated\",\n  \"modules\": [\n    \"patients\",\n    \"booking\"\n  ],\n  \"contact_email\": \"admin@example.com\",\n  \"contact_phone\": \"+15551234567\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"tags\": [\n    \"clinic\"\n  ],\n  \"default_currency\": \"INR\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/platform/tenants/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "platform",
+                    "tenants",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": [
+                {
+                  "name": "Success",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/platform/tenants/{{tenantId}}/",
+                      "path": [
+                        "api",
+                        "platform",
+                        "tenants",
+                        "{{tenantId}}"
+                      ],
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"name\": \"Direct Tenant Updated\",\n  \"modules\": [\n    \"patients\",\n    \"booking\"\n  ],\n  \"contact_email\": \"admin@example.com\",\n  \"contact_phone\": \"+15551234567\",\n  \"timezone\": \"Asia/Kolkata\",\n  \"tags\": [\n    \"clinic\"\n  ],\n  \"default_currency\": \"INR\"\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "cookie": []
+                }
+              ],
+              "protocolProfileBehavior": {
+                "strictSSL": false,
+                "followRedirects": true
+              }
             }
           ]
         }
@@ -13543,365 +14474,6 @@
           "description": "Clinical, booking orders, invoicing, payments, and staff attendance endpoints under /api/care/. Plan-gated under product code 'care' (with 'medicare' alias).",
           "item": [
             {
-              "name": "01 - Patients",
-              "description": "Clinical Patient management endpoints (PatientViewSet).",
-              "item": [
-                {
-                  "name": "List patients",
-                  "description": "Paginated patient list with clinical history and structured JSON addresses.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/patients/?page=1&page_size=20&search=&status=true",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "patients",
-                        ""
-                      ],
-                      "query": [
-                        {
-                          "key": "page",
-                          "value": "1"
-                        },
-                        {
-                          "key": "page_size",
-                          "value": "20"
-                        },
-                        {
-                          "key": "search",
-                          "value": ""
-                        },
-                        {
-                          "key": "status",
-                          "value": "true"
-                        }
-                      ],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Create patient",
-                  "description": "Register a patient with demographics, emergency contact, and structured JSON address.",
-                  "event": [
-                    {
-                      "listen": "test",
-                      "script": {
-                        "type": "text/javascript",
-                        "exec": [
-                          "if(pm.response.code===201) pm.environment.set(\"patientId\", pm.response.json().id);"
-                        ]
-                      }
-                    }
-                  ],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/patients/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "patients",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"first_name\": \"Aarav\",\n  \"last_name\": \"Sharma\",\n  \"phone\": \"+919876543210\",\n  \"email\": \"aarav.sharma@example.com\",\n  \"dob\": \"1988-06-15\",\n  \"gender\": \"MALE\",\n  \"blood_group\": \"B+\",\n  \"address\": {\n    \"line1\": \"Flat 402, Lotus Residency\",\n    \"line2\": \"MG Road\",\n    \"locality\": \"Indiranagar\",\n    \"city\": \"Bengaluru\",\n    \"state\": \"Karnataka\",\n    \"pincode\": \"560038\"\n  },\n  \"medical_history\": \"Hypertension, mild asthma\",\n  \"allergies\": \"Penicillin\",\n  \"emergency_contact_name\": \"Priya Sharma\",\n  \"emergency_contact_phone\": \"+919876543211\",\n  \"emergency_contact_relation\": \"Spouse\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Retrieve patient",
-                  "description": "Retrieve patient profile by ID.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/patients/{{patientId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "patients",
-                        "{{patientId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Update patient",
-                  "description": "Update patient demographics or medical notes.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "PATCH",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/patients/{{patientId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "patients",
-                        "{{patientId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"medical_history\": \"Hypertension under control with medication\",\n  \"emergency_contact_phone\": \"+919876543299\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Toggle active status",
-                  "description": "Explicitly toggle active flag (status) without soft deleting.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "PATCH",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/patients/{{patientId}}/active-status/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "patients",
-                        "{{patientId}}",
-                        "active-status",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"status\": false\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Soft delete patient",
-                  "description": "Soft delete patient (sets is_deleted=true, status=false, and stamps deleted_at).",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "DELETE",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/patients/{{patientId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "patients",
-                        "{{patientId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                }
-              ]
-            },
-            {
               "name": "02 - Patient Documents",
               "description": "Patient medical record file uploads and attachments (PatientDocumentViewSet).",
               "item": [
@@ -14814,1679 +15386,6 @@
                         "care",
                         "packages",
                         "{{packageId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                }
-              ]
-            },
-            {
-              "name": "05 - Primary Orders",
-              "description": "Top-level patient care agreements. Venue, service, package, and client_address live on child Secondary Orders.",
-              "item": [
-                {
-                  "name": "List primary orders",
-                  "description": "List primary orders with patient and totals rollup.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/primary-orders/?page=1&page_size=20&status=BOOKED",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "primary-orders",
-                        ""
-                      ],
-                      "query": [
-                        {
-                          "key": "page",
-                          "value": "1"
-                        },
-                        {
-                          "key": "page_size",
-                          "value": "20"
-                        },
-                        {
-                          "key": "status",
-                          "value": "BOOKED"
-                        }
-                      ],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Create primary order",
-                  "description": "Create top-level care agreement for a patient. Note: venue, service, package, and client_address are configured on child Secondary Orders.",
-                  "event": [
-                    {
-                      "listen": "test",
-                      "script": {
-                        "type": "text/javascript",
-                        "exec": [
-                          "if(pm.response.code===201) pm.environment.set(\"primaryOrderId\", pm.response.json().id);"
-                        ]
-                      }
-                    }
-                  ],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/primary-orders/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "primary-orders",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"patient\": \"{{patientId}}\",\n  \"start_datetime\": \"2026-11-20T09:00:00Z\",\n  \"end_datetime\": \"2026-12-20T09:00:00Z\",\n  \"notes\": \"Post total knee replacement home care agreement\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Retrieve primary order",
-                  "description": "Retrieve primary order with child secondary orders rollup.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/primary-orders/{{primaryOrderId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "primary-orders",
-                        "{{primaryOrderId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Update primary order",
-                  "description": "Update notes or billing details.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "PATCH",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/primary-orders/{{primaryOrderId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "primary-orders",
-                        "{{primaryOrderId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"notes\": \"Care plan updated: added physical therapy sessions\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Soft delete primary order",
-                  "description": "Soft delete primary order.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "DELETE",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/primary-orders/{{primaryOrderId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "primary-orders",
-                        "{{primaryOrderId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                }
-              ]
-            },
-            {
-              "name": "06 - Secondary Orders",
-              "description": "Secondary booking cycle orders. Carries package, service, venue, client_address, booking_type, cycle dates, and amount adjustments.",
-              "item": [
-                {
-                  "name": "List secondary orders",
-                  "description": "List secondary orders with filters.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/secondary-orders/?primary_order={{primaryOrderId}}&status=BOOKED",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "secondary-orders",
-                        ""
-                      ],
-                      "query": [
-                        {
-                          "key": "primary_order",
-                          "value": "{{primaryOrderId}}"
-                        },
-                        {
-                          "key": "status",
-                          "value": "BOOKED"
-                        }
-                      ],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Create secondary order (Client-side / Home Care)",
-                  "description": "Create secondary booking cycle order for home care. Carries package, service, client_address (JSON), booking_type, dates, and amounts.",
-                  "event": [
-                    {
-                      "listen": "test",
-                      "script": {
-                        "type": "text/javascript",
-                        "exec": [
-                          "if(pm.response.code===201) pm.environment.set(\"secondaryOrderId\", pm.response.json().id);"
-                        ]
-                      }
-                    }
-                  ],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/secondary-orders/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "secondary-orders",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"primary_order\": \"{{primaryOrderId}}\",\n  \"package\": \"{{packageId}}\",\n  \"service\": \"{{serviceId}}\",\n  \"booking_type\": \"CLIENT_SIDE\",\n  \"client_address\": {\n    \"line1\": \"Flat 402, Lotus Residency\",\n    \"locality\": \"Indiranagar\",\n    \"city\": \"Bengaluru\",\n    \"pincode\": \"560038\"\n  },\n  \"start_datetime\": \"2026-11-20T09:00:00Z\",\n  \"end_datetime\": \"2026-11-27T09:00:00Z\",\n  \"subtotal\": \"17500.00\",\n  \"discount_amount\": \"1000.00\",\n  \"auto_continue\": true\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Create secondary order (In-House / Clinical Venue)",
-                  "description": "Create secondary booking cycle order for clinic admission. Carries package, venue, booking_type, dates, and amounts.",
-                  "event": [
-                    {
-                      "listen": "test",
-                      "script": {
-                        "type": "text/javascript",
-                        "exec": [
-                          "if(pm.response.code===201) pm.environment.set(\"secondaryOrderId\", pm.response.json().id);"
-                        ]
-                      }
-                    }
-                  ],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/secondary-orders/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "secondary-orders",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"primary_order\": \"{{primaryOrderId}}\",\n  \"package\": \"{{packageId}}\",\n  \"venue\": \"{{venueId}}\",\n  \"booking_type\": \"IN_HOUSE\",\n  \"start_datetime\": \"2026-11-20T09:00:00Z\",\n  \"end_datetime\": \"2026-11-27T09:00:00Z\",\n  \"subtotal\": \"25000.00\",\n  \"discount_amount\": \"0.00\",\n  \"auto_continue\": false\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Retrieve secondary order",
-                  "description": "Retrieve secondary order details with add-on ternary orders.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/secondary-orders/{{secondaryOrderId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "secondary-orders",
-                        "{{secondaryOrderId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Update secondary order",
-                  "description": "Update order dates or amounts.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "PATCH",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/secondary-orders/{{secondaryOrderId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "secondary-orders",
-                        "{{secondaryOrderId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"discount_amount\": \"1500.00\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Generate invoice for secondary order",
-                  "description": "Generates or retrieves an itemized billing.Invoice (SINV-YYYY-XXXXX) with GST.",
-                  "event": [
-                    {
-                      "listen": "test",
-                      "script": {
-                        "type": "text/javascript",
-                        "exec": [
-                          "if(pm.response.code===200) { pm.environment.set(\"careInvoiceId\", pm.response.json().invoice_id); pm.environment.set(\"careInvoiceNumber\", pm.response.json().invoice_number); }"
-                        ]
-                      }
-                    }
-                  ],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/secondary-orders/{{secondaryOrderId}}/generate-invoice/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "secondary-orders",
-                        "{{secondaryOrderId}}",
-                        "generate-invoice",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Soft delete secondary order",
-                  "description": "Soft delete secondary order.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "DELETE",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/secondary-orders/{{secondaryOrderId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "secondary-orders",
-                        "{{secondaryOrderId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                }
-              ]
-            },
-            {
-              "name": "07 - Ternary Orders",
-              "description": "Add-on care items, tests, and rental equipment (TernaryOrderViewSet).",
-              "item": [
-                {
-                  "name": "List ternary orders",
-                  "description": "List add-ons for secondary order.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/ternary-orders/?secondary_order={{secondaryOrderId}}",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "ternary-orders",
-                        ""
-                      ],
-                      "query": [
-                        {
-                          "key": "secondary_order",
-                          "value": "{{secondaryOrderId}}"
-                        }
-                      ],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Create ternary order",
-                  "description": "Add-on service or rental attached to a SecondaryOrder.",
-                  "event": [
-                    {
-                      "listen": "test",
-                      "script": {
-                        "type": "text/javascript",
-                        "exec": [
-                          "if(pm.response.code===201) pm.environment.set(\"ternaryOrderId\", pm.response.json().id);"
-                        ]
-                      }
-                    }
-                  ],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/ternary-orders/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "ternary-orders",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"secondary_order\": \"{{secondaryOrderId}}\",\n  \"service\": \"{{serviceId}}\",\n  \"booking_type\": \"CLIENT_SIDE\",\n  \"start_datetime\": \"2026-11-22T09:00:00Z\",\n  \"end_datetime\": \"2026-11-23T09:00:00Z\",\n  \"subtotal\": \"2000.00\",\n  \"discount_amount\": \"0.00\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Retrieve ternary order",
-                  "description": "Retrieve ternary order details.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/ternary-orders/{{ternaryOrderId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "ternary-orders",
-                        "{{ternaryOrderId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Generate invoice for ternary order",
-                  "description": "Generates itemized billing.Invoice (TINV-YYYY-XXXXX) for this add-on.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/ternary-orders/{{ternaryOrderId}}/generate-invoice/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "ternary-orders",
-                        "{{ternaryOrderId}}",
-                        "generate-invoice",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Delete ternary order",
-                  "description": "Soft delete ternary order.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "DELETE",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/ternary-orders/{{ternaryOrderId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "ternary-orders",
-                        "{{ternaryOrderId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                }
-              ]
-            },
-            {
-              "name": "08 - Contact Bookings",
-              "description": "Staff-assisted walk-in care bookings (ContactBookingViewSet).",
-              "item": [
-                {
-                  "name": "List contact bookings",
-                  "description": "List staff-assisted bookings.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/contact-bookings/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "contact-bookings",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Create contact booking",
-                  "description": "Create a walk-in assisted care booking.",
-                  "event": [
-                    {
-                      "listen": "test",
-                      "script": {
-                        "type": "text/javascript",
-                        "exec": [
-                          "if(pm.response.code===201) pm.environment.set(\"contactBookingId\", pm.response.json().id);"
-                        ]
-                      }
-                    }
-                  ],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/contact-bookings/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "contact-bookings",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"patient\": \"{{patientId}}\",\n  \"service\": \"{{serviceId}}\",\n  \"booking_date\": \"2026-11-25\",\n  \"time_slot\": \"10:00 AM - 11:00 AM\",\n  \"contact_phone\": \"+919876543210\",\n  \"notes\": \"Walk-in consultation with senior physiotherapist\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Retrieve contact booking",
-                  "description": "Retrieve contact booking.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/contact-bookings/{{contactBookingId}}/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "contact-bookings",
-                        "{{contactBookingId}}",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                }
-              ]
-            },
-            {
-              "name": "09 - Payment Config & Razorpay",
-              "description": "Per-tenant Razorpay credentials and payment gateway verification.",
-              "item": [
-                {
-                  "name": "Retrieve payment config",
-                  "description": "Get this tenant workspace's Razorpay configuration.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/payment-config/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "payment-config",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Update payment config",
-                  "description": "Configure per-tenant Razorpay credentials.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "PATCH",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/payment-config/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "payment-config",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"razorpay_key_id\": \"rzp_test_exampleKey123\",\n  \"razorpay_key_secret\": \"sampleSecretKey456\",\n  \"razorpay_webhook_secret\": \"whsec_sample789\",\n  \"currency\": \"INR\",\n  \"is_active\": true\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Initiate Razorpay order",
-                  "description": "Create a Razorpay order dynamically using this tenant's credentials.",
-                  "event": [
-                    {
-                      "listen": "test",
-                      "script": {
-                        "type": "text/javascript",
-                        "exec": [
-                          "if(pm.response.code===200) { pm.environment.set(\"razorpayOrderId\", pm.response.json().order_id); }"
-                        ]
-                      }
-                    }
-                  ],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/razorpay/initiate/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "razorpay",
-                        "initiate",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"invoice_id\": \"{{careInvoiceId}}\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Verify Razorpay payment",
-                  "description": "Verify HMAC SHA-256 signature and record verified billing.Payment in tenant schema.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/razorpay/verify/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "razorpay",
-                        "verify",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"invoice_id\": \"{{careInvoiceId}}\",\n  \"razorpay_order_id\": \"{{razorpayOrderId}}\",\n  \"razorpay_payment_id\": \"pay_sampleMockPaymentId\",\n  \"razorpay_signature\": \"mock_signature_for_test\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                }
-              ]
-            },
-            {
-              "name": "10 - Staff Attendance",
-              "description": "Daily staff attendance management and bulk check-in automation.",
-              "item": [
-                {
-                  "name": "List attendance status codes",
-                  "description": "List available staff attendance status codes (e.g. PRESENT, ON_LEAVE, SICK).",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/attendance-status/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "attendance-status",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Create attendance status code",
-                  "description": "Create a custom staff attendance status code.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/attendance-status/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "attendance-status",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"code\": \"PRESENT\",\n  \"label\": \"Present on Duty\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "List attendance records",
-                  "description": "List staff attendance records filtered by date or status.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/attendance/?date=2026-11-18",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "attendance",
-                        ""
-                      ],
-                      "query": [
-                        {
-                          "key": "date",
-                          "value": "2026-11-18"
-                        }
-                      ],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Log staff attendance",
-                  "description": "Log attendance entry for a care staff member.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      },
-                      {
-                        "key": "Content-Type",
-                        "value": "application/json",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/attendance/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "attendance",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {
-                      "mode": "raw",
-                      "raw": "{\n  \"user\": \"{{tenantUserId}}\",\n  \"date\": \"2026-11-18\",\n  \"status\": 1,\n  \"notes\": \"Checked in on morning hospital ward duty\"\n}",
-                      "options": {
-                        "raw": {
-                          "language": "json"
-                        }
-                      }
-                    }
-                  },
-                  "response": []
-                },
-                {
-                  "name": "Bulk mark staff present today",
-                  "description": "Batch creates present attendance records for all active staff for the day.",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "POST",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/care/attendance/mark-today/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "care",
-                        "attendance",
-                        "mark-today",
                         ""
                       ],
                       "query": [],
@@ -18969,53 +17868,6 @@
               "description": "Subscriber notification logs and live broadcast dispatching.",
               "item": [
                 {
-                  "name": "List subscriber notification history",
-                  "description": "",
-                  "event": [],
-                  "auth": {},
-                  "request": {
-                    "auth": {
-                      "type": "bearer",
-                      "bearer": [
-                        {
-                          "key": "token",
-                          "value": "{{tenantAccessToken}}",
-                          "type": "string"
-                        }
-                      ]
-                    },
-                    "method": "GET",
-                    "header": [
-                      {
-                        "key": "Accept",
-                        "value": "application/json",
-                        "type": "text"
-                      },
-                      {
-                        "key": "X-Tenant",
-                        "value": "{{tenantSlug}}",
-                        "type": "text"
-                      }
-                    ],
-                    "url": {
-                      "raw": "{{baseUrl}}/api/notifications/subscriber-notifications/",
-                      "host": [
-                        "{{baseUrl}}"
-                      ],
-                      "path": [
-                        "api",
-                        "notifications",
-                        "subscriber-notifications",
-                        ""
-                      ],
-                      "query": [],
-                      "variable": []
-                    },
-                    "body": {}
-                  },
-                  "response": []
-                },
-                {
                   "name": "Send subscriber notification broadcast",
                   "description": "",
                   "event": [],
@@ -20405,6 +19257,1822 @@
                   "response": []
                 }
               ]
+            }
+          ]
+        },
+        {
+          "name": "99 - Additional current API methods",
+          "description": "Current routes and HTTP methods not present in the original request examples.",
+          "item": [
+            {
+              "name": "DELETE /api/employees/<recordId>/",
+              "request": {
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employees/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employees",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: DELETE /api/employees/{{recordId}}/"
+            },
+            {
+              "name": "DELETE /api/notifications/<recordId>/",
+              "description": "Current API route: DELETE /api/notifications/{{recordId}}/",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/notifications/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "notifications",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "DELETE /api/payroll/salary-transactions/<recordId>/",
+              "description": "Current API route: DELETE /api/payroll/salary-transactions/{{recordId}}/",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "DELETE",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/payroll/salary-transactions/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "payroll",
+                    "salary-transactions",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "GET /api/",
+              "event": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: GET /api/"
+            },
+            {
+              "name": "GET /api/analytics/",
+              "event": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/analytics/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "analytics"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: GET /api/analytics/"
+            },
+            {
+              "name": "GET /api/billing/",
+              "event": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/billing/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "billing"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: GET /api/billing/"
+            },
+            {
+              "name": "GET /api/care/",
+              "event": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/care/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "care"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: GET /api/care/"
+            },
+            {
+              "name": "GET /api/catalog/",
+              "event": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/catalog/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "catalog"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: GET /api/catalog/"
+            },
+            {
+              "name": "GET /api/content/",
+              "event": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/content/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "content"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: GET /api/content/"
+            },
+            {
+              "name": "GET /api/payroll/",
+              "event": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/payroll/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "payroll"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: GET /api/payroll/"
+            },
+            {
+              "name": "GET /api/permissions/<recordId>/",
+              "event": [],
+              "request": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/permissions/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "permissions",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                }
+              },
+              "response": [],
+              "description": "Current API route: GET /api/permissions/{{recordId}}/"
+            },
+            {
+              "name": "PATCH /api/care/patient-documents/<recordId>/",
+              "event": [],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/care/patient-documents/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "care",
+                    "patient-documents",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PATCH /api/care/patient-documents/{{recordId}}/"
+            },
+            {
+              "name": "PATCH /api/notifications/<recordId>/",
+              "event": [],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/notifications/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "notifications",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PATCH /api/notifications/{{recordId}}/"
+            },
+            {
+              "name": "PATCH /api/payroll/salary-transactions/<recordId>/",
+              "event": [],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/payroll/salary-transactions/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "payroll",
+                    "salary-transactions",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PATCH /api/payroll/salary-transactions/{{recordId}}/"
+            },
+            {
+              "name": "PATCH /api/user-documents/<recordId>/",
+              "event": [],
+              "request": {
+                "method": "PATCH",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user-documents/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user-documents",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PATCH /api/user-documents/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/care/locations/<recordId>/",
+              "description": "Update location details.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/care/locations/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "care",
+                    "locations",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"phone\": \"+919876543299\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/care/packages/<recordId>/",
+              "description": "Update package pricing or details.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/care/packages/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "care",
+                    "packages",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"price\": \"2800.00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/care/patient-documents/<recordId>/",
+              "event": [],
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/care/patient-documents/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "care",
+                    "patient-documents",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PUT /api/care/patient-documents/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/content/contacts/<recordId>/",
+              "description": "Current API route: PUT /api/content/contacts/{{recordId}}/",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/content/contacts/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "content",
+                    "contacts",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"mobile_number\": \"+919876543211\",\n  \"url\": \"tel:+919876543211\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/content/faq/<recordId>/",
+              "description": "Current API route: PUT /api/content/faq/{{recordId}}/",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/content/faq/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "content",
+                    "faq",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"topic\": \"Home Healthcare, Nursing & Palliative Care\",\n  \"qanda\": [\n    {\n      \"question\": \"How do I schedule an in-home nursing visit?\",\n      \"answer\": \"Book directly through the patient portal or dial our dedicated support desk.\"\n    }\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/content/video/<recordId>/",
+              "description": "Current API route: PUT /api/content/video/{{recordId}}/",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/content/video/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "content",
+                    "video",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"title\": \"Post-Operative Physiotherapy Routine (Guided Tutorial)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/customers/<recordId>/",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/customers/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "customers",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"Taylor\",\n  \"city\": \"Mumbai\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PUT /api/customers/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/employees/<recordId>/",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/employees/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "employees",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"Jamie\",\n  \"employee_profile\": {\n    \"designation\": \"Senior Technician\"\n  }\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PUT /api/employees/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/groups/<recordId>/",
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/groups/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "groups",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"name\": \"Senior User Managers\",\n  \"permissions\": [\n    1,\n    2,\n    3\n  ]\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "description": "Update a Django permission group name or permission IDs list."
+              },
+              "response": [],
+              "description": "Current API route: PUT /api/groups/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/notifications/<recordId>/",
+              "event": [],
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/notifications/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "notifications",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PUT /api/notifications/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/notifications/templates/<recordId>/",
+              "description": "Current API route: PUT /api/notifications/templates/{{recordId}}/",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/notifications/templates/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "notifications",
+                    "templates",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"body\": \"Hello {{name}}, prompt reminder: your clinical duty starts at {{start_time}}.\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/payroll/attendance-status/<recordId>/",
+              "description": "Current API route: PUT /api/payroll/attendance-status/{{recordId}}/",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/payroll/attendance-status/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "payroll",
+                    "attendance-status",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"label\": \"Present (Full Day)\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/payroll/salary-structures/<recordId>/",
+              "description": "Current API route: PUT /api/payroll/salary-structures/{{recordId}}/",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/payroll/salary-structures/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "payroll",
+                    "salary-structures",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"amount\": \"55000.00\"\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": []
+            },
+            {
+              "name": "PUT /api/payroll/salary-transactions/<recordId>/",
+              "event": [],
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/payroll/salary-transactions/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "payroll",
+                    "salary-transactions",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PUT /api/payroll/salary-transactions/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/shifts/<recordId>/",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/shifts/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "shifts",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"grace_minutes\": 15\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PUT /api/shifts/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/staff-for-hire/<recordId>/",
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "text"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/staff-for-hire/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "staff-for-hire",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"is_available\": false\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PUT /api/staff-for-hire/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/user-documents/<recordId>/",
+              "event": [],
+              "request": {
+                "method": "PUT",
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "type": "string"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/user-documents/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "user-documents",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                },
+                "description": "Review the API documentation for required request fields before sending.",
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "body": {
+                  "mode": "raw",
+                  "raw": "{}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                }
+              },
+              "response": [],
+              "description": "Current API route: PUT /api/user-documents/{{recordId}}/"
+            },
+            {
+              "name": "PUT /api/users/<recordId>/",
+              "description": "Email cannot be changed. Password in updates is ignored. Cannot deactivate yourself or remove the last active Tenant Admin.",
+              "event": [],
+              "auth": {},
+              "request": {
+                "auth": {
+                  "type": "bearer",
+                  "bearer": [
+                    {
+                      "key": "token",
+                      "value": "{{tenantAccessToken}}",
+                      "type": "string"
+                    }
+                  ]
+                },
+                "method": "PUT",
+                "body": {
+                  "mode": "raw",
+                  "raw": "{\n  \"first_name\": \"Sam\",\n  \"middle_name\": \"\",\n  \"last_name\": \"Updated\",\n  \"mobile_number\": \"5550002222\",\n  \"is_active\": true\n}",
+                  "options": {
+                    "raw": {
+                      "language": "json"
+                    }
+                  }
+                },
+                "header": [
+                  {
+                    "key": "Accept",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  },
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json",
+                    "description": "",
+                    "type": "string"
+                  },
+                  {
+                    "key": "X-Tenant",
+                    "value": "{{tenantSlug}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{baseUrl}}/api/users/{{recordId}}/",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "users",
+                    "{{recordId}}"
+                  ],
+                  "query": []
+                }
+              },
+              "response": [
+                {
+                  "name": "Success",
+                  "originalRequest": {
+                    "method": "PATCH",
+                    "header": [
+                      {
+                        "key": "Accept",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      },
+                      {
+                        "key": "Content-Type",
+                        "value": "application/json",
+                        "description": "",
+                        "disabled": false
+                      },
+                      {
+                        "key": "X-Tenant",
+                        "value": "{{tenantSlug}}",
+                        "description": "",
+                        "disabled": false
+                      }
+                    ],
+                    "url": {
+                      "raw": "{{baseUrl}}/api/users/{{userId}}/",
+                      "path": [
+                        "api",
+                        "users",
+                        "{{userId}}"
+                      ],
+                      "host": [
+                        "{{baseUrl}}"
+                      ],
+                      "query": [],
+                      "variable": []
+                    },
+                    "body": {
+                      "mode": "raw",
+                      "raw": "{\n  \"full_name\": \"Sam Updated\",\n  \"phone\": \"+15550002222\",\n  \"is_active\": true\n}",
+                      "options": {
+                        "raw": {
+                          "language": "json"
+                        }
+                      }
+                    }
+                  },
+                  "cookie": []
+                }
+              ],
+              "protocolProfileBehavior": {
+                "strictSSL": false,
+                "followRedirects": true
+              }
             }
           ]
         }

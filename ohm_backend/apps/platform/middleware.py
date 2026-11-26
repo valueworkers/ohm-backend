@@ -7,12 +7,48 @@ The active schema is selected by:
   * API requests: ``X-Tenant`` header (absent → public, present → tenant)
   * Admin panel: ``X-Tenant`` form input, cookie, or query param
 """
-from django.db import connection
+from django.db import ProgrammingError, connection
 from django.http import JsonResponse
 from django_tenants.middleware.main import TenantMainMiddleware
 from django_tenants.utils import get_public_schema_name, get_tenant_model
 
 from .utils import SLUG_RE, schema_for_slug
+
+
+class PublicSchemaUnavailable(Exception):
+    """Raised when tenant routing cannot read required public tables."""
+
+
+def _is_missing_relation_error(exc):
+    """Return True only for PostgreSQL's undefined-table error."""
+    pending = [exc]
+    seen = set()
+    while pending:
+        current = pending.pop()
+        if current is None or id(current) in seen:
+            continue
+        seen.add(id(current))
+
+        sqlstate = (
+            getattr(current, "sqlstate", None)
+            or getattr(current, "pgcode", None)
+            or getattr(getattr(current, "diag", None), "sqlstate", None)
+        )
+        if sqlstate == "42P01":
+            return True
+
+        pending.extend((getattr(current, "__cause__", None), getattr(current, "__context__", None)))
+    return False
+
+
+def _public_schema_unavailable_response():
+    return JsonResponse(
+        {
+            "error": "The public schema is not initialized. Please run the database migrations.",
+            "code": "public_schema_unavailable",
+        },
+        status=503,
+    )
 
 
 class TenantHeaderMiddleware(TenantMainMiddleware):
@@ -25,6 +61,10 @@ class TenantHeaderMiddleware(TenantMainMiddleware):
             )
         except get_tenant_model().DoesNotExist:
             return None
+        except ProgrammingError as exc:
+            if _is_missing_relation_error(exc):
+                raise PublicSchemaUnavailable from exc
+            raise
 
     def process_request(self, request):
         tenant_slug = request.headers.get("X-Tenant", "").strip().lower()
@@ -54,7 +94,10 @@ class TenantHeaderMiddleware(TenantMainMiddleware):
         # ---- No header / slug → public schema (root / platform admin) ----
         if not tenant_slug:
             connection.set_schema_to_public()
-            request.tenant = self._get_public_tenant()
+            try:
+                request.tenant = self._get_public_tenant()
+            except PublicSchemaUnavailable:
+                return _public_schema_unavailable_response()
             return None
 
         # ---- X-Tenant / slug present → resolve tenant schema ----
@@ -66,6 +109,9 @@ class TenantHeaderMiddleware(TenantMainMiddleware):
                 return None
             return JsonResponse({"error": "Invalid tenant slug."}, status=400)
 
+        # Tenant records live in the public schema, even when the previous
+        # request on this DB connection used a tenant schema.
+        connection.set_schema_to_public()
         tenant_model = get_tenant_model()
         schema = schema_for_slug(tenant_slug)
 
@@ -88,6 +134,10 @@ class TenantHeaderMiddleware(TenantMainMiddleware):
                 request.tenant = self._get_public_tenant()
                 return None
             return JsonResponse({"error": "Tenant not found."}, status=404)
+        except ProgrammingError as exc:
+            if _is_missing_relation_error(exc):
+                return _public_schema_unavailable_response()
+            raise
 
         if tenant.schema_name == get_public_schema_name():
             if is_admin:
@@ -110,6 +160,15 @@ class TenantHeaderMiddleware(TenantMainMiddleware):
 
         connection.set_tenant(tenant)
         request.tenant = tenant
+        return None
+
+    def process_exception(self, request, exception):
+        """Turn public-schema missing-table errors into a useful API response."""
+        if (
+            getattr(connection, "schema_name", None) == get_public_schema_name()
+            and _is_missing_relation_error(exception)
+        ):
+            return _public_schema_unavailable_response()
         return None
 
     def process_response(self, request, response):

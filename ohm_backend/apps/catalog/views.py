@@ -83,7 +83,6 @@ class ServiceViewSet(viewsets.ModelViewSet):
     serializer_class = ServiceSerializer
     parser_classes = [MultiPartParser, FormParser, JSONParser]
     filterset_class = ServiceFilter
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     search_fields = ["name", "description", "address", "city", "contact"]
     ordering_fields = ["name", "created_at"]
     ordering = ["-created_at"]

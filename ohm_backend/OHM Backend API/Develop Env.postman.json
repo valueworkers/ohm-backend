@@ -276,6 +276,78 @@
       "value": "",
       "type": "default",
       "enabled": true
+    },
+    {
+      "key": "documentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "objectPermissionAssignmentId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "owner_id",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "planId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "quoteAcceptToken",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "recordId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "searchTerm",
+      "value": "clinic",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "shiftId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "staffForHireId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "subscriptionId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "tenantId",
+      "value": "",
+      "type": "default",
+      "enabled": true
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "default",
+      "enabled": true
     }
   ],
   "_postman_variable_scope": "environment"

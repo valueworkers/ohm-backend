@@ -1,7 +1,9 @@
 from decimal import Decimal
+import json
 from django.contrib import admin
-from django.db import connection
+from django.db import ProgrammingError, connection
 from django.test import RequestFactory, TestCase
+from unittest.mock import patch
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
@@ -130,6 +132,19 @@ class MultiTenantAdminTests(TestCase):
         self.middleware.process_request(req)
         self.assertEqual(connection.schema_name, "public")
         self.assertIsNone(getattr(req, "_admin_tenant_error", None))
+
+    def test_missing_public_tenant_table_returns_service_unavailable(self):
+        missing_relation = Exception("undefined table")
+        missing_relation.sqlstate = "42P01"
+        db_error = ProgrammingError("relation \"platform_tenant\" does not exist")
+        db_error.__cause__ = missing_relation
+
+        req = self.rf.get("/api/platform/tenants/")
+        with patch.object(Tenant.objects, "get", side_effect=db_error):
+            response = self.middleware.process_request(req)
+
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(json.loads(response.content)["code"], "public_schema_unavailable")
 
     def test_admin_login_post_invalid_slug_sets_error_without_400_json(self):
         req = self.rf.post("/admin/login/", {"x_tenant": "invalid!slug"})

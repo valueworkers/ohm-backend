@@ -292,7 +292,7 @@ class EmployeeProfile(models.Model):
     grade = models.CharField(max_length=20, blank=True, null=True)
     cost_center = models.CharField(max_length=50, blank=True, null=True)
     department = models.CharField(
-        max_length=50, blank=True, null=True,
+        max_length=50, blank=True, null=True, 
         help_text="Employee's HR department.",
     )
     skills = models.JSONField(blank=True, null=True)
