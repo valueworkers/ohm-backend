@@ -219,14 +219,6 @@ class UserSession(models.Model):
         )]
 
 
-class PasswordResetToken(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="password_reset_tokens")
-    token_hash = models.CharField(max_length=64, unique=True)
-    expires_at = models.DateTimeField()
-    consumed_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-
 # ------------------------ SHIFT SCHEDULE (tenant) ------------------------
 class ShiftSchedule(models.Model):
     """Reusable duty-timing template (e.g. Morning / Night) shared by many employees."""

@@ -2,28 +2,20 @@ from django.db import connection, transaction
 from django.db.models import Q
 from django.db.models.deletion import ProtectedError
 from django.shortcuts import get_object_or_404
-import hashlib
-import secrets
-from datetime import timedelta
 
 from django.utils import timezone
 from rest_framework.decorators import action
 from rest_framework import mixins, status, viewsets
 from rest_framework.exceptions import AuthenticationFailed,ValidationError
 from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.parsers import MultiPartParser, FormParser
 from rest_framework.response import Response
 from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 from config.pagination import StandardResultsSetPagination
 
-from django.contrib.auth.models import Permission
 from django_tenants.utils import get_public_schema_name, schema_context
-from apps.accounts.models import (
-    EmployeeProfile, ShiftSchedule, StaffForHire,
-    PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
-)
+from apps.accounts.models import User, UserSession
 from apps.accounts.permissions import is_root_user, is_superadmin
 from apps.accounts.services import AccountsService
 from apps.accounts.serializers import (
@@ -348,55 +340,3 @@ class RevokeAllSessionsView(APIView):
             pk=current_id
         ).update(revoked_at=timezone.now())
         return Response({"revoked_sessions": updated})
-
-class VerifyOTPView(APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []
-    throttle_classes = [ScopedRateThrottle, OTPIdentityThrottle]
-    throttle_scope = "otp_verify"
-
-    def post(self, request):
-        username = request.data.get("username")
-        otp = request.data.get("otp")
-        user = find_user(username or "")
-        if not user or not user.is_active or not consume_otp(user, "password_reset", otp or ""):
-            raise AuthenticationFailed("Invalid or expired OTP.")
-        raw_token = secrets.token_urlsafe(32)
-        PasswordResetToken.objects.filter(user=user, consumed_at__isnull=True).update(consumed_at=timezone.now())
-        PasswordResetToken.objects.create(
-            user=user, token_hash=hashlib.sha256(raw_token.encode()).hexdigest(),
-            expires_at=timezone.now() + timedelta(minutes=10),
-        )
-        return Response({"reset_token": raw_token})
-
-class ResetPasswordView(APIView):
-    permission_classes = [AllowAny]
-    authentication_classes = []
-    throttle_classes = [ScopedRateThrottle]
-    throttle_scope = "otp_verify"
-
-    def post(self, request):
-        token = request.data.get("reset_token")
-        password = request.data.get("new_password")
-        if not isinstance(token, str) or not isinstance(password, str) or not token or not password:
-            raise ValidationError({"detail": "reset_token and new_password are required."})
-        digest = hashlib.sha256(token.encode()).hexdigest()
-        try:
-            from django.contrib.auth.password_validation import validate_password
-            from django.core.exceptions import ValidationError as DjangoValidationError
-            with transaction.atomic():
-                reset = PasswordResetToken.objects.select_for_update().get(
-                    token_hash=digest, consumed_at__isnull=True, expires_at__gt=timezone.now(), user__is_active=True
-                )
-                user = reset.user
-                validate_password(password, user)
-                user.set_password(password)
-                user.save(update_fields=["password"])
-                reset.consumed_at = timezone.now()
-                reset.save(update_fields=["consumed_at"])
-                UserSession.objects.filter(user=user, revoked_at__isnull=True).update(revoked_at=timezone.now())
-        except PasswordResetToken.DoesNotExist:
-            raise AuthenticationFailed("Invalid, expired, or already used password reset token.")
-        except DjangoValidationError as exc:
-            raise ValidationError({"new_password": exc.messages})
-        return Response({"message": "Password reset successful."})
