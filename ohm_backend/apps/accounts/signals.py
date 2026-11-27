@@ -81,9 +81,11 @@ def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
     # The onboarding form may name one operations administrator. Mirror that
     # identity with the tenant's operational role, never with platform-wide
     # credentials. If the email is already an owner, keep its owner privileges.
-    ops_email = (provisioning.ops_admin_email or "").strip().lower()
+    ops_emails = [e.strip().lower() for e in (provisioning.ops_admin_emails or []) if e.strip()]
     owner_emails = {applicant.email.strip().lower(), *(e.strip().lower() for e in co_emails if e.strip())}
-    if ops_email and ops_email not in owner_emails:
+    for ops_email in ops_emails:
+        if ops_email in owner_emails:
+            continue
         ops_user = _get_or_create_public_user(ops_email)
         with schema_context(tenant.schema_name):
             tenant_ops_user = AccountsService.ensure_tenant_admin(ops_user, as_superuser=False)

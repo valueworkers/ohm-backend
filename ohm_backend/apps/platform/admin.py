@@ -289,9 +289,9 @@ class DocumentSequenceAdmin(PlatformModelAdmin):
 
 @admin.register(Tenant)
 class TenantAdmin(PlatformModelAdmin):
-    list_display = ("name", "schema_name", "status", "contact_email", "created_at")
+    list_display = ("name", "schema_name", "status", "created_at")
     list_filter = ("status",)
-    search_fields = ("name", "schema_name", "contact_email", "domains__domain")
+    search_fields = ("name", "schema_name", "domains__domain")
     readonly_fields = ("schema_name", "created_at")
     filter_horizontal = ("owners",)
     inlines = [DomainInline, SubscriptionInline]
@@ -339,7 +339,7 @@ class TenantProvisioningAdmin(PlatformModelAdmin):
         "applicant", "requested_plan", "created_at",
     )
     list_filter = ("status", "wants_custom_website", "requested_plan")
-    search_fields = ("organization_name", "slug", "custom_domain", "email", "applicant__email")
+    search_fields = ("organization_name", "slug", "custom_domain", "applicant__email")
     date_hierarchy = "created_at"
     raw_id_fields = ("applicant", "reviewed_by", "tenant")
     readonly_fields = (
@@ -347,8 +347,9 @@ class TenantProvisioningAdmin(PlatformModelAdmin):
         "provision_error", "created_at", "updated_at",
     )
     fieldsets = (
-        ("Organization", {"fields": ("organization_name", "logo", "email", "contact_phone", "gst_number", "branches")}),
-        ("Hosting", {"fields": ("slug", "custom_domain", "wants_custom_website", "ops_admin_email", "co_owner_emails", "requested_plan")}),
+        ("Organization", {"fields": ("organization_name", "logo", "contact_emails", "contact_phones", "gst_number", "branches")}),
+        ("Hosting", {"fields": ("slug", "custom_domain", "wants_custom_website", "existing_website", "ops_admin_emails", "co_owner_emails", "requested_plan")}),
+        ("Integrations", {"fields": ("erp_name", "existing_payment_providers", "provided_payment_providers", "razorpay_account_id", "razorpay_key_id", "cashfree_app_id", "cashfree_secret_key")}),
         ("Review", {"fields": ("id", "applicant", "status", "review_notes", "reviewed_by", "reviewed_at")}),
         ("Provisioning", {"fields": ("tenant", "provision_error", "created_at", "updated_at")}),
     )

@@ -244,7 +244,7 @@ class Command(BaseCommand):
             # 1. Public tenant
             tenant, _ = Tenant.objects.get_or_create(
                 schema_name=public,
-                defaults={"name": "O-hm platform", "status": Tenant.Status.ACTIVE, "contact_email": email},
+                defaults={"name": "O-hm platform", "status": Tenant.Status.ACTIVE, "contact_emails": {"primary": email}},
             )
             if tenant.status != Tenant.Status.ACTIVE:
                 tenant.status = Tenant.Status.ACTIVE

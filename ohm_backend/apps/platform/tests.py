@@ -23,8 +23,8 @@ class PlatformTenantEntitiesTest(TestCase):
         self.tenant = Tenant.objects.create(
             name="Sunrise Healthcare",
             schema_name="sunrise",
-            contact_email="sunrise@example.com",
-            contact_phone="9876543210",
+            contact_emails={"primary": "sunrise@example.com"},
+            contact_phones={"primary": "9876543210"},
         )
         self.plan = Plan.objects.create(
             name="Professional",

@@ -282,7 +282,7 @@ class TenantProvisioningViewSet(viewsets.ModelViewSet):
 
 class TenantViewSet(viewsets.ModelViewSet):
     filterset_fields = ("status",)
-    search_fields = ("name", "schema_name", "contact_email", "domains__domain")
+    search_fields = ("name", "schema_name", "domains__domain")
     queryset = (
         Tenant.objects.exclude(schema_name="public")
         .prefetch_related("domains", "subscriptions__plan")
@@ -439,7 +439,7 @@ class MyTenantViewSet(
             if tenant.status != Tenant.Status.PROVISIONING:
                 raise ValidationError({"status": f"Tenant is {tenant.status}; only a newly provisioned tenant can be activated."})
             missing = [
-                f for f in ("name", "contact_email", "contact_phone", "timezone", "default_currency")
+                f for f in ("name", "contact_emails", "contact_phones", "timezone", "default_currency")
                 if not getattr(tenant, f)
             ]
             if missing:
@@ -939,7 +939,7 @@ class BookingViewSet(viewsets.ModelViewSet):
             tenant=tenant,
             booking=booking,
             customer_name=booking.contact_name or (tenant.name if tenant else "Customer"),
-            buyer_email=booking.contact_email or (tenant.contact_email if tenant else ""),
+            buyer_email=booking.contact_email or ((tenant.contact_emails or {}).get("primary", "") if tenant else ""),
             your_ref=booking.booking_id,
             issue_date=today,
             issuer=issuer,

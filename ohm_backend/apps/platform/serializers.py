@@ -21,7 +21,7 @@ from .models import (
     Tenant,
     TenantProvisioning,
     Quote, QuoteEvent, QuoteLine, QuoteTaxSettings,
-    Invoice, InvoiceItem, Payment, Booking
+    Invoice, InvoiceItem, Payment, Booking, PaymentProvider
 )
 from apps.accounts.services import AccountsService
 from .utils import HOST_RE, SLUG_RE, base_domain, slug_problem
@@ -98,6 +98,9 @@ class BranchSerializer(serializers.Serializer):
 
 class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
     branches = serializers.JSONField(required=False)
+    contact_emails = serializers.JSONField(required=True)
+    contact_phones = serializers.JSONField(required=True)
+    cashfree_secret_key = serializers.CharField(required=False, allow_blank=True, write_only=True)
     requested_plan = serializers.PrimaryKeyRelatedField(
         queryset=Plan.objects.filter(is_active=True), required=False, default=default_trial_plan
     )
@@ -105,9 +108,11 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = TenantProvisioning
         fields = (
-            "id", "organization_name", "logo", "email", "contact_phone", "gst_number",
-            "branches", "ops_admin_email", "co_owner_emails", "slug", "custom_domain",
-            "wants_custom_website", "requested_plan", "status", "created_at",
+            "id", "organization_name", "logo", "contact_emails", "contact_phones", "gst_number",
+            "branches", "ops_admin_emails", "co_owner_emails", "slug", "custom_domain",
+            "wants_custom_website", "existing_website", "erp_name", "requested_plan",
+            "existing_payment_providers", "provided_payment_providers", "razorpay_account_id",
+            "razorpay_key_id", "cashfree_app_id", "cashfree_secret_key", "status", "created_at",
         )
         read_only_fields = ("id", "status", "created_at")
 
@@ -115,6 +120,53 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
         serializer = BranchSerializer(data=value or [], many=True)
         serializer.is_valid(raise_exception=True)
         return [dict(item) for item in serializer.validated_data]
+
+    def validate_contact_emails(self, value):
+        return self._validate_primary_contact(value, "email")
+
+    def validate_contact_phones(self, value):
+        return self._validate_primary_contact(value, "phone")
+
+    @staticmethod
+    def _validate_primary_contact(value, kind):
+        if not isinstance(value, dict) or not value.get("primary"):
+            raise serializers.ValidationError({"primary": "This contact is required."})
+        cleaned = {}
+        for key, item in value.items():
+            if key not in {"primary", "secondary", "tertiary"}:
+                raise serializers.ValidationError("Use primary, secondary, or tertiary contact keys.")
+            if item in (None, ""):
+                continue
+            cleaned[key] = serializers.EmailField().run_validation(item) if kind == "email" else str(item).strip()
+        if not cleaned.get("primary"):
+            raise serializers.ValidationError({"primary": "This contact is required."})
+        return cleaned
+
+    def validate_ops_admin_emails(self, value):
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Expected a list of email addresses.")
+        validator = serializers.EmailField()
+        return list(dict.fromkeys(validator.run_validation(item).lower() for item in value if item))
+
+    def validate_existing_payment_providers(self, value):
+        return self._validate_payment_providers(value)
+
+    def validate_provided_payment_providers(self, value):
+        return self._validate_payment_providers(value)
+
+    @staticmethod
+    def _validate_payment_providers(value):
+        if value is None:
+            return None
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Expected a list of payment provider codes.")
+        valid = {choice.value for choice in PaymentProvider}
+        invalid = set(value) - valid
+        if invalid:
+            raise serializers.ValidationError(f"Unsupported payment providers: {', '.join(sorted(invalid))}.")
+        return list(dict.fromkeys(value))
 
 
     def validate_slug(self, value):
@@ -161,14 +213,14 @@ class TenantProvisioningCreateSerializer(serializers.ModelSerializer):
 
     @transaction.atomic
     def create(self, validated_data):
-        validated_data["applicant"] = self._get_or_create_applicant(validated_data["email"])
+        validated_data["applicant"] = self._get_or_create_applicant(validated_data["contact_emails"]["primary"])
         return super().create(validated_data)
 
 class TenantProvisioningUpdateSerializer(TenantProvisioningCreateSerializer):
     @transaction.atomic
     def update(self, instance, validated_data):
         # not a validation: keeps the applicant (tenant owner) in sync with an email change
-        email = validated_data.get("email")
+        email = (validated_data.get("contact_emails") or {}).get("primary")
         if email and email != instance.applicant.email.lower():
             validated_data["applicant"] = self._get_or_create_applicant(email)
         return super().update(instance, validated_data)
@@ -184,9 +236,11 @@ class TenantProvisioningSerializer(serializers.ModelSerializer):
     class Meta:
         model = TenantProvisioning
         fields = (
-            "id", "applicant_email", "organization_name", "logo", "email", "contact_phone",
-            "gst_number", "branches", "ops_admin_email", "co_owner_emails", "slug",
-            "custom_domain", "wants_custom_website", "requested_plan", "requested_plan_name",
+            "id", "applicant_email", "organization_name", "logo", "contact_emails", "contact_phones",
+            "gst_number", "branches", "ops_admin_emails", "co_owner_emails", "slug",
+            "custom_domain", "wants_custom_website", "existing_website", "erp_name",
+            "requested_plan", "requested_plan_name", "existing_payment_providers",
+            "provided_payment_providers", "razorpay_account_id", "razorpay_key_id", "cashfree_app_id",
             "status", "review_notes", "reviewed_at", "tenant_schema",
             "provision_error", "created_at", "updated_at",
         )
@@ -295,6 +349,7 @@ class SubscriptionSerializer(serializers.ModelSerializer):
 
 
 class TenantCreateSerializer(serializers.ModelSerializer):
+    cashfree_secret_key = serializers.CharField(required=False, allow_blank=True, write_only=True)
     plan = serializers.PrimaryKeyRelatedField(
         queryset=Plan.objects.filter(is_active=True), write_only=True,
         required=False, default=default_trial_plan,
@@ -311,8 +366,10 @@ class TenantCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tenant
         fields = (
-            "id", "name", "schema_name", "owner_ids", "plan", "logo", "contact_email",
-            "contact_phone", "timezone","tags", "default_currency", "domain",
+            "id", "name", "schema_name", "owner_ids", "plan", "logo", "contact_emails", "contact_phones",
+            "existing_website", "erp_name", "existing_payment_providers", "provided_payment_providers",
+            "razorpay_account_id", "razorpay_key_id", "cashfree_app_id", "cashfree_secret_key",
+            "gst_number", "timezone","tags", "default_currency", "domain",
         )
         read_only_fields = ("id",)
 
@@ -358,7 +415,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
             status=(Subscription.Status.TRIAL if plan.pk == DEFAULT_TRIAL_PLAN_ID else Subscription.Status.ACTIVE),
             starts_at=now,
             trial_ends_at=(now + timedelta(days=DEFAULT_TRIAL_DAYS) if plan.pk == DEFAULT_TRIAL_PLAN_ID else None),
-            billing_email=tenant.contact_email,
+            billing_email=(tenant.contact_emails or {}).get("primary", ""),
         )
         if owners:
             tenant.owners.set(owners)
@@ -370,6 +427,7 @@ class TenantCreateSerializer(serializers.ModelSerializer):
         return tenant
 
 class TenantUpdateSerializer(serializers.ModelSerializer):
+    cashfree_secret_key = serializers.CharField(required=False, allow_blank=True, write_only=True)
     owner_ids = serializers.PrimaryKeyRelatedField(
         queryset=get_user_model().objects.all(),
         many=True,
@@ -381,8 +439,10 @@ class TenantUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tenant
         fields = (
-            "name", "owner_ids", "modules", "logo", "contact_email",
-            "contact_phone", "timezone", "tags", "default_currency",
+            "name", "owner_ids", "modules", "logo", "contact_emails", "contact_phones",
+            "existing_website", "erp_name", "existing_payment_providers", "provided_payment_providers",
+            "razorpay_account_id", "razorpay_key_id", "cashfree_app_id", "cashfree_secret_key",
+            "gst_number", "timezone", "tags", "default_currency",
         )
 
     @transaction.atomic
@@ -404,7 +464,7 @@ class TenantProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Tenant
         fields = (
-            "id", "name", "schema_name", "status", "logo", "contact_email", "contact_phone",
+            "id", "name", "schema_name", "status", "logo", "contact_emails", "contact_phones",
             "timezone", "tags", "default_currency", "modules", "domains", "subscriptions",
             "owners",
         )
@@ -547,7 +607,7 @@ class QuoteSerializer(serializers.ModelSerializer):
             if not attrs.get("company") and not getattr(inst, "company", ""):
                 attrs["company"] = tenant.name
             if not attrs.get("buyer_email") and not getattr(inst, "buyer_email", ""):
-                attrs["buyer_email"] = tenant.contact_email or "billing@example.com"
+                attrs["buyer_email"] = (tenant.contact_emails or {}).get("primary") or "billing@example.com"
 
         if not attrs.get("company") and not getattr(inst, "company", ""):
             raise serializers.ValidationError({"company": "Company name is required."})

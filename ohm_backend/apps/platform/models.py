@@ -21,6 +21,13 @@ from django.utils import timezone
 
 GSTIN_RE = r"^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$"
 
+
+class PaymentProvider(models.TextChoices):
+    RAZORPAY = "razorpay", "Razorpay"
+    CASHFREE = "cashfree", "Cashfree"
+    CASH = "cash", "Cash (offline)"
+    COD = "cod", "COD"
+
 def _verification_token():
     return secrets.token_hex(16)
 
@@ -81,8 +88,14 @@ class Tenant(TenantMixin):
 
     # --- Organization profile (copied from the approved onboarding request) ---
     logo = models.ImageField(upload_to="tenants/logos/", null=True, blank=True)
-    contact_email = models.EmailField(blank=True)
-    contact_phone = models.CharField(max_length=30, blank=True)
+    contact_emails = models.JSONField(
+        null=True, blank=True,
+        help_text='{"primary": "a@x.com", "secondary": "b@x.com", "tertiary": "c@x.com"}',
+    )
+    contact_phones = models.JSONField(
+        null=True, blank=True,
+        help_text='{"primary": "9889765432", "secondary": "9876543210", "tertiary": "..."}',
+    )
     gst_number = models.CharField(
         max_length=15, null=True, blank=True,
         validators=[RegexValidator(GSTIN_RE, "Enter a valid 15-character GSTIN, e.g. 22AAAAA0000A1Z5.")],
@@ -90,6 +103,14 @@ class Tenant(TenantMixin):
     timezone = models.CharField(max_length=64, default="Asia/Kolkata")
     tags = models.JSONField(default=list, blank=True)  # e.g. ["hospital", "clinic", "lab"]
     default_currency = models.CharField(max_length=3, default="INR")
+    existing_website = models.URLField(max_length=255, null=True, blank=True)
+    erp_name = models.CharField(max_length=100, null=True, blank=True)
+    existing_payment_providers = models.JSONField(null=True, blank=True)
+    provided_payment_providers = models.JSONField(null=True, blank=True)
+    razorpay_account_id = models.CharField(max_length=100, null=True, blank=True)
+    razorpay_key_id = models.CharField(max_length=100, null=True, blank=True)
+    cashfree_app_id = models.CharField(max_length=100, null=True, blank=True)
+    cashfree_secret_key = models.TextField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -193,13 +214,21 @@ class TenantProvisioning(models.Model):
     # --- Fields from the onboarding form ---
     organization_name = models.CharField(max_length=200)          # Tenant name
     logo = models.ImageField(upload_to="onboarding/logos/", null=True, blank=True)
-    email = models.EmailField()                                   # Email
-    contact_phone = models.CharField(max_length=30)               # Phone number
+    contact_emails = models.JSONField(
+        null=True, blank=True,
+        help_text='{"primary": "a@x.com", "secondary": "b@x.com", "tertiary": "c@x.com"}',
+    )
+    contact_phones = models.JSONField(
+        null=True, blank=True,
+        help_text='{"primary": "9889765432", "secondary": "9876543210", "tertiary": "..."}',
+    )
+    ops_admin_emails = models.JSONField(
+        null=True, blank=True, help_text='["ops1@x.com", "ops2@x.com"]; NULL if none.',
+    )
     branches = models.JSONField(
         default=list,
         help_text='{"name": "","line1": "", "line2": "", "locality": "", "city": "", "pincode": ""}',
     )
-    ops_admin_email = models.EmailField(blank=True,null=True)               # null=True = no ops admin
     slug = models.SlugField(max_length=30)                        # Subdomain -> slug.o-hm.com
     custom_domain = models.CharField(max_length=253, blank=True)  # blank = no own domain
     wants_custom_website = models.BooleanField(default=False)     # Customized website
@@ -213,6 +242,14 @@ class TenantProvisioning(models.Model):
     co_owner_emails = models.JSONField(
         default=list, blank=True, null=True
     )
+    existing_website = models.URLField(max_length=255, null=True, blank=True)
+    erp_name = models.CharField(max_length=100, null=True, blank=True)
+    existing_payment_providers = models.JSONField(null=True, blank=True, help_text="Own gateway = Yes: providers we connect.")
+    provided_payment_providers = models.JSONField(null=True, blank=True, help_text="Own gateway = No: providers we set up for them.")
+    razorpay_account_id = models.CharField(max_length=100, null=True, blank=True)
+    razorpay_key_id = models.CharField(max_length=100, null=True, blank=True)
+    cashfree_app_id = models.CharField(max_length=100, null=True, blank=True)
+    cashfree_secret_key = models.TextField(null=True, blank=True)
 
     # --- Workflow fields (not on the form, needed for the lobby/approval flow) ---
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.SUBMITTED)
@@ -233,6 +270,13 @@ class TenantProvisioning(models.Model):
     class Meta:
         ordering = ["-created_at"]
         constraints = [
+            models.CheckConstraint(
+                condition=(
+                    models.Q(contact_emails__isnull=False, contact_emails__has_key="primary")
+                    & models.Q(contact_phones__isnull=False, contact_phones__has_key="primary")
+                ),
+                name="contacts_primary_required",
+            ),
             models.UniqueConstraint(
                 fields=["slug"], name="uniq_open_request_slug",
                 condition=models.Q(status__in=["submitted", "approved", "provisioning"]),
@@ -245,6 +289,14 @@ class TenantProvisioning(models.Model):
 
     def __str__(self):
         return f"{self.organization_name} ({self.status})"
+
+    @property
+    def primary_email(self):
+        return (self.contact_emails or {}).get("primary")
+
+    @property
+    def primary_phone(self):
+        return (self.contact_phones or {}).get("primary")
 
 
 class DocumentSequence(models.Model):
@@ -617,9 +669,9 @@ class Booking(models.Model):
             if not self.contact_name:
                 self.contact_name = getattr(self.tenant, "name", "")
             if not self.contact_email:
-                self.contact_email = getattr(self.tenant, "contact_email", "")
+                self.contact_email = (getattr(self.tenant, "contact_emails", None) or {}).get("primary", "")
             if not self.contact_phone:
-                self.contact_phone = getattr(self.tenant, "contact_phone", "")
+                self.contact_phone = (getattr(self.tenant, "contact_phones", None) or {}).get("primary", "")
         super().save(*args, **kwargs)
 
 

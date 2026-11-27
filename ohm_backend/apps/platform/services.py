@@ -435,8 +435,16 @@ def _get_or_create_tenant(p):
         status=Tenant.Status.PROVISIONING,  # stays here until the owner completes setup and activates
         modules=modules,
         logo=p.logo.name if p.logo else "",
-        contact_email=p.email,
-        contact_phone=p.contact_phone,
+        contact_emails=p.contact_emails,
+        contact_phones=p.contact_phones,
+        existing_website=p.existing_website,
+        erp_name=p.erp_name,
+        existing_payment_providers=p.existing_payment_providers,
+        provided_payment_providers=p.provided_payment_providers,
+        razorpay_account_id=p.razorpay_account_id,
+        razorpay_key_id=p.razorpay_key_id,
+        cashfree_app_id=p.cashfree_app_id,
+        cashfree_secret_key=p.cashfree_secret_key,
         gst_number=p.gst_number or None,
     )
     tenant.save()
@@ -479,7 +487,7 @@ def _create_domains_and_subscription(p, tenant):
                 if p.requested_plan_id == DEFAULT_TRIAL_PLAN_ID
                 else None
             ),
-            "billing_email": p.email,
+            "billing_email": p.primary_email or "",
         },
     )
 
@@ -517,8 +525,7 @@ def provision_tenant(provisioning):
                 # Also activate any co-owner accounts that were created as stubs.
                 co_emails = [e.strip().lower() for e in (p.co_owner_emails or []) if e.strip()]
                 provisioned_emails = set(co_emails)
-                if p.ops_admin_email:
-                    provisioned_emails.add(p.ops_admin_email.strip().lower())
+                provisioned_emails.update(e.strip().lower() for e in (p.ops_admin_emails or []) if e.strip())
                 for provisioned_user in User.objects.filter(email__in=provisioned_emails, is_active=False):
                     provisioned_user.is_active = True
                     provisioned_user.save(update_fields=["is_active"])

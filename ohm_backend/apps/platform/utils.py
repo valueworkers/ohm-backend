@@ -24,7 +24,7 @@ def tenant_url(slug, path=""):
 
 
 def send_tenant_welcome_email(p, tenant, recipient_email=None):
-    to_email = recipient_email or p.email
+    to_email = recipient_email or p.primary_email
     login_url = "https://admin.o-hm.com/login"
     profile_url = "TBD"  # TODO: link to the profile page in the tenant schema, once that exists)
 

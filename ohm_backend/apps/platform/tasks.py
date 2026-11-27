@@ -66,7 +66,11 @@ def send_tenant_welcome_email_task(self, request_id):
         # Also send to co-owners who aren't the primary applicant.
         for email in (p.co_owner_emails or []):
             email = email.strip().lower()
-            if email and email != p.email.lower():
+            if email and email != (p.primary_email or "").lower():
+                send_tenant_welcome_email(p, p.tenant, recipient_email=email)
+        for email in (p.ops_admin_emails or []):
+            email = email.strip().lower()
+            if email and email not in {(p.primary_email or "").lower(), *(e.strip().lower() for e in (p.co_owner_emails or []))}:
                 send_tenant_welcome_email(p, p.tenant, recipient_email=email)
         TenantProvisioning.objects.filter(pk=p.pk).update(welcome_email_sent_at=timezone.now())
 
