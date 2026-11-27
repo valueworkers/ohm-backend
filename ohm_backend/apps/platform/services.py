@@ -516,9 +516,12 @@ def provision_tenant(provisioning):
                     applicant.save(update_fields=["is_active"])
                 # Also activate any co-owner accounts that were created as stubs.
                 co_emails = [e.strip().lower() for e in (p.co_owner_emails or []) if e.strip()]
-                for co_owner in User.objects.filter(email__in=co_emails, is_active=False):
-                    co_owner.is_active = True
-                    co_owner.save(update_fields=["is_active"])
+                provisioned_emails = set(co_emails)
+                if p.ops_admin_email:
+                    provisioned_emails.add(p.ops_admin_email.strip().lower())
+                for provisioned_user in User.objects.filter(email__in=provisioned_emails, is_active=False):
+                    provisioned_user.is_active = True
+                    provisioned_user.save(update_fields=["is_active"])
                 p.tenant = tenant
                 p.status = TenantProvisioning.Status.PROVISIONED
                 p.provision_error = ""

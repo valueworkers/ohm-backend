@@ -59,18 +59,10 @@ def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
     public_schema = get_public_schema_name()
     with schema_context(public_schema):
         applicant = User.objects.get(pk=provisioning.applicant_id)
-        from apps.accounts.permissions import is_root_user
-        platform_superusers = list(User.objects.filter(is_superuser=True, is_active=True))
-        platform_root_users = [
-            u for u in User.objects.filter(is_active=True).exclude(is_superuser=True)
-            if is_root_user(u)
-        ]
 
-    # Create the superuser within the tenant schema using the provided tenant credentials
+    # Only identities named by this onboarding request belong in the tenant.
     with schema_context(tenant.schema_name):
         AccountsService.ensure_superuser(applicant)
-        for su in platform_superusers + platform_root_users:
-            AccountsService.ensure_superuser(su)
 
     # Seed co-owners as Tenant Admins / superusers
     co_emails = provisioning.co_owner_emails or []
@@ -85,6 +77,17 @@ def seed_tenant_admin(sender, provisioning, tenant, **kwargs):
         # Seed in the tenant schema
         with schema_context(tenant.schema_name):
             AccountsService.ensure_superuser(public_user)
+
+    # The onboarding form may name one operations administrator. Mirror that
+    # identity with the tenant's operational role, never with platform-wide
+    # credentials. If the email is already an owner, keep its owner privileges.
+    ops_email = (provisioning.ops_admin_email or "").strip().lower()
+    owner_emails = {applicant.email.strip().lower(), *(e.strip().lower() for e in co_emails if e.strip())}
+    if ops_email and ops_email not in owner_emails:
+        ops_user = _get_or_create_public_user(ops_email)
+        with schema_context(tenant.schema_name):
+            tenant_ops_user = AccountsService.ensure_tenant_admin(ops_user, as_superuser=False)
+            AccountsService.set_role(tenant_ops_user, "OPS_MANAGER")
 
 
 @receiver(m2m_changed, sender=Tenant.owners.through)
