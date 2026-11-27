@@ -27,14 +27,7 @@ urlpatterns = [
     path("health/", health),
     path("admin/", admin.site.urls),
 
-    # --- Auth (works on any schema – public or tenant) ---
-    # path("api/auth/login/", UnifiedLoginView.as_view(), name="unified-login"),
-    # path("api/auth/logout/", UnifiedLogoutView.as_view(), name="unified-logout"),
-    # path("api/auth/otp/", OTPRequestView.as_view(), name="otp-request"),
-    # path("api/auth/password-reset/", OTPPasswordResetView.as_view(), name="otp-password-reset"),
-    # path("api/auth/access-tokens/", ScopedTokenRefreshView.as_view(), name="token-refresh"),
 
-    # --- Tenant-scoped (only meaningful with X-Tenant) ---
     path("api/auth/registrations/", TenantRegistrationCreateView.as_view(), name="tenant-registration-create"),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/billing/", include("apps.billing.urls")),
@@ -46,6 +39,5 @@ urlpatterns = [
     path("api/content/", include("apps.content.urls")),
     path("api/analytics/", include("apps.analytics.urls")),
 
-    # --- Platform admin + onboarding (public schema) ---
     path("api/platform/", include("apps.platform.urls")),
 ]
