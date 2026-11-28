@@ -4,8 +4,8 @@ from apps.accounts.auth import ScopedTokenRefreshView
 
 from .public_views import (
     ChangePasswordView, OTPPasswordResetView, OTPRequestView, OwnerViewSet,
-    RevokeAllSessionsView, ResetPasswordView, UnifiedLoginView, UnifiedLogoutView,
-    UserProfileView, UserSessionsView, VerifyOTPView,
+    RevokeAllSessionsView, UnifiedLoginView, UnifiedLogoutView,
+    UserProfileView, UserSessionsView,
 )
 from .tenant_views import (
     BulkEmployeeUploadAPIView, CustomerViewSet, EmployeeViewSet,
@@ -31,22 +31,11 @@ router.register("staff-for-hire", StaffForHireViewSet, basename="staff-for-hire"
 
 urlpatterns = [
     path("", include(router.urls)),
-
-    # --- Shorthand / Backward-compatibility Auth Aliases ---
-    # Note: Canonical auth routes are registered under /api/auth/* in config/urls.py:
-    #   - /api/auth/login/
-    #   - /api/auth/logout/
-    #   - /api/auth/otp/
-    #   - /api/auth/password-reset/
-    #   - /api/auth/access-tokens/
-    #   - /api/auth/registrations/
     path("login/", UnifiedLoginView.as_view(), name="login"),
     path("logout/", UnifiedLogoutView.as_view(), name="logout"),
+    path("password-reset/", OTPPasswordResetView.as_view(), name="password-reset"),
     path("change-password/", ChangePasswordView.as_view(), name="change-password"),
     path("request-otp/", OTPRequestView.as_view(), name="request-otp"),
-    path("verify-otp/", VerifyOTPView.as_view(), name="verify-otp"),
-    path("reset-password/", ResetPasswordView.as_view(), name="reset-password"),
-    path("password-reset/", OTPPasswordResetView.as_view(), name="password-reset"),
     path("register/customer/", TenantRegistrationCreateView.as_view(), name="register-customer"),
     path("token/refresh/", ScopedTokenRefreshView.as_view(), name="token-refresh"),
     path("profile/", UserProfileView.as_view(), name="profile"),

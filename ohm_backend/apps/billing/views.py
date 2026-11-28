@@ -5,6 +5,8 @@ API views for the billing, quotation, order, and invoice domain.
 """
 
 from decimal import Decimal
+from django.db.models import CharField, Count, DateTimeField, IntegerField, Max, Min
+from django.db.models.functions import Cast, Coalesce
 from rest_framework import permissions, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.parsers import FormParser, MultiPartParser
@@ -16,6 +18,7 @@ from .models import (
     Invoice,
     Location,
     Package,
+    Patient,
     PatientDocument,
     PatientDocumentFile,
     Payment,
@@ -26,12 +29,14 @@ from .serializers import (
     InvoiceSerializer,
     LocationSerializer,
     PackageSerializer,
+    PatientSerializer,
     PatientDocumentSerializer,
     PaymentSerializer,
     QuoteSerializer,
     QuoteTaxSettingsSerializer,
     SendEmailSerializer,
 )
+from .filters import PatientFilter
 from .services import (
     create_invoice_from_quote,
     issue_invoice,
@@ -89,6 +94,117 @@ class PatientDocumentViewSet(viewsets.ModelViewSet):
         PatientDocumentFile.objects.bulk_create(
             [PatientDocumentFile(document=document, file=file) for file in files]
         )
+
+
+class PatientViewSet(viewsets.ModelViewSet):
+    serializer_class = PatientSerializer
+    filterset_class = PatientFilter
+    search_fields = [
+        "=id",
+        "patient_id",
+        "first_name",
+        "last_name",
+        "=email",
+        "=phone",
+    ]
+    ordering_fields = [
+        "id",
+        "patient_id_num",
+        "first_name",
+        "last_name",
+        "email",
+        "phone",
+        "address",
+        "age",
+        "emergency_contact",
+        "emergency_phone",
+        "emergency_contact_2",
+        "emergency_phone_2",
+        "gender",
+        "onboading_date",
+        "is_deleted",
+        "is_active",
+        "location_type",
+        "emr_count",
+        "affiliate",
+        "source",
+        "referred_by",
+        "is_probono",
+    ]
+    ordering = ["first_name", "last_name"]
+
+    def get_queryset(self):
+        user = self.request.user
+        if user.is_superuser or user.is_owner:
+            queryset = Patient.objects.all()
+        else:
+            queryset = Patient.objects.filter(registered_by=user)
+
+        return queryset.annotate(
+            emr_count=Count("documents", distinct=True),
+            location_type=Max("primary_orders__booking_type"),
+            booking_locality=Coalesce(
+                Max("primary_orders__venue__location__locality"),
+                Max(Cast("primary_orders__client_address", CharField())),
+                output_field=CharField(),
+            ),
+            onboading_date=Coalesce(
+                Min("primary_orders__start_datetime"),
+                "registration_date",
+                output_field=DateTimeField(),
+            ),
+            patient_id_num=Cast("patient_id", IntegerField()),
+        )
+
+    def perform_create(self, serializer):
+        serializer.save(registered_by=self.request.user, is_active=True)
+
+    def perform_destroy(self, instance):
+        if hasattr(instance, "soft_delete"):
+            instance.soft_delete()
+        else:
+            instance.delete()
+
+    @action(detail=True, methods=["patch"], url_path="active-status")
+    def active_status(self, request, pk=None):
+        patient = self.get_object()
+        is_active = request.data.get("is_active")
+        if not isinstance(is_active, bool):
+            return Response(
+                {"detail": "'is_active' (boolean) is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        patient.is_active = is_active
+        patient.save(update_fields=["is_active", "updated_at"])
+        return Response({"status": patient.is_active}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=["get"])
+    def patient_dropdown(self, request):
+        queryset = self.filter_queryset(self.get_queryset())
+        queryset = queryset.select_related("registered_by").only(
+            "id",
+            "first_name",
+            "last_name",
+            "phone",
+            "registered_by__id",
+            "registered_by__first_name",
+            "registered_by__last_name",
+        )
+        data = [
+            {
+                "id": patient.id,
+                "name": patient.get_full_name(),
+                "phone": patient.phone,
+                "registered_by": (
+                    patient.registered_by.get_full_name()
+                    if patient.registered_by_id
+                    else None
+                ),
+            }
+            for patient in queryset
+        ]
+        return Response(data, status=status.HTTP_200_OK)
 
 
 class QuoteTaxSettingsViewSet(viewsets.ModelViewSet):

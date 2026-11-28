@@ -23,7 +23,7 @@ from rest_framework import filters
 from django.contrib.auth.models import Group, Permission
 from apps.accounts.models import (
     EmployeeProfile, ShiftSchedule, StaffForHire,
-    PasswordResetToken, User, UserDocument, UserDocumentFile, UserSession,
+    User, UserDocument, UserDocumentFile, UserSession,
 )
 from apps.accounts.permissions import CanManageRoles, IsTenantAdmin, IsTenantSchema
 from apps.accounts.serializers import (

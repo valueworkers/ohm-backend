@@ -202,6 +202,12 @@ If unavailable or reserved:
 }
 ```
 
+This reset endpoint supports both password setup for accounts without a password and
+password recovery. It applies Django's configured password validators and revokes
+active sessions. It works in the public schema and tenant schemas; provisioned tenant
+owners use their activated account identity and their password stays in sync across
+the public account and tenant mirrors.
+
 ### 2.4 Refresh Access Token
 - **Endpoint**: `POST /api/auth/access-tokens/`
 - **Authentication**: None
@@ -676,7 +682,7 @@ All personal settings routes require `Authorization: Bearer <token>` and operate
 
 `GET/PATCH /api/settings/appearance/` stores `theme` (`light`, `dark`, `system`), `font_size` (`small`, `medium`, `large`), and `font_family` (`system`, `inter`, `roboto`, `open_sans`, `lato`). `GET/PATCH /api/settings/notifications/` accepts partial `channels` and `categories` maps of booleans. Supported channels are `email`, `in_app`, `browser_push`, `mobile_push`, and `sms`; supported categories are `product_updates`, `marketing_emails`, `security_alerts`, and `billing_alerts`. Security and billing alerts are always enabled. Marketing preference updates record or clear `marketing_consent_at`.
 
-Password reset tokens from `POST /api/verify-otp/` expire after 10 minutes and are single-use. Password changes and resets revoke all active sessions, so users must sign in again. `PUT /api/profile/` does not accept password changes.
+`POST /api/auth/password-reset/` sets or resets a password using a password-reset OTP. Password changes and resets revoke all active sessions, so users must sign in again. `PUT /api/profile/` does not accept password changes.
 
 The existing `POST /api/change-password/` endpoint handles password changes with current-password verification and Django's configured password validators. `GET /api/settings/security/sessions/` returns the authenticated user's paginated session inventory. `POST /api/settings/security/sessions/revoke-all/` revokes all other sessions and requires the current password or a fresh login OTP. Billing-provider operations, 2FA, recovery codes, backups, and import/export jobs are not implemented by this backend and are not exposed as nonfunctional settings endpoints. Email verification delivery uses the configured Django email backend.
 
