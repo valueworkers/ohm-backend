@@ -144,8 +144,8 @@ class PatientViewSet(viewsets.ModelViewSet):
             emr_count=Count("documents", distinct=True),
             location_type=Max("primaryorder__booking_type"),
             booking_locality=Coalesce(
-                Max("primaryorder__venue__location__locality"),
-                Max(Cast("primaryorder__client_address", CharField())),
+                Max("primaryorder__secondary_orders__venue__location__locality"),
+                Max(Cast("primaryorder__secondary_orders__client_address", CharField())),
                 output_field=CharField(),
             ),
             onboading_date=Coalesce(
