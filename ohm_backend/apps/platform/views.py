@@ -723,7 +723,6 @@ class PublicQuoteResponseView(APIView):
             raise ValidationError({"detail": str(exc)})
         return Response({"number": quote.number, "status": quote.status})
 
-
 class InvoiceViewSet(viewsets.ModelViewSet):
     filterset_class = InvoiceFilter
     search_fields = ["number", "customer_name", "buyer_email", "gstin", "your_ref", "tenant__name"]
@@ -900,9 +899,7 @@ class InvoiceViewSet(viewsets.ModelViewSet):
         payment = services.record_payment(invoice, user=request.user, **ser.validated_data)
         return Response(PaymentReadSerializer(payment).data, status=status.HTTP_201_CREATED)
 
-
 class BookingViewSet(viewsets.ModelViewSet):
-    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_class = BookingFilter
     search_fields = ["booking_id", "title", "contact_name", "contact_email", "contact_phone", "tenant__name"]
     ordering_fields = ["start_datetime", "end_datetime", "created_at", "status", "total_amount"]
@@ -961,7 +958,6 @@ class BookingViewSet(viewsets.ModelViewSet):
         invoice.total = booking.total_amount
         invoice.save()
         return Response(InvoiceSerializer(invoice).data, status=status.HTTP_201_CREATED)
-
 
 class PaymentViewSet(viewsets.ModelViewSet):
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]

@@ -12000,384 +12000,6 @@
         ]
       }
     },
-    "/api/care/primary-orders/": {
-      "get": {
-        "summary": "List primary orders",
-        "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
-        "tags": [],
-        "parameters": [
-          {
-            "name": "Accept",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "application/json",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Tenant",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "{{tenantSlug}}",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {}
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "summary": "Create primary order",
-        "deprecated": false,
-        "description": "Creates a patient agreement. Example body: {\"patient\": 5, \"notes\": \"Care plan\"}.\nDocumented route; not currently registered in config/urls.py.",
-        "tags": [],
-        "parameters": [
-          {
-            "name": "Accept",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "application/json",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Tenant",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "{{tenantSlug}}",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {}
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/care/ternary-orders/": {
-      "get": {
-        "summary": "List ternary orders",
-        "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
-        "tags": [],
-        "parameters": [
-          {
-            "name": "Accept",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "application/json",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Tenant",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "{{tenantSlug}}",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {}
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "summary": "Create ternary order",
-        "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
-        "tags": [],
-        "parameters": [
-          {
-            "name": "Accept",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "application/json",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Tenant",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "{{tenantSlug}}",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {}
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/care/ternary-orders/ternaryOrderId/generate-invoice/": {
-      "post": {
-        "summary": "Generate invoice for ternary order",
-        "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
-        "tags": [],
-        "parameters": [
-          {
-            "name": "Accept",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "application/json",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Tenant",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "{{tenantSlug}}",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {}
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/care/secondary-orders/": {
-      "get": {
-        "summary": "List secondary orders",
-        "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
-        "tags": [],
-        "parameters": [
-          {
-            "name": "Accept",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "application/json",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Tenant",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "{{tenantSlug}}",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {}
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      },
-      "post": {
-        "summary": "Create secondary order",
-        "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
-        "tags": [],
-        "parameters": [
-          {
-            "name": "Accept",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "application/json",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Tenant",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "{{tenantSlug}}",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {}
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
-    "/api/care/secondary-orders/secondaryOrderId/generate-invoice/": {
-      "post": {
-        "summary": "Generate invoice for secondary order",
-        "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
-        "tags": [],
-        "parameters": [
-          {
-            "name": "Accept",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "application/json",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "X-Tenant",
-            "in": "header",
-            "description": "",
-            "required": true,
-            "example": "{{tenantSlug}}",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {}
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ]
-      }
-    },
     "/api/billing/quotes/": {
       "get": {
         "summary": "List billing quotes",
@@ -15227,7 +14849,7 @@
         ]
       }
     },
-    "/api/care/locations/": {
+    "/api/billing/locations/": {
       "get": {
         "summary": "List locations",
         "deprecated": false,
@@ -15401,7 +15023,7 @@
         ]
       }
     },
-    "/api/care/locations/locationId/": {
+    "/api/billing/locations/locationId/": {
       "get": {
         "summary": "Retrieve location",
         "deprecated": false,
@@ -15571,7 +15193,7 @@
         ]
       }
     },
-    "/api/care/locations/recordId/": {
+    "/api/billing/locations/recordId/": {
       "put": {
         "summary": "PUT /api/care/locations/<recordId>/",
         "deprecated": false,
@@ -15649,7 +15271,7 @@
         ]
       }
     },
-    "/api/care/packages/": {
+    "/api/billing/packages/": {
       "get": {
         "summary": "List packages",
         "deprecated": false,
@@ -15818,7 +15440,7 @@
         ]
       }
     },
-    "/api/care/packages/packageId/": {
+    "/api/billing/packages/packageId/": {
       "get": {
         "summary": "Retrieve package",
         "deprecated": false,
@@ -15988,7 +15610,7 @@
         ]
       }
     },
-    "/api/care/packages/recordId/": {
+    "/api/billing/packages/recordId/": {
       "put": {
         "summary": "PUT /api/care/packages/<recordId>/",
         "deprecated": false,
@@ -16066,7 +15688,7 @@
         ]
       }
     },
-    "/api/care/patient-documents/": {
+    "/api/billing/patient-documents/": {
       "get": {
         "summary": "List patient documents",
         "deprecated": false,
@@ -16210,7 +15832,7 @@
         ]
       }
     },
-    "/api/care/patient-documents/patientDocumentId/": {
+    "/api/billing/patient-documents/patientDocumentId/": {
       "get": {
         "summary": "Retrieve patient document",
         "deprecated": false,
@@ -16304,7 +15926,7 @@
         ]
       }
     },
-    "/api/care/patient-documents/recordId/": {
+    "/api/billing/patient-documents/recordId/": {
       "patch": {
         "summary": "PATCH /api/care/patient-documents/<recordId>/",
         "deprecated": false,
@@ -16440,11 +16062,11 @@
         ]
       }
     },
-    "/api/care/patients/": {
+    "/api/billing/patients/": {
       "get": {
         "summary": "List patients",
         "deprecated": false,
-        "description": "Search by name, phone, or patient_id; supports status, is_deleted, page, and page_size.\nDocumented route; not currently registered in config/urls.py.",
+        "description": "Search by name, phone, or patient_id; supports status, is_deleted, page, and page_size.",
         "tags": [],
         "parameters": [
           {
@@ -16490,7 +16112,7 @@
       "post": {
         "summary": "Create patient",
         "deprecated": false,
-        "description": "Requires X-Tenant and tenant access token.\nDocumented route; not currently registered in config/urls.py.",
+        "description": "Requires X-Tenant and tenant access token.",
         "tags": [],
         "parameters": [
           {
@@ -16534,11 +16156,11 @@
         ]
       }
     },
-    "/api/care/patients/patientId/": {
+    "/api/billing/patients/patientId/": {
       "get": {
         "summary": "Get patient",
         "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
+        "description": "Review the API documentation for required request fields before sending.",
         "tags": [],
         "parameters": [
           {
@@ -16584,7 +16206,7 @@
       "patch": {
         "summary": "Update patient",
         "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
+        "description": "Review the API documentation for required request fields before sending.",
         "tags": [],
         "parameters": [
           {
@@ -16630,7 +16252,7 @@
       "delete": {
         "summary": "Delete patient",
         "deprecated": false,
-        "description": "Soft-deletes the patient.\nDocumented route; not currently registered in config/urls.py.",
+        "description": "Soft-deletes the patient.",
         "tags": [],
         "parameters": [
           {
@@ -16674,11 +16296,11 @@
         ]
       }
     },
-    "/api/care/patients/patientId/active-status/": {
+    "/api/billing/patients/patientId/active-status/": {
       "patch": {
         "summary": "Update patient active status",
         "deprecated": false,
-        "description": "Review the API documentation for required request fields before sending.\nDocumented route; not currently registered in config/urls.py.",
+        "description": "Review the API documentation for required request fields before sending.",
         "tags": [],
         "parameters": [
           {
@@ -29710,6 +29332,73 @@
                 "schema": {
                   "type": "object",
                   "properties": {}
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ]
+      }
+    },
+    "/api/billing/patients/patient_dropdown/": {
+      "get": {
+        "summary": "List patients for dropdown",
+        "deprecated": false,
+        "description": "Returns patient names, phone numbers, and registering users for dropdowns. Supports the configured patient filters.",
+        "tags": [],
+        "parameters": [
+          {
+            "name": "Accept",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "example": "application/json",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-Tenant",
+            "in": "header",
+            "description": "",
+            "required": true,
+            "example": "{{tenantSlug}}",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Patient dropdown entries.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "integer"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "phone": {
+                        "type": "string"
+                      },
+                      "registered_by": {
+                        "type": [
+                          "string",
+                          "null"
+                        ]
+                      }
+                    }
+                  }
                 }
               }
             }

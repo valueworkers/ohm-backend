@@ -31,7 +31,6 @@ urlpatterns = [
     path("api/auth/registrations/", TenantRegistrationCreateView.as_view(), name="tenant-registration-create"),
     path("api/auth/", include("apps.accounts.urls")),
     path("api/billing/", include("apps.billing.urls")),
-    path("api/care/", include("apps.billing.care_urls")),
     path("api/catalog/", include("apps.catalog.urls")),
     path("api/wallet/", include("apps.wallet.urls")),
     path("api/payroll/", include("apps.payroll.urls")),
